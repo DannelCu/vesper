@@ -1,0 +1,49 @@
+# Ignore everything by default
+*
+
+# Keep Git ignore rules
+!.gitignore
+
+# Keep core Vesper source
+!vesper/
+!vesper/**
+
+# Keep project metadata
+!pyproject.toml
+!README.md
+
+# Ignore Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ignore virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Ignore package/build artifacts
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Ignore test/example apps
+boots-test/
+config-test/
+tailwind-test/
+
+# Ignore frontend dependency folders if created inside examples
+node_modules/
+package-lock.json
+
+# Ignore IDE/editor files
+.idea/
+.vscode/
+*.iml
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
