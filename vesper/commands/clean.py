@@ -12,6 +12,8 @@ DIRECTORY_PATTERNS = {
     ".ruff_cache",
     "dist",
     "build",
+    "package",
+    ".pyinstaller",
 }
 
 FILE_SUFFIXES = {

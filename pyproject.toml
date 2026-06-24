@@ -23,4 +23,7 @@ where = ["."]
 include = ["vesper*"]
 
 [tool.setuptools.package-data]
-vesper = ["sdk/*.js"]
+vesper = ["sdk/*.js", "assets/*.svg"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import argparse
 
+from vesper.commands.build import add_build_parser, handle_build
 from vesper.commands.clean import add_clean_parser, handle_clean
+from vesper.commands.package import add_package_parser, handle_package
+from vesper.commands.dev import add_dev_parser, handle_dev
 from vesper.commands.doctor import add_doctor_parser, handle_doctor
 from vesper.commands.info import add_info_parser, handle_info
 from vesper.commands.init import add_init_parser, handle_init
@@ -30,6 +33,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     add_init_parser(subparsers)
     add_run_parser(subparsers)
+    add_dev_parser(subparsers)
+    add_build_parser(subparsers)
+    add_package_parser(subparsers)
     add_sync_sdk_parser(subparsers)
     add_doctor_parser(subparsers)
     add_info_parser(subparsers)
@@ -46,6 +52,9 @@ def main() -> None:
     handlers = (
         handle_init,
         handle_run,
+        handle_dev,
+        handle_build,
+        handle_package,
         handle_sync_sdk,
         handle_doctor,
         handle_info,

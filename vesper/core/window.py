@@ -1,4 +1,7 @@
 import json
+import os
+from pathlib import Path
+
 import webview
 
 from vesper.core.config import WindowConfig
@@ -33,6 +36,16 @@ class Window:
                 Window configuration.
         """
 
+        dev_url = os.environ.get("VESPER_DEV_URL")
+
+        if dev_url:
+            frontend = dev_url
+        else:
+            frontend_path = Path(config.frontend)
+            if not frontend_path.is_file():
+                raise FileNotFoundError(f"Frontend file does not exist: {config.frontend}")
+            frontend = config.frontend
+
         self.ipc = ipc_handler
 
         class API:
@@ -64,7 +77,7 @@ class Window:
 
         self.window = webview.create_window(
             title=config.title,
-            url=config.frontend,
+            url=frontend,
             js_api=api,
             width=config.width,
             height=config.height,

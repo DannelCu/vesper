@@ -65,9 +65,4 @@ class WindowConfig:
         if not frontend.lower().endswith(".html"):
             raise ValueError("frontend must point to an HTML file.")
 
-        frontend_path = Path(frontend)
-
-        if not frontend_path.is_file():
-            raise FileNotFoundError(f"Frontend file does not exist: {frontend}")
-
         return frontend

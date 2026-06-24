@@ -22,12 +22,12 @@ class CommandRegistry:
                 Optional public command name. If omitted, the function name is used.
         """
 
-        command_name = name or fn.__name__
-
-        if not isinstance(command_name, str) or not command_name.strip():
-            raise ValueError("Command name must be a non-empty string.")
-
-        command_name = command_name.strip()
+        if name is not None:
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError("Command name must be a non-empty string.")
+            command_name = name.strip()
+        else:
+            command_name = fn.__name__
 
         if command_name in self._commands:
             raise CommandAlreadyRegisteredError(

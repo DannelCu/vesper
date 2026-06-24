@@ -5,15 +5,24 @@ import runpy
 import sys
 from pathlib import Path
 
-from vesper.commands.utils import APP_ENTRYPOINTS, find_entrypoint
+from vesper.commands.utils import (
+    APP_ENTRYPOINTS,
+    FRAMEWORK_TEMPLATES,
+    find_entrypoint,
+    read_vesper_toml,
+)
 
 
 def run_app() -> None:
-    """
-    Run a Vesper application from the current working directory.
-    """
-
     current_directory = Path.cwd()
+
+    config = read_vesper_toml(current_directory)
+    template = config.get("template", "vanilla")
+
+    if template in FRAMEWORK_TEMPLATES and not (current_directory / "dist").exists():
+        print("dist/ not found. Run `vesper build` first.")
+        raise SystemExit(1)
+
     entrypoint = find_entrypoint(current_directory)
 
     if entrypoint is None:
