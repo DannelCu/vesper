@@ -1,6 +1,7 @@
 from collections.abc import Callable
 
 from vesper.core.config import WindowConfig
+from vesper.core.module import Container
 from vesper.core.registry import CommandRegistry
 from vesper.core.window import Window
 from vesper.core.ipc import IPC
@@ -114,6 +115,46 @@ class App:
             return fn
 
         return decorator
+
+    def register_module(self, module_cls: type) -> None:
+        """
+        Register a @Module class, wiring its controllers and providers.
+
+        Resolves provider dependencies via the built-in IoC container and
+        registers every @command method on each controller into the IPC
+        registry under "<prefix>.<command_name>".
+
+        Args:
+            module_cls: A class decorated with @Module.
+        """
+        meta = getattr(module_cls, "__vesper_module__", None)
+        if meta is None:
+            raise TypeError(f"{module_cls.__name__} is not decorated with @Module.")
+
+        for imported in meta["imports"]:
+            self.register_module(imported)
+
+        container = Container(meta["providers"])
+
+        for ctrl_cls in meta["controllers"]:
+            ctrl_meta = getattr(ctrl_cls, "__vesper_controller__", None)
+            if ctrl_meta is None:
+                raise TypeError(f"{ctrl_cls.__name__} is not decorated with @Controller.")
+
+            prefix = ctrl_meta["prefix"]
+            instance = container.resolve(ctrl_cls)
+
+            for attr_name in dir(instance):
+                if attr_name.startswith("_"):
+                    continue
+                method = getattr(instance, attr_name, None)
+                if not callable(method):
+                    continue
+                cmd_meta = getattr(method, "__vesper_command__", None)
+                if cmd_meta is None:
+                    continue
+                cmd_name = f"{prefix}.{cmd_meta['name']}" if prefix else cmd_meta["name"]
+                self.registry.register(method, name=cmd_name)
 
     def emit(self, event: str, payload=None) -> None:
         """
