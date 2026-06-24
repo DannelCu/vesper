@@ -19,6 +19,23 @@ _HOOK_TO_EVENT: dict[str, str] = {
 }
 
 
+def _to_file_types(filters: list[dict] | None) -> tuple:
+    """Convert Vesper filter dicts to the tuple of strings PyWebView expects.
+
+    Input:  [{"name": "Images", "extensions": ["png", "jpg"]}, ...]
+    Output: ("Images (*.png;*.jpg)", ...)
+    """
+    if not filters:
+        return ()
+    result = []
+    for f in filters:
+        name = f.get("name", "Files")
+        exts = f.get("extensions") or ["*"]
+        parts = ";".join(f"*.*" if e == "*" else f"*.{e}" for e in exts)
+        result.append(f"{name} ({parts})")
+    return tuple(result)
+
+
 class Window:
     """
     Window layer for Vesper.
@@ -130,6 +147,84 @@ class Window:
         data = json.dumps(payload)
         js = f'window.dispatchEvent(new CustomEvent("vesper:{event}",{{detail:{data}}}))'
         self.window.evaluate_js(js)
+
+    def open_dialog(
+        self,
+        multiple: bool = False,
+        filters: list[dict] | None = None,
+        directory: str = "",
+    ) -> list[str] | None:
+        """
+        Open a native file-picker dialog.
+
+        Args:
+            multiple:  Allow selecting more than one file.
+            filters:   List of ``{"name": str, "extensions": [str, ...]}`` dicts.
+            directory: Initial directory shown to the user.
+
+        Returns:
+            List of selected absolute paths, or None if cancelled.
+        """
+        if self.window is None:
+            raise RuntimeError("Cannot open dialog: window is not created yet.")
+        result = self.window.create_file_dialog(
+            webview.OPEN_DIALOG,
+            directory=directory,
+            allow_multiple=multiple,
+            file_types=_to_file_types(filters),
+        )
+        return list(result) if result else None
+
+    def save_dialog(
+        self,
+        filename: str = "",
+        filters: list[dict] | None = None,
+        directory: str = "",
+    ) -> str | None:
+        """
+        Open a native save-file dialog.
+
+        Args:
+            filename:  Default file name pre-filled in the dialog.
+            filters:   List of ``{"name": str, "extensions": [str, ...]}`` dicts.
+            directory: Initial directory shown to the user.
+
+        Returns:
+            Absolute path chosen by the user, or None if cancelled.
+        """
+        if self.window is None:
+            raise RuntimeError("Cannot open dialog: window is not created yet.")
+        result = self.window.create_file_dialog(
+            webview.SAVE_DIALOG,
+            directory=directory,
+            save_filename=filename,
+            file_types=_to_file_types(filters),
+        )
+        return result[0] if result else None
+
+    def pick_folder(
+        self,
+        directory: str = "",
+        multiple: bool = False,
+    ) -> list[str] | None:
+        """
+        Open a native folder-picker dialog.
+
+        Args:
+            directory: Initial directory shown to the user.
+            multiple:  Allow selecting more than one folder.
+
+        Returns:
+            List of selected absolute paths, or None if cancelled.
+        """
+        if self.window is None:
+            raise RuntimeError("Cannot open dialog: window is not created yet.")
+        result = self.window.create_file_dialog(
+            webview.FOLDER_DIALOG,
+            directory=directory,
+            allow_multiple=multiple,
+        )
+        return list(result) if result else None
 
     def show(self) -> None:
         """

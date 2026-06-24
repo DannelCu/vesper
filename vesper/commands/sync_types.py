@@ -234,12 +234,17 @@ def sync_types() -> None:
         print(f"Error: {error}")
         raise SystemExit(1)
 
-    if not app.registry._commands:
+    user_commands = {
+        k: v for k, v in app.registry._commands.items()
+        if not k.startswith("vesper:")
+    }
+
+    if not user_commands:
         print("No commands registered — nothing to generate.")
         raise SystemExit(0)
 
     out_path = _output_path(project_dir, template)
-    dts = generate_dts(app.registry._commands)
+    dts = generate_dts(user_commands)
     out_path.write_text(dts, encoding="utf-8")
 
     count = len(app.registry._commands)

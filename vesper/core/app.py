@@ -76,8 +76,23 @@ class App:
         self.registry = CommandRegistry()
         self.window = Window()
         self._middleware: list[Callable] = []
-        self.ipc = IPC(self.registry, middleware=self._middleware, debug=self.debug)
         self._hooks: dict[str, list[Callable]] = {}
+
+        # Built-in dialog commands — use vesper: prefix so sync-types skips them
+        def _open_dialog(multiple: bool = False, filters=None, directory: str = ""):
+            return self.window.open_dialog(multiple=multiple, filters=filters, directory=directory)
+
+        def _save_dialog(filename: str = "", filters=None, directory: str = ""):
+            return self.window.save_dialog(filename=filename, filters=filters, directory=directory)
+
+        def _pick_folder(directory: str = "", multiple: bool = False):
+            return self.window.pick_folder(directory=directory, multiple=multiple)
+
+        self.registry.register(_open_dialog, name="vesper:dialog:open")
+        self.registry.register(_save_dialog, name="vesper:dialog:save")
+        self.registry.register(_pick_folder, name="vesper:dialog:folder")
+
+        self.ipc = IPC(self.registry, middleware=self._middleware, debug=self.debug)
 
         if root_module is not None:
             self.register_module(root_module)

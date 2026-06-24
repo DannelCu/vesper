@@ -350,7 +350,8 @@ def test_import_app_multiple_commands(tmp_path):
     """)
     app, error = _import_app(entrypoint, tmp_path)
     assert error is None
-    assert set(app.registry._commands) == {"ping", "add"}
+    user_cmds = {k for k in app.registry._commands if not k.startswith("vesper:")}
+    assert user_cmds == {"ping", "add"}
 
 
 def test_import_app_no_app_instance_returns_error(tmp_path):

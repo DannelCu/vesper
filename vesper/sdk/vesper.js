@@ -57,8 +57,44 @@
         };
     }
 
+    var dialog = {
+        /**
+         * Open a native file-picker dialog.
+         * @param {object} [options]
+         * @param {boolean} [options.multiple=false]
+         * @param {{name:string,extensions:string[]}[]} [options.filters]
+         * @param {string} [options.directory=""]
+         * @returns {Promise<string[]|null>}
+         */
+        open: function(options) {
+            return invoke("vesper:dialog:open", options || {});
+        },
+        /**
+         * Open a native save-file dialog.
+         * @param {object} [options]
+         * @param {string} [options.filename=""]
+         * @param {{name:string,extensions:string[]}[]} [options.filters]
+         * @param {string} [options.directory=""]
+         * @returns {Promise<string|null>}
+         */
+        save: function(options) {
+            return invoke("vesper:dialog:save", options || {});
+        },
+        /**
+         * Open a native folder-picker dialog.
+         * @param {object} [options]
+         * @param {string} [options.directory=""]
+         * @param {boolean} [options.multiple=false]
+         * @returns {Promise<string[]|null>}
+         */
+        pickFolder: function(options) {
+            return invoke("vesper:dialog:folder", options || {});
+        },
+    };
+
     global.vesper = {
         invoke,
         on,
+        dialog,
     };
 })(window);

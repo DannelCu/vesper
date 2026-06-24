@@ -9,7 +9,8 @@ from vesper.core.ipc import IPC
 
 def test_app_root_module_none_is_default():
     app = App()
-    assert app.registry._commands == {}
+    user_cmds = {k for k in app.registry._commands if not k.startswith("vesper:")}
+    assert user_cmds == set()
 
 
 def test_app_root_module_registers_commands():
