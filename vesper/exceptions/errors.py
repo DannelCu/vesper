@@ -17,3 +17,9 @@ class CommandAlreadyRegisteredError(VesperError):
     """
 
 
+class ForbiddenError(VesperError):
+    """
+    Raised when a guard rejects a command call.
+    """
+
+

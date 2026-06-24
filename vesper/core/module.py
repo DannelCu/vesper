@@ -13,16 +13,22 @@ def Injectable() -> Callable[[type], type]:
     return decorator
 
 
-def Controller(prefix: str = "") -> Callable[[type], type]:
+def Controller(
+    prefix: str = "",
+    *,
+    guards: list | None = None,
+) -> Callable[[type], type]:
     """
     Mark a class as a Vesper controller.
 
     Args:
         prefix: IPC namespace prefix. Commands register as
                 "<prefix>.<name>" when prefix is non-empty.
+        guards: Guard functions applied to every command in this
+                controller, evaluated before method-level guards.
     """
     def decorator(cls: type) -> type:
-        cls.__vesper_controller__ = {"prefix": prefix}
+        cls.__vesper_controller__ = {"prefix": prefix, "guards": guards or []}
         return cls
     return decorator
 

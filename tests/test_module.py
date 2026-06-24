@@ -24,7 +24,7 @@ def test_controller_sets_prefix():
     class UsersController:
         pass
 
-    assert UsersController.__vesper_controller__ == {"prefix": "users"}
+    assert UsersController.__vesper_controller__ == {"prefix": "users", "guards": []}
 
 
 def test_controller_empty_prefix():
@@ -32,7 +32,7 @@ def test_controller_empty_prefix():
     class Ctrl:
         pass
 
-    assert Ctrl.__vesper_controller__ == {"prefix": ""}
+    assert Ctrl.__vesper_controller__ == {"prefix": "", "guards": []}
 
 
 def test_command_bare_uses_fn_name():

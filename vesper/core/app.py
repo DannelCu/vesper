@@ -107,7 +107,8 @@ class App:
         """
 
         if callable(target):
-            self.registry.register(target, name=name)
+            guards = getattr(target, "__vesper_guards__", None)
+            self.registry.register(target, name=name, guards=guards)
             return target
 
         if isinstance(target, str):
@@ -122,7 +123,8 @@ class App:
             )
 
         def decorator(fn: Callable) -> Callable:
-            self.registry.register(fn, name=name)
+            guards = getattr(fn, "__vesper_guards__", None)
+            self.registry.register(fn, name=name, guards=guards)
             return fn
 
         return decorator
@@ -212,7 +214,10 @@ class App:
                 if cmd_meta is None:
                     continue
                 cmd_name = f"{prefix}.{cmd_meta['name']}" if prefix else cmd_meta["name"]
-                self.registry.register(method, name=cmd_name)
+                method_guards = getattr(method, "__vesper_guards__", [])
+                ctrl_guards = ctrl_meta.get("guards", [])
+                all_guards = ctrl_guards + method_guards
+                self.registry.register(method, name=cmd_name, guards=all_guards or None)
 
     def emit(self, event: str, payload=None) -> None:
         """

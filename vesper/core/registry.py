@@ -10,8 +10,15 @@ class CommandRegistry:
 
     def __init__(self) -> None:
         self._commands: dict[str, Callable] = {}
+        self._guards: dict[str, list[Callable]] = {}
 
-    def register(self, fn: Callable, *, name: str | None = None) -> None:
+    def register(
+        self,
+        fn: Callable,
+        *,
+        name: str | None = None,
+        guards: list[Callable] | None = None,
+    ) -> None:
         """
         Register a Python function as a Vesper command.
 
@@ -35,6 +42,8 @@ class CommandRegistry:
             )
 
         self._commands[command_name] = fn
+        if guards:
+            self._guards[command_name] = list(guards)
 
     def get(self, name: str) -> Callable:
         """

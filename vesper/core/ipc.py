@@ -6,7 +6,7 @@ import threading
 import traceback
 from typing import Any
 
-from vesper.exceptions import CommandNotFoundError
+from vesper.exceptions import CommandNotFoundError, ForbiddenError
 from vesper.core.registry import CommandRegistry
 
 
@@ -121,6 +121,17 @@ class IPC:
             }
 
         try:
+            for guard_fn in self.registry._guards.get(command_name, []):
+                if inspect.iscoroutinefunction(guard_fn):
+                    future = asyncio.run_coroutine_threadsafe(
+                        guard_fn(command_name, args), self._loop
+                    )
+                    ok = future.result()
+                else:
+                    ok = guard_fn(command_name, args)
+                if ok is False:
+                    raise ForbiddenError("Forbidden")
+
             for mw in self._middleware:
                 if inspect.iscoroutinefunction(mw):
                     future = asyncio.run_coroutine_threadsafe(
