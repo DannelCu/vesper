@@ -23,16 +23,25 @@ class IPC:
         - Error handling and reporting
     """
 
-    def __init__(self, registry: CommandRegistry, *, debug: bool = False) -> None:
+    def __init__(
+        self,
+        registry: CommandRegistry,
+        *,
+        middleware: list | None = None,
+        debug: bool = False,
+    ) -> None:
         """
         Initialize IPC with a command registry.
 
         Args:
-            registry: Command registry containing all registered commands
-            debug: Whether to include debug information in error responses
+            registry:   Command registry containing all registered commands.
+            middleware: Shared middleware list. Passed by reference from App
+                        so handlers registered after IPC construction are visible.
+            debug:      Whether to include debug information in error responses.
         """
         self.registry = registry
         self.debug = debug
+        self._middleware: list = middleware if middleware is not None else []
 
         self._loop = asyncio.new_event_loop()
         _started = threading.Event()
@@ -112,6 +121,15 @@ class IPC:
             }
 
         try:
+            for mw in self._middleware:
+                if inspect.iscoroutinefunction(mw):
+                    future = asyncio.run_coroutine_threadsafe(
+                        mw(command_name, args), self._loop
+                    )
+                    future.result()
+                else:
+                    mw(command_name, args)
+
             if isinstance(args, dict):
                 if inspect.iscoroutinefunction(command):
                     future = asyncio.run_coroutine_threadsafe(command(**args), self._loop)

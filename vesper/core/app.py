@@ -75,7 +75,8 @@ class App:
 
         self.registry = CommandRegistry()
         self.window = Window()
-        self.ipc = IPC(self.registry, debug=self.debug)
+        self._middleware: list[Callable] = []
+        self.ipc = IPC(self.registry, middleware=self._middleware, debug=self.debug)
         self._hooks: dict[str, list[Callable]] = {}
 
         if root_module is not None:
@@ -125,6 +126,30 @@ class App:
             return fn
 
         return decorator
+
+    def middleware(self, fn: Callable) -> Callable:
+        """
+        Register a global IPC middleware function.
+
+        Middleware runs before every command, in registration order. Raising
+        an exception inside middleware rejects the call and returns an error
+        response — use this for auth, logging, or rate-limiting.
+
+        Signature: fn(command: str, args: Any) -> None
+        Async middleware (async def) is also supported.
+
+        Usage:
+            @app.middleware
+            def log(command, args):
+                print(f"[IPC] {command}")
+
+            @app.middleware
+            def auth(command, args):
+                if command.startswith("admin.") and not session.valid:
+                    raise PermissionError("Unauthorized")
+        """
+        self._middleware.append(fn)
+        return fn
 
     def on(self, event: str) -> Callable:
         """
