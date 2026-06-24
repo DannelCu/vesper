@@ -115,6 +115,16 @@ class App:
 
         return decorator
 
+    def emit(self, event: str, payload=None) -> None:
+        """
+        Dispatch a named event to the frontend.
+
+        Args:
+            event: Event name. The frontend receives it as "vesper:<event>".
+            payload: JSON-serializable data passed as event.detail.
+        """
+        self.window.emit(event, payload)
+
     def run(self) -> None:
         """
         Start the Vesper application.

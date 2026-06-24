@@ -1,5 +1,10 @@
-from typing import Any, Dict
+from __future__ import annotations
+
+import asyncio
+import inspect
+import threading
 import traceback
+from typing import Any, Dict
 
 from vesper.exceptions import CommandNotFoundError
 from vesper.core.registry import CommandRegistry
@@ -13,7 +18,7 @@ class IPC:
         - Receiving frontend messages
         - Validating requests
         - Resolving commands from registry
-        - Executing commands
+        - Executing commands (sync and async)
         - Returning structured responses
         - Error handling and reporting
     """
@@ -28,6 +33,18 @@ class IPC:
         """
         self.registry = registry
         self.debug = debug
+
+        self._loop = asyncio.new_event_loop()
+        _started = threading.Event()
+
+        def _run() -> None:
+            asyncio.set_event_loop(self._loop)
+            self._loop.call_soon(lambda: _started.set())
+            self._loop.run_forever()
+
+        self._loop_thread = threading.Thread(target=_run, daemon=True, name="vesper-async")
+        self._loop_thread.start()
+        _started.wait(timeout=5)
 
     def handle(self, message: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -96,9 +113,17 @@ class IPC:
 
         try:
             if isinstance(args, dict):
-                result = command(**args)
+                if inspect.iscoroutinefunction(command):
+                    future = asyncio.run_coroutine_threadsafe(command(**args), self._loop)
+                    result = future.result()
+                else:
+                    result = command(**args)
             else:
-                result = command(args)
+                if inspect.iscoroutinefunction(command):
+                    future = asyncio.run_coroutine_threadsafe(command(args), self._loop)
+                    result = future.result()
+                else:
+                    result = command(args)
 
             return {
                 "id": request_id,

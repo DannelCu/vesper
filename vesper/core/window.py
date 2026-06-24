@@ -87,6 +87,20 @@ class Window:
             on_top=config.on_top,
         )
 
+    def emit(self, event: str, payload=None) -> None:
+        """
+        Dispatch a named event to the frontend.
+
+        Args:
+            event: Event name (dispatched as "vesper:<event>" in JS).
+            payload: JSON-serializable data attached as event.detail.
+        """
+        if self.window is None:
+            return
+        data = json.dumps(payload)
+        js = f'window.dispatchEvent(new CustomEvent("vesper:{event}",{{detail:{data}}}))'
+        self.window.evaluate_js(js)
+
     def show(self) -> None:
         """
         Start the GUI event loop.

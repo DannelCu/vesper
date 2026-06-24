@@ -49,7 +49,16 @@
         return response.result;
     }
 
+    function on(event, handler) {
+        const wrapped = function(e) { handler(e.detail); };
+        window.addEventListener("vesper:" + event, wrapped);
+        return function() {
+            window.removeEventListener("vesper:" + event, wrapped);
+        };
+    }
+
     global.vesper = {
-        invoke
+        invoke,
+        on,
     };
 })(window);

@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from vesper.core.ipc import IPC
 from vesper.core.registry import CommandRegistry
@@ -117,3 +119,69 @@ def test_args_as_non_dict_passed_positionally():
     resp = ipc.handle({"id": "1", "command": "double", "args": 5})
     assert resp["ok"] is True
     assert resp["result"] == 10
+
+
+# ── Async commands ────────────────────────────────────────────────────────────
+
+
+def test_async_command_returns_result():
+    ipc, registry = _make_ipc()
+
+    async def async_hello():
+        return "async hello"
+
+    registry.register(async_hello)
+    resp = ipc.handle({"id": "1", "command": "async_hello", "args": {}})
+    assert resp == {"id": "1", "ok": True, "result": "async hello"}
+
+
+def test_async_command_receives_kwargs():
+    ipc, registry = _make_ipc()
+
+    async def async_greet(name: str):
+        return f"hello {name}"
+
+    registry.register(async_greet)
+    resp = ipc.handle({"id": "1", "command": "async_greet", "args": {"name": "world"}})
+    assert resp["ok"] is True
+    assert resp["result"] == "hello world"
+
+
+def test_async_command_can_await():
+    ipc, registry = _make_ipc()
+
+    async def waiter():
+        await asyncio.sleep(0)
+        return "waited"
+
+    registry.register(waiter)
+    resp = ipc.handle({"id": "1", "command": "waiter", "args": {}})
+    assert resp["ok"] is True
+    assert resp["result"] == "waited"
+
+
+def test_async_command_exception_returns_error():
+    ipc, registry = _make_ipc()
+
+    async def async_fail():
+        raise ValueError("async error")
+
+    registry.register(async_fail)
+    resp = ipc.handle({"id": "1", "command": "async_fail", "args": {}})
+    assert resp["ok"] is False
+    assert resp["error"]["type"] == "ValueError"
+    assert "async error" in resp["error"]["message"]
+
+
+def test_sync_and_async_commands_coexist():
+    ipc, registry = _make_ipc()
+    registry.register(lambda: "sync", name="sync_cmd")
+
+    async def async_cmd():
+        return "async"
+
+    registry.register(async_cmd)
+    r1 = ipc.handle({"id": "1", "command": "sync_cmd", "args": {}})
+    r2 = ipc.handle({"id": "2", "command": "async_cmd", "args": {}})
+    assert r1["result"] == "sync"
+    assert r2["result"] == "async"
