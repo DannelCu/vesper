@@ -17,12 +17,3 @@ class CommandAlreadyRegisteredError(VesperError):
     """
 
 
-class InvalidMessageError(VesperError):
-    """
-    Exception raised for invalid inter-process communication (IPC) messages.
-
-    This error is used to signify that a received message in an IPC system
-    does not conform to the expected format, structure, or protocol. It is
-    intended to help identify and handle malformed or unexpected IPC messages
-    effectively.
-    """

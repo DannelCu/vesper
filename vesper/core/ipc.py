@@ -4,7 +4,7 @@ import asyncio
 import inspect
 import threading
 import traceback
-from typing import Any, Dict
+from typing import Any
 
 from vesper.exceptions import CommandNotFoundError
 from vesper.core.registry import CommandRegistry
@@ -55,7 +55,7 @@ class IPC:
         self._loop_thread.start()
         _started.wait(timeout=5)
 
-    def handle(self, message: Dict[str, Any]) -> Dict[str, Any]:
+    def handle(self, message: dict[str, Any]) -> dict[str, Any]:
         """
         Handle an incoming IPC message from the frontend.
 
