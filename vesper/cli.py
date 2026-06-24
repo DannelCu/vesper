@@ -12,6 +12,7 @@ from vesper.commands.info import add_info_parser, handle_info
 from vesper.commands.init import add_init_parser, handle_init
 from vesper.commands.run import add_run_parser, handle_run
 from vesper.commands.sync_sdk import add_sync_sdk_parser, handle_sync_sdk
+from vesper.commands.sync_types import add_sync_types_parser, handle_sync_types
 from vesper.commands.utils import get_installed_version
 from vesper.commands.version import add_version_parser, handle_version
 
@@ -38,6 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_build_parser(subparsers)
     add_package_parser(subparsers)
     add_sync_sdk_parser(subparsers)
+    add_sync_types_parser(subparsers)
     add_generate_parser(subparsers)
     add_doctor_parser(subparsers)
     add_info_parser(subparsers)
@@ -58,6 +60,7 @@ def main() -> None:
         handle_build,
         handle_package,
         handle_sync_sdk,
+        handle_sync_types,
         handle_generate,
         handle_doctor,
         handle_info,
