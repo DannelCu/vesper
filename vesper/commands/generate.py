@@ -83,6 +83,18 @@ __all__ = ["{pascal}Module"]
 """
 
 
+def _app_module_content(snake: str, pascal: str) -> str:
+    return f"""\
+from vesper import Module
+from .{snake}.{snake}_module import {pascal}Module
+
+
+@Module(imports=[{pascal}Module])
+class AppModule:
+    pass
+"""
+
+
 # ── Generators ────────────────────────────────────────────────────────────────
 
 
@@ -108,10 +120,18 @@ def generate_module(name: str, project_dir: Path) -> None:
     _write(module_dir / f"{snake}_controller.py", _controller_content(snake, pascal, with_service=True))
     _write(module_dir / f"{snake}_module.py", _module_content(snake, pascal))
 
-    print(f"\nModule '{snake}' created at modules/{snake}/")
-    print("\nTo register it in your app, add to app.py:")
-    print(f"  from modules.{snake}.{snake}_module import {pascal}Module")
-    print(f"  app.register_module({pascal}Module)")
+    app_module_path = project_dir / "modules" / "app_module.py"
+    if not app_module_path.exists():
+        _write(app_module_path, _app_module_content(snake, pascal))
+        print(f"\nModule '{snake}' created at modules/{snake}/")
+        print("\nTo use it in app.py:")
+        print("  from modules.app_module import AppModule")
+        print("  app = App(root_module=AppModule)")
+    else:
+        print(f"\nModule '{snake}' created at modules/{snake}/")
+        print("\nAdd to modules/app_module.py:")
+        print(f"  from .{snake}.{snake}_module import {pascal}Module")
+        print(f"  # then add {pascal}Module to @Module(imports=[...])")
 
 
 def generate_controller(name: str, project_dir: Path) -> None:

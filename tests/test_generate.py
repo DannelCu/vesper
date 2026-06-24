@@ -98,12 +98,50 @@ def test_generate_module_normalizes_pascal_name(tmp_path):
 
 def test_generate_module_skips_existing_files(tmp_path):
     generate_module("users", tmp_path)
-    # Modify the service file
     svc = tmp_path / "modules" / "users" / "users_service.py"
     svc.write_text("# custom content", encoding="utf-8")
-    # Run again — should not overwrite
     generate_module("users", tmp_path)
     assert svc.read_text() == "# custom content"
+
+
+# ── app_module.py scaffold ────────────────────────────────────────────────────
+
+
+def test_generate_module_creates_app_module_on_first_module(tmp_path):
+    generate_module("users", tmp_path)
+    assert (tmp_path / "modules" / "app_module.py").exists()
+
+
+def test_generate_module_app_module_imports_new_module(tmp_path):
+    generate_module("users", tmp_path)
+    content = (tmp_path / "modules" / "app_module.py").read_text()
+    assert "UsersModule" in content
+    assert "class AppModule:" in content
+
+
+def test_generate_module_app_module_has_root_module_import(tmp_path):
+    generate_module("users", tmp_path)
+    content = (tmp_path / "modules" / "app_module.py").read_text()
+    assert "from vesper import Module" in content
+    assert "from .users.users_module import UsersModule" in content
+
+
+def test_generate_module_skips_app_module_if_already_exists(tmp_path):
+    generate_module("users", tmp_path)
+    app_mod = tmp_path / "modules" / "app_module.py"
+    app_mod.write_text("# custom AppModule", encoding="utf-8")
+    generate_module("orders", tmp_path)
+    assert app_mod.read_text() == "# custom AppModule"
+
+
+def test_generate_module_second_module_does_not_overwrite_app_module(tmp_path):
+    generate_module("users", tmp_path)
+    generate_module("orders", tmp_path)
+    content = (tmp_path / "modules" / "app_module.py").read_text()
+    # First module's AppModule is preserved
+    assert "UsersModule" in content
+    # orders was NOT auto-added (user does it manually)
+    assert "OrdersModule" not in content
 
 
 # ── generate_controller ───────────────────────────────────────────────────────

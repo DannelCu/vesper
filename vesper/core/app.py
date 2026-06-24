@@ -30,6 +30,7 @@ class App:
         on_top: bool = False,
         frontend: str = "frontend/index.html",
         debug: bool = False,
+        root_module: type | None = None,
     ) -> None:
         """
         Initialize the Vesper application core systems.
@@ -53,6 +54,9 @@ class App:
                 Path to the frontend entry HTML file.
             debug:
                 Whether to include debug information in IPC error responses.
+            root_module:
+                Optional root @Module class. All modules imported by it are
+                registered automatically, so app.py stays minimal.
         """
 
         self.debug = debug
@@ -70,6 +74,9 @@ class App:
         self.registry = CommandRegistry()
         self.window = Window()
         self.ipc = IPC(self.registry, debug=self.debug)
+
+        if root_module is not None:
+            self.register_module(root_module)
 
     def command(
         self,
