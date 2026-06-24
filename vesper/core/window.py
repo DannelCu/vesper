@@ -1,11 +1,23 @@
 import json
 import os
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import webview
 
 from vesper.core.config import WindowConfig
 from vesper.core.ipc import IPC
+
+# Maps Vesper hook names → PyWebView window.events attribute names
+_HOOK_TO_EVENT: dict[str, str] = {
+    "close":    "closed",
+    "minimize": "minimized",
+    "restore":  "restored",
+    "focus":    "focused",
+    "blur":     "blurred",
+    "loaded":   "loaded",
+}
 
 
 class Window:
@@ -24,7 +36,12 @@ class Window:
         self.window = None
         self.ipc: IPC | None = None
 
-    def create(self, ipc_handler: IPC, config: WindowConfig) -> None:
+    def create(
+        self,
+        ipc_handler: IPC,
+        config: WindowConfig,
+        hooks: dict[str, list[Callable]] | None = None,
+    ) -> None:
         """
         Create the application window and bind IPC.
 
@@ -34,6 +51,9 @@ class Window:
                 handling frontend messages.
             config:
                 Window configuration.
+            hooks:
+                Lifecycle handlers keyed by Vesper event name
+                (close, minimize, restore, focus, blur, loaded).
         """
 
         dev_url = os.environ.get("VESPER_DEV_URL")
@@ -86,6 +106,17 @@ class Window:
             minimized=config.minimized,
             on_top=config.on_top,
         )
+
+        if hooks:
+            for vesper_event, handlers in hooks.items():
+                pywebview_attr = _HOOK_TO_EVENT.get(vesper_event)
+                if pywebview_attr is None:
+                    continue
+                pywebview_event = getattr(self.window.events, pywebview_attr, None)
+                if pywebview_event is None:
+                    continue
+                for fn in handlers:
+                    pywebview_event += fn
 
     def emit(self, event: str, payload=None) -> None:
         """

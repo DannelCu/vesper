@@ -3,8 +3,10 @@ from collections.abc import Callable
 from vesper.core.config import WindowConfig
 from vesper.core.module import Container
 from vesper.core.registry import CommandRegistry
-from vesper.core.window import Window
+from vesper.core.window import Window, _HOOK_TO_EVENT
 from vesper.core.ipc import IPC
+
+_VALID_HOOKS: frozenset[str] = frozenset(_HOOK_TO_EVENT)
 
 
 class App:
@@ -74,6 +76,7 @@ class App:
         self.registry = CommandRegistry()
         self.window = Window()
         self.ipc = IPC(self.registry, debug=self.debug)
+        self._hooks: dict[str, list[Callable]] = {}
 
         if root_module is not None:
             self.register_module(root_module)
@@ -119,6 +122,29 @@ class App:
 
         def decorator(fn: Callable) -> Callable:
             self.registry.register(fn, name=name)
+            return fn
+
+        return decorator
+
+    def on(self, event: str) -> Callable:
+        """
+        Register a lifecycle hook for a window event.
+
+        Supported events: close, minimize, restore, focus, blur, loaded.
+
+        Usage:
+            @app.on("close")
+            def handle_close():
+                db.close()
+        """
+        if event not in _VALID_HOOKS:
+            raise ValueError(
+                f"Unknown lifecycle event: '{event}'. "
+                f"Valid events: {sorted(_VALID_HOOKS)}"
+            )
+
+        def decorator(fn: Callable) -> Callable:
+            self._hooks.setdefault(event, []).append(fn)
             return fn
 
         return decorator
@@ -183,6 +209,7 @@ class App:
         self.window.create(
             ipc_handler=self.ipc,
             config=self.config,
+            hooks=self._hooks or None,
         )
 
         self.window.show()
