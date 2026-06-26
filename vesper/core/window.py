@@ -19,6 +19,45 @@ _HOOK_TO_EVENT: dict[str, str] = {
 }
 
 
+class WindowHandle:
+    """
+    Handle for a secondary window returned by ``app.register_window()``.
+
+    The underlying PyWebView window is created when ``app.run()`` is called.
+    Calling ``show()`` / ``hide()`` / ``close()`` before that is a no-op.
+    """
+
+    def __init__(self, config: "WindowConfig") -> None:
+        self._config = config
+        self._win = None
+
+    def _attach(self, win) -> None:
+        self._win = win
+
+    def show(self) -> None:
+        """Make the window visible."""
+        if self._win is not None:
+            self._win.show()
+
+    def hide(self) -> None:
+        """Hide the window without destroying it."""
+        if self._win is not None:
+            self._win.hide()
+
+    def close(self) -> None:
+        """Destroy the window."""
+        if self._win is not None:
+            self._win.destroy()
+
+    def emit(self, event: str, payload=None) -> None:
+        """Dispatch a named event to this window's frontend."""
+        if self._win is None:
+            return
+        data = json.dumps(payload)
+        js = f'window.dispatchEvent(new CustomEvent("vesper:{event}",{{detail:{data}}}))'
+        self._win.evaluate_js(js)
+
+
 def _to_file_types(filters: list[dict] | None) -> tuple:
     """Convert Vesper filter dicts to the tuple of strings PyWebView expects.
 
@@ -57,6 +96,7 @@ class Window:
         ipc_handler: IPC,
         config: WindowConfig,
         hooks: dict[str, list[Callable]] | None = None,
+        secondary_windows: list[WindowHandle] | None = None,
     ) -> None:
         """
         Create the application window and bind IPC.
@@ -70,6 +110,9 @@ class Window:
             hooks:
                 Lifecycle handlers keyed by Vesper event name
                 (close, minimize, restore, focus, blur, loaded).
+            secondary_windows:
+                Pre-declared secondary windows created hidden.
+                Each is attached to the IPC and shown on demand.
         """
 
         dev_url = os.environ.get("VESPER_DEV_URL")
@@ -133,6 +176,32 @@ class Window:
                     continue
                 for fn in handlers:
                     pywebview_event += fn
+
+        for handle in (secondary_windows or []):
+            cfg = handle._config
+            if dev_url:
+                filename = Path(cfg.frontend).name
+                sec_url = f"{dev_url.rstrip('/')}/{filename}"
+            else:
+                sec_frontend = Path(cfg.frontend)
+                if not sec_frontend.is_file():
+                    raise FileNotFoundError(
+                        f"Secondary window frontend does not exist: {cfg.frontend}"
+                    )
+                sec_url = cfg.frontend
+            sec_win = webview.create_window(
+                title=cfg.title,
+                url=sec_url,
+                js_api=API(ipc_handler),
+                width=cfg.width,
+                height=cfg.height,
+                resizable=cfg.resizable,
+                fullscreen=cfg.fullscreen,
+                minimized=cfg.minimized,
+                on_top=cfg.on_top,
+                hidden=True,
+            )
+            handle._attach(sec_win)
 
     def emit(self, event: str, payload=None) -> None:
         """
