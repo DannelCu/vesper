@@ -3,7 +3,7 @@ from collections.abc import Callable
 from vesper.core.config import WindowConfig
 from vesper.core.module import Container
 from vesper.core.registry import CommandRegistry
-from vesper.core.window import Window, _HOOK_TO_EVENT
+from vesper.core.window import Window, WindowHandle, _HOOK_TO_EVENT
 from vesper.core.ipc import IPC
 
 _VALID_HOOKS: frozenset[str] = frozenset(_HOOK_TO_EVENT)
@@ -77,6 +77,8 @@ class App:
         self.window = Window()
         self._middleware: list[Callable] = []
         self._hooks: dict[str, list[Callable]] = {}
+        self._secondary_windows: list[WindowHandle] = []
+        self._tray = None
 
         # Built-in dialog commands — use vesper: prefix so sync-types skips them
         def _open_dialog(multiple: bool = False, filters=None, directory: str = ""):
@@ -234,6 +236,75 @@ class App:
                 all_guards = ctrl_guards + method_guards
                 self.registry.register(method, name=cmd_name, guards=all_guards or None)
 
+    def register_window(
+        self,
+        *,
+        title: str = "Vesper Window",
+        width: int = 800,
+        height: int = 600,
+        resizable: bool = True,
+        fullscreen: bool = False,
+        minimized: bool = False,
+        on_top: bool = False,
+        frontend: str,
+    ) -> WindowHandle:
+        """
+        Pre-declare a secondary window.
+
+        The window is created hidden when ``app.run()`` is called and shares
+        the same IPC registry as the main window. Call ``handle.show()`` from
+        a command to display it on demand.
+
+        Args:
+            title:     Window title.
+            width:     Initial width in pixels.
+            height:    Initial height in pixels.
+            resizable: Whether the window can be resized.
+            fullscreen: Whether the window starts fullscreen.
+            minimized: Whether the window starts minimized.
+            on_top:    Whether the window stays on top.
+            frontend:  Path to the HTML entry file for this window.
+
+        Returns:
+            A :class:`WindowHandle` you can call ``.show()`` / ``.hide()`` /
+            ``.close()`` / ``.emit()`` on after the app starts.
+        """
+        cfg = WindowConfig(
+            title=title,
+            width=width,
+            height=height,
+            resizable=resizable,
+            fullscreen=fullscreen,
+            minimized=minimized,
+            on_top=on_top,
+            frontend=frontend,
+        )
+        handle = WindowHandle(cfg)
+        self._secondary_windows.append(handle)
+        return handle
+
+    def tray(
+        self,
+        icon: str,
+        menu: list,
+        *,
+        title: str = "",
+    ) -> None:
+        """
+        Configure a system tray icon with a context menu.
+
+        Must be called before ``app.run()``. Requires the ``vesper[tray]``
+        extra (pystray + Pillow).
+
+        Args:
+            icon:  Path to the icon image file (PNG recommended).
+            menu:  List of :class:`TrayMenuItem` items. Pass ``None`` to
+                   insert a separator.
+            title: Tooltip text shown when hovering over the tray icon.
+        """
+        from vesper.core.tray import Tray
+        self._tray = Tray(icon=icon, menu=menu, title=title)
+
     def emit(self, event: str, payload=None) -> None:
         """
         Dispatch a named event to the frontend.
@@ -255,6 +326,14 @@ class App:
             ipc_handler=self.ipc,
             config=self.config,
             hooks=self._hooks or None,
+            secondary_windows=self._secondary_windows or None,
         )
 
-        self.window.show()
+        if self._tray is not None:
+            self._tray.start()
+
+        try:
+            self.window.show()
+        finally:
+            if self._tray is not None:
+                self._tray.stop()

@@ -15,6 +15,9 @@ dependencies = [
   "pywebview>=4.0"
 ]
 
+[project.optional-dependencies]
+tray = ["pystray>=0.19", "Pillow>=9.0"]
+
 [project.scripts]
 vesper = "vesper.cli:main"
 
