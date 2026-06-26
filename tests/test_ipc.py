@@ -185,3 +185,59 @@ def test_sync_and_async_commands_coexist():
     r2 = ipc.handle({"id": "2", "command": "async_cmd", "args": {}})
     assert r1["result"] == "sync"
     assert r2["result"] == "async"
+
+
+# ── Arg validation ────────────────────────────────────────────────────────────
+
+
+def test_missing_required_arg_returns_validation_error():
+    ipc, registry = _make_ipc()
+    registry.register(lambda user_id: user_id, name="get_user")
+    resp = ipc.handle({"id": "1", "command": "get_user", "args": {}})
+    assert resp["ok"] is False
+    assert resp["error"]["type"] == "ValidationError"
+    assert "user_id" in resp["error"]["message"]
+
+
+def test_unexpected_arg_returns_validation_error():
+    ipc, registry = _make_ipc()
+    registry.register(lambda: None, name="noop")
+    resp = ipc.handle({"id": "1", "command": "noop", "args": {"x": 1}})
+    assert resp["ok"] is False
+    assert resp["error"]["type"] == "ValidationError"
+    assert "x" in resp["error"]["message"]
+
+
+def test_valid_args_pass_validation():
+    ipc, registry = _make_ipc()
+    registry.register(lambda name: name, name="echo")
+    resp = ipc.handle({"id": "1", "command": "echo", "args": {"name": "hi"}})
+    assert resp["ok"] is True
+    assert resp["result"] == "hi"
+
+
+def test_optional_arg_not_required():
+    ipc, registry = _make_ipc()
+    registry.register(lambda x=0: x + 1, name="inc")
+    resp = ipc.handle({"id": "1", "command": "inc", "args": {}})
+    assert resp["ok"] is True
+    assert resp["result"] == 1
+
+
+def test_var_kwargs_command_accepts_any_args():
+    ipc, registry = _make_ipc()
+
+    def flexible(**kwargs):
+        return list(kwargs.keys())
+
+    registry.register(flexible)
+    resp = ipc.handle({"id": "1", "command": "flexible", "args": {"a": 1, "b": 2}})
+    assert resp["ok"] is True
+
+
+def test_validation_error_not_raised_for_non_dict_args():
+    ipc, registry = _make_ipc()
+    registry.register(lambda x: x * 2, name="double")
+    resp = ipc.handle({"id": "1", "command": "double", "args": 5})
+    assert resp["ok"] is True
+    assert resp["result"] == 10

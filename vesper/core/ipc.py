@@ -10,6 +10,39 @@ from vesper.exceptions import CommandNotFoundError, ForbiddenError
 from vesper.core.registry import CommandRegistry
 
 
+def _validate_args(fn, args: dict) -> str | None:
+    """Check args match fn's signature. Returns an error message or None."""
+    try:
+        sig = inspect.signature(fn)
+    except (ValueError, TypeError):
+        return None
+
+    params = sig.parameters
+    has_var_keyword = any(
+        p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
+    )
+
+    if not has_var_keyword:
+        valid = {
+            n for n, p in params.items()
+            if p.kind not in (inspect.Parameter.VAR_KEYWORD, inspect.Parameter.VAR_POSITIONAL)
+        }
+        unexpected = set(args) - valid
+        if unexpected:
+            return f"Unexpected arguments: {', '.join(sorted(unexpected))}"
+
+    missing = [
+        n for n, p in params.items()
+        if p.kind not in (inspect.Parameter.VAR_KEYWORD, inspect.Parameter.VAR_POSITIONAL)
+        and p.default is inspect.Parameter.empty
+        and n not in args
+    ]
+    if missing:
+        return f"Missing required arguments: {', '.join(missing)}"
+
+    return None
+
+
 class IPC:
     """
     Inter-Process Communication manager.
@@ -119,6 +152,15 @@ class IPC:
                     "message": str(e)
                 }
             }
+
+        if isinstance(args, dict):
+            err = _validate_args(command, args)
+            if err:
+                return {
+                    "id": request_id,
+                    "ok": False,
+                    "error": {"type": "ValidationError", "message": err},
+                }
 
         try:
             for guard_fn in self.registry._guards.get(command_name, []):
