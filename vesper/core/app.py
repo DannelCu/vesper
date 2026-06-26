@@ -101,6 +101,13 @@ class App:
 
         self.registry.register(_notify, name="vesper:notify")
 
+        from vesper.core import fs as _fs
+
+        self.registry.register(_fs.read, name="vesper:fs:read")
+        self.registry.register(_fs.write, name="vesper:fs:write")
+        self.registry.register(_fs.exists, name="vesper:fs:exists")
+        self.registry.register(_fs.list_dir, name="vesper:fs:list")
+
         self.ipc = IPC(self.registry, middleware=self._middleware, debug=self.debug)
 
         if root_module is not None:

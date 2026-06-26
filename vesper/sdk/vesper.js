@@ -96,10 +96,49 @@
         return invoke("vesper:notify", { title: title || "", body: body || "" });
     }
 
+    var fs = {
+        /**
+         * Read a file and return its contents as a string.
+         * @param {string} path
+         * @param {string} [encoding="utf-8"]
+         * @returns {Promise<string>}
+         */
+        read: function(path, encoding) {
+            return invoke("vesper:fs:read", { path: path, encoding: encoding || "utf-8" });
+        },
+        /**
+         * Write a string to a file (creates parent directories if needed).
+         * @param {string} path
+         * @param {string} content
+         * @param {string} [encoding="utf-8"]
+         * @returns {Promise<void>}
+         */
+        write: function(path, content, encoding) {
+            return invoke("vesper:fs:write", { path: path, content: content, encoding: encoding || "utf-8" });
+        },
+        /**
+         * Return true if the path exists.
+         * @param {string} path
+         * @returns {Promise<boolean>}
+         */
+        exists: function(path) {
+            return invoke("vesper:fs:exists", { path: path });
+        },
+        /**
+         * List entries in a directory.
+         * @param {string} path
+         * @returns {Promise<{name:string, path:string, is_dir:boolean}[]>}
+         */
+        list: function(path) {
+            return invoke("vesper:fs:list", { path: path });
+        },
+    };
+
     global.vesper = {
         invoke,
         on,
         dialog,
         notify,
+        fs,
     };
 })(window);
