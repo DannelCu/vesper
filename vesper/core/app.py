@@ -94,6 +94,13 @@ class App:
         self.registry.register(_save_dialog, name="vesper:dialog:save")
         self.registry.register(_pick_folder, name="vesper:dialog:folder")
 
+        from vesper.core.notify import send as _notify_send
+
+        def _notify(title: str = "", body: str = "") -> None:
+            _notify_send(title, body)
+
+        self.registry.register(_notify, name="vesper:notify")
+
         self.ipc = IPC(self.registry, middleware=self._middleware, debug=self.debug)
 
         if root_module is not None:
@@ -282,6 +289,20 @@ class App:
         handle = WindowHandle(cfg)
         self._secondary_windows.append(handle)
         return handle
+
+    def notify(self, title: str, body: str = "") -> None:
+        """
+        Send a native desktop notification (fire-and-forget).
+
+        Dispatches in a background thread so it never blocks the app.
+        Uses PowerShell on Windows, osascript on macOS, notify-send on Linux.
+
+        Args:
+            title: Notification title.
+            body:  Notification body text.
+        """
+        from vesper.core.notify import send
+        send(title, body)
 
     def tray(
         self,

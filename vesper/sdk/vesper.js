@@ -92,9 +92,14 @@
         },
     };
 
+    function notify(title, body) {
+        return invoke("vesper:notify", { title: title || "", body: body || "" });
+    }
+
     global.vesper = {
         invoke,
         on,
         dialog,
+        notify,
     };
 })(window);
