@@ -1,10 +1,25 @@
 from __future__ import annotations
 
 import argparse
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
-from vesper.commands.utils import find_entrypoint, get_installed_version, print_check
+from vesper.commands.utils import (
+    find_entrypoint,
+    get_installed_version,
+    print_check,
+    read_vesper_toml,
+)
+
+_TOML_VALID_KEYS = {"name", "template", "styles", "bundler", "package_manager"}
+_TOML_VALID_VALUES: dict[str, set[str]] = {
+    "template": {"vanilla", "react", "vue", "svelte"},
+    "styles": {"none", "bootstrap", "tailwind"},
+    "bundler": {"pyinstaller", "nuitka"},
+    "package_manager": {"npm", "pnpm", "yarn"},
+}
 
 
 def doctor() -> None:
@@ -45,6 +60,55 @@ def doctor() -> None:
         "Run `pip install pywebview` or reinstall Vesper with `pip install -e .`."
     )
     has_failures = has_failures or not pywebview_ok
+
+    node_path = shutil.which("node")
+    node_version: str | None = None
+    node_ok = False
+    if node_path:
+        try:
+            result = subprocess.run(
+                [node_path, "--version"], capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0:
+                node_version = result.stdout.strip()
+                major = int(node_version.lstrip("v").split(".")[0])
+                node_ok = major >= 18
+        except Exception:
+            pass
+    print_check(
+        node_ok,
+        f"Node.js version: {node_version or 'not found'}",
+        "Install Node.js 18 or newer from https://nodejs.org",
+    )
+    has_failures = has_failures or not node_ok
+
+    toml_config = read_vesper_toml(current_directory)
+    pm = toml_config.get("package_manager", "npm")
+    pm_path = shutil.which(pm)
+    pm_ok = pm_path is not None
+    print_check(
+        pm_ok,
+        f"Package manager available: {pm}" if pm_ok else f"Package manager not found: {pm}",
+        f"Install {pm} or set 'package_manager' in vesper.toml",
+    )
+    has_failures = has_failures or not pm_ok
+
+    toml_path = current_directory / "vesper.toml"
+    if toml_path.is_file():
+        toml_errors: list[str] = []
+        for key, value in toml_config.items():
+            if key not in _TOML_VALID_KEYS:
+                toml_errors.append(f"unknown key '{key}'")
+            elif key in _TOML_VALID_VALUES and value not in _TOML_VALID_VALUES[key]:
+                toml_errors.append(f"invalid value for '{key}': '{value}'")
+        toml_ok = not toml_errors
+        msg = (
+            "vesper.toml schema is valid"
+            if toml_ok
+            else f"vesper.toml schema errors: {'; '.join(toml_errors)}"
+        )
+        print_check(toml_ok, msg, "Check vesper.toml for typos in keys or values.")
+        has_failures = has_failures or not toml_ok
 
     entrypoint = find_entrypoint(current_directory)
     entrypoint_ok = entrypoint is not None
