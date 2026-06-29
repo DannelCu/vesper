@@ -41,6 +41,31 @@ def read_vesper_toml(project_dir: Path) -> dict[str, str]:
     return result
 
 
+def read_vesper_toml_section(project_dir: Path, section: str) -> dict[str, str]:
+    """Return key-value pairs from a specific TOML section."""
+    toml_path = project_dir / "vesper.toml"
+
+    if not toml_path.is_file():
+        return {}
+
+    result: dict[str, str] = {}
+    target = f"[{section}]"
+    in_section = False
+
+    for line in toml_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+
+        if stripped.startswith("["):
+            in_section = stripped == target
+            continue
+
+        if in_section and not stripped.startswith("#") and "=" in stripped:
+            key, _, value = stripped.partition("=")
+            result[key.strip()] = value.strip().strip('"')
+
+    return result
+
+
 # ─── Entrypoint ──────────────────────────────────────────────────────────────
 
 

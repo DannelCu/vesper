@@ -134,11 +134,54 @@
         },
     };
 
+    var update = {
+        /**
+         * Check the configured manifest for a newer version.
+         * @returns {Promise<{version:string, notes:string, download_url:string}|null>}
+         */
+        check: function() {
+            return invoke("vesper:update:check", {});
+        },
+        /**
+         * Download an update binary. Calls onProgress(percent) during the transfer.
+         * @param {string} url - Direct download URL from check() result.
+         * @param {function(number):void} [onProgress]
+         * @returns {Promise<string>} Local path to the downloaded binary.
+         */
+        download: function(url, onProgress) {
+            var unsub;
+            if (typeof onProgress === "function") {
+                unsub = on("update:progress", function(data) {
+                    onProgress(data.percent);
+                });
+            }
+            return invoke("vesper:update:download", { url: url }).then(
+                function(result) {
+                    if (unsub) unsub();
+                    return result;
+                },
+                function(err) {
+                    if (unsub) unsub();
+                    throw err;
+                }
+            );
+        },
+        /**
+         * Install the binary at path and restart the app.
+         * @param {string} path - Local path returned by download().
+         * @returns {Promise<void>}
+         */
+        install: function(path) {
+            return invoke("vesper:update:install", { path: path });
+        },
+    };
+
     global.vesper = {
         invoke,
         on,
         dialog,
         notify,
         fs,
+        update,
     };
 })(window);

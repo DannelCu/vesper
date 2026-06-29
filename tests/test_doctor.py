@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vesper.commands.doctor import _TOML_VALID_KEYS, _TOML_VALID_VALUES, doctor
+from vesper.commands.doctor import _PROJECT_VALID_KEYS, _PROJECT_VALID_VALUES, doctor
 
 
 def _run_doctor(tmp_path: Path, *, monkeypatch, node_version: str | None = "v20.0.0", pm: str = "npm"):
@@ -320,14 +320,80 @@ def test_no_toml_does_not_report_schema_check(tmp_path, monkeypatch, capsys):
 
 
 def test_toml_valid_keys_set():
-    assert "name" in _TOML_VALID_KEYS
-    assert "template" in _TOML_VALID_KEYS
-    assert "bundler" in _TOML_VALID_KEYS
+    assert "name" in _PROJECT_VALID_KEYS
+    assert "template" in _PROJECT_VALID_KEYS
+    assert "bundler" in _PROJECT_VALID_KEYS
+    assert "version" in _PROJECT_VALID_KEYS
 
 
 def test_toml_valid_template_values():
-    assert _TOML_VALID_VALUES["template"] == {"vanilla", "react", "vue", "svelte"}
+    assert _PROJECT_VALID_VALUES["template"] == {"vanilla", "react", "vue", "svelte"}
 
 
 def test_toml_valid_bundler_values():
-    assert _TOML_VALID_VALUES["bundler"] == {"pyinstaller", "nuitka"}
+    assert _PROJECT_VALID_VALUES["bundler"] == {"pyinstaller", "nuitka"}
+
+
+# ── [update] section ──────────────────────────────────────────────────────────
+
+
+def _make_project(tmp_path, monkeypatch, toml_content):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "app.py").write_text("")
+    (tmp_path / "vesper.toml").write_text(toml_content)
+    frontend = tmp_path / "frontend"
+    frontend.mkdir()
+    (frontend / "index.html").write_text('<script src="./vesper.js"></script></body>')
+    (frontend / "vesper.js").write_text("")
+
+    def fake_which(name):
+        return f"/usr/bin/{name}" if name in ("node", "npm") else None
+
+    def fake_run(cmd, **kwargs):
+        m = MagicMock()
+        m.returncode = 0
+        m.stdout = "v20.0.0"
+        return m
+
+    return fake_which, fake_run
+
+
+def test_toml_update_section_valid(tmp_path, monkeypatch, capsys):
+    fake_which, fake_run = _make_project(
+        tmp_path, monkeypatch,
+        '[project]\nname = "app"\nversion = "1.0.0"\n\n[update]\ncheck_url = "https://example.com/manifest.json"\n',
+    )
+    with patch("vesper.commands.doctor.shutil.which", side_effect=fake_which), \
+         patch("vesper.commands.doctor.subprocess.run", side_effect=fake_run), \
+         patch("vesper.commands.utils.importlib.metadata.version", return_value="1.0.0"):
+        doctor()
+    out = capsys.readouterr().out
+    assert "[OK] vesper.toml schema is valid" in out
+
+
+def test_toml_update_check_url_without_version_fails(tmp_path, monkeypatch, capsys):
+    fake_which, fake_run = _make_project(
+        tmp_path, monkeypatch,
+        '[project]\nname = "app"\n\n[update]\ncheck_url = "https://example.com/manifest.json"\n',
+    )
+    with patch("vesper.commands.doctor.shutil.which", side_effect=fake_which), \
+         patch("vesper.commands.doctor.subprocess.run", side_effect=fake_run), \
+         patch("vesper.commands.utils.importlib.metadata.version", return_value="1.0.0"):
+        with pytest.raises(SystemExit):
+            doctor()
+    out = capsys.readouterr().out
+    assert "version is missing" in out
+
+
+def test_toml_update_unknown_key_fails(tmp_path, monkeypatch, capsys):
+    fake_which, fake_run = _make_project(
+        tmp_path, monkeypatch,
+        '[project]\nname = "app"\nversion = "1.0.0"\n\n[update]\nbad_key = "x"\n',
+    )
+    with patch("vesper.commands.doctor.shutil.which", side_effect=fake_which), \
+         patch("vesper.commands.doctor.subprocess.run", side_effect=fake_run), \
+         patch("vesper.commands.utils.importlib.metadata.version", return_value="1.0.0"):
+        with pytest.raises(SystemExit):
+            doctor()
+    out = capsys.readouterr().out
+    assert "[update] unknown key 'bad_key'" in out

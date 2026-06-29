@@ -33,6 +33,8 @@ class App:
         frontend: str = "frontend/index.html",
         debug: bool = False,
         root_module: type | None = None,
+        version: str = "",
+        update_url: str = "",
     ) -> None:
         """
         Initialize the Vesper application core systems.
@@ -62,6 +64,8 @@ class App:
         """
 
         self.debug = debug
+        self._version = version
+        self._update_url = update_url
         self.config = WindowConfig(
             title=title,
             width=width,
@@ -107,6 +111,25 @@ class App:
         self.registry.register(_fs.write, name="vesper:fs:write")
         self.registry.register(_fs.exists, name="vesper:fs:exists")
         self.registry.register(_fs.list_dir, name="vesper:fs:list")
+
+        from vesper.core import updater as _updater
+
+        _app = self
+
+        def _update_check() -> dict | None:
+            return _updater.check(_app._update_url, _app._version)
+
+        def _update_download(url: str = "") -> str:
+            def _on_progress(percent: int) -> None:
+                _app.window.emit("update:progress", {"percent": percent})
+            return _updater.download(url, on_progress=_on_progress)
+
+        def _update_install(path: str = "") -> None:
+            _updater.install(path)
+
+        self.registry.register(_update_check, name="vesper:update:check")
+        self.registry.register(_update_download, name="vesper:update:download")
+        self.registry.register(_update_install, name="vesper:update:install")
 
         self.ipc = IPC(self.registry, middleware=self._middleware, debug=self.debug)
 
@@ -332,6 +355,45 @@ class App:
         """
         from vesper.core.tray import Tray
         self._tray = Tray(icon=icon, menu=menu, title=title)
+
+    def check_update(self) -> dict | None:
+        """
+        Check the configured update manifest for a newer version.
+
+        Returns a dict with ``version``, ``notes``, and ``download_url`` if an
+        update is available for the current platform, or None otherwise.
+        Requires ``update_url`` and ``version`` to be set on the App.
+        """
+        from vesper.core import updater
+        return updater.check(self._update_url, self._version)
+
+    def download_update(
+        self,
+        url: str,
+        on_progress: "Callable[[int], None] | None" = None,
+    ) -> str:
+        """
+        Download an update binary from url to a temporary file.
+
+        Args:
+            url:         Direct download URL (from check_update result).
+            on_progress: Optional callback called with percent (0–100).
+
+        Returns:
+            Local path to the downloaded binary.
+        """
+        from vesper.core import updater
+        return updater.download(url, on_progress=on_progress)
+
+    def install_update(self, path: str) -> None:
+        """
+        Replace the running executable with the binary at path and restart.
+
+        On POSIX this re-execs the process. On Windows it launches a detached
+        helper script and exits. Only meaningful for packaged apps.
+        """
+        from vesper.core import updater
+        updater.install(path)
 
     def emit(self, event: str, payload=None) -> None:
         """

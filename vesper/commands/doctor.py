@@ -11,15 +11,17 @@ from vesper.commands.utils import (
     get_installed_version,
     print_check,
     read_vesper_toml,
+    read_vesper_toml_section,
 )
 
-_TOML_VALID_KEYS = {"name", "template", "styles", "bundler", "package_manager"}
-_TOML_VALID_VALUES: dict[str, set[str]] = {
+_PROJECT_VALID_KEYS = {"name", "template", "styles", "bundler", "package_manager", "version"}
+_PROJECT_VALID_VALUES: dict[str, set[str]] = {
     "template": {"vanilla", "react", "vue", "svelte"},
     "styles": {"none", "bootstrap", "tailwind"},
     "bundler": {"pyinstaller", "nuitka"},
     "package_manager": {"npm", "pnpm", "yarn"},
 }
+_UPDATE_VALID_KEYS = {"check_url"}
 
 
 def doctor() -> None:
@@ -95,12 +97,21 @@ def doctor() -> None:
 
     toml_path = current_directory / "vesper.toml"
     if toml_path.is_file():
+        project_section = read_vesper_toml_section(current_directory, "project")
+        update_section = read_vesper_toml_section(current_directory, "update")
+
         toml_errors: list[str] = []
-        for key, value in toml_config.items():
-            if key not in _TOML_VALID_KEYS:
-                toml_errors.append(f"unknown key '{key}'")
-            elif key in _TOML_VALID_VALUES and value not in _TOML_VALID_VALUES[key]:
-                toml_errors.append(f"invalid value for '{key}': '{value}'")
+        for key, value in project_section.items():
+            if key not in _PROJECT_VALID_KEYS:
+                toml_errors.append(f"[project] unknown key '{key}'")
+            elif key in _PROJECT_VALID_VALUES and value not in _PROJECT_VALID_VALUES[key]:
+                toml_errors.append(f"[project] invalid value for '{key}': '{value}'")
+        for key in update_section:
+            if key not in _UPDATE_VALID_KEYS:
+                toml_errors.append(f"[update] unknown key '{key}'")
+        if update_section.get("check_url") and not project_section.get("version"):
+            toml_errors.append("[update] check_url is set but [project] version is missing")
+
         toml_ok = not toml_errors
         msg = (
             "vesper.toml schema is valid"
