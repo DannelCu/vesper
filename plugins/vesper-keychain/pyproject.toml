@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vesper-keychain"
+version = "0.1.0"
+description = "Secure OS keychain plugin for Vesper — Windows Credential Manager, macOS Keychain, Linux Secret Service"
+requires-python = ">=3.10"
+authors = [{ name = "Dannel LLC" }]
+license = "MIT"
+
+dependencies = [
+  "vesper",
+  "keyring>=24.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["vesper_keychain*"]
+
+[tool.setuptools.package-data]
+vesper_keychain = ["sdk/*.js"]
