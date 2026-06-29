@@ -22,6 +22,10 @@ _PROJECT_VALID_VALUES: dict[str, set[str]] = {
     "package_manager": {"npm", "pnpm", "yarn"},
 }
 _UPDATE_VALID_KEYS = {"check_url"}
+_SIGN_VALID_KEYS = {"identity", "entitlements", "notarize", "apple_id", "team_id", "certificate", "timestamp_url"}
+_SIGN_VALID_VALUES: dict[str, set[str]] = {
+    "notarize": {"true", "false"},
+}
 
 
 def doctor() -> None:
@@ -112,6 +116,18 @@ def doctor() -> None:
         if update_section.get("check_url") and not project_section.get("version"):
             toml_errors.append("[update] check_url is set but [project] version is missing")
 
+        sign_section = read_vesper_toml_section(current_directory, "sign")
+        for key, value in sign_section.items():
+            if key not in _SIGN_VALID_KEYS:
+                toml_errors.append(f"[sign] unknown key '{key}'")
+            elif key in _SIGN_VALID_VALUES and value not in _SIGN_VALID_VALUES[key]:
+                toml_errors.append(f"[sign] invalid value for '{key}': '{value}'")
+        if sign_section.get("notarize", "").lower() == "true":
+            if not sign_section.get("apple_id"):
+                toml_errors.append("[sign] notarize is true but apple_id is missing")
+            if not sign_section.get("team_id"):
+                toml_errors.append("[sign] notarize is true but team_id is missing")
+
         toml_ok = not toml_errors
         msg = (
             "vesper.toml schema is valid"
@@ -120,6 +136,37 @@ def doctor() -> None:
         )
         print_check(toml_ok, msg, "Check vesper.toml for typos in keys or values.")
         has_failures = has_failures or not toml_ok
+
+        if sign_section:
+            import sys as _sys
+            from vesper.commands.sign import find_signtool
+            if _sys.platform == "darwin":
+                codesign_ok = shutil.which("codesign") is not None
+                print_check(
+                    codesign_ok,
+                    "codesign available" if codesign_ok else "codesign not found",
+                    "Install Xcode Command Line Tools: xcode-select --install",
+                )
+                has_failures = has_failures or not codesign_ok
+                if sign_section.get("notarize", "").lower() == "true":
+                    xcrun_ok = shutil.which("xcrun") is not None
+                    print_check(
+                        xcrun_ok,
+                        "xcrun available" if xcrun_ok else "xcrun not found",
+                        "Install Xcode Command Line Tools: xcode-select --install",
+                    )
+                    has_failures = has_failures or not xcrun_ok
+            elif _sys.platform == "win32":
+                signtool_ok = find_signtool() is not None
+                osslsign_ok = shutil.which("osslsigncode") is not None
+                tool_ok = signtool_ok or osslsign_ok
+                tool_name = "signtool" if signtool_ok else ("osslsigncode" if osslsign_ok else "none")
+                print_check(
+                    tool_ok,
+                    f"Signing tool available: {tool_name}" if tool_ok else "No signing tool found (signtool / osslsigncode)",
+                    "Install Windows SDK (signtool) or osslsigncode.",
+                )
+                has_failures = has_failures or not tool_ok
 
     entrypoint = find_entrypoint(current_directory)
     entrypoint_ok = entrypoint is not None
