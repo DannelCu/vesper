@@ -137,6 +137,17 @@ def doctor() -> None:
         print_check(toml_ok, msg, "Check vesper.toml for typos in keys or values.")
         has_failures = has_failures or not toml_ok
 
+        plugins_section = read_vesper_toml_section(current_directory, "plugins")
+        for _alias, package_name in plugins_section.items():
+            version = get_installed_version(package_name)
+            plugin_ok = version is not None
+            print_check(
+                plugin_ok,
+                f"Plugin {package_name} installed: {version}" if plugin_ok else f"Plugin {package_name} not installed",
+                f"Run `pip install {package_name}`",
+            )
+            has_failures = has_failures or not plugin_ok
+
         if sign_section:
             import sys as _sys
             from vesper.commands.sign import find_signtool

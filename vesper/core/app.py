@@ -35,6 +35,7 @@ class App:
         root_module: type | None = None,
         version: str = "",
         update_url: str = "",
+        plugins: list | None = None,
     ) -> None:
         """
         Initialize the Vesper application core systems.
@@ -135,6 +136,9 @@ class App:
 
         if root_module is not None:
             self.register_module(root_module)
+
+        for plugin in (plugins or []):
+            plugin.register(self)
 
     def command(
         self,

@@ -16,6 +16,13 @@
 !tests/
 !tests/**
 
+# Keep plugins
+!plugins/
+!plugins/**
+
+# Keep root conftest
+!conftest.py
+
 # Ignore Python cache files
 __pycache__/
 *.py[cod]

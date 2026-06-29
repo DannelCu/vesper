@@ -1,0 +1,13 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vesper-store"
+version = "0.1.0"
+description = "Persistent key-value store plugin for Vesper"
+requires-python = ">=3.10"
+dependencies = ["vesper"]
+
+[tool.hatch.build.targets.wheel]
+include = ["vesper_store/**"]
