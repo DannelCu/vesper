@@ -19,6 +19,16 @@ Requires Python 3.10+. PyWebView is the only runtime dependency. Optional extras
 pip install -e ".[tray]"   # system tray support (pystray + Pillow)
 ```
 
+Plugins are separate packages under `plugins/` and must be installed individually:
+
+```bash
+pip install -e plugins/vesper-store      # persistent key-value store
+pip install -e plugins/vesper-db         # SQLAlchemy DI integration
+pip install -e plugins/vesper-http       # HTTP client proxy (solves CORS)
+pip install -e plugins/vesper-keychain   # OS keychain (Windows/macOS/Linux)
+pip install -e plugins/vesper-mongodb    # MongoDB via PyMongo
+```
+
 ## Common Commands
 
 ```bash
@@ -43,6 +53,7 @@ vesper package      # create native executable — reads bundler from vesper.tom
 vesper sync-sdk     # copy vesper.js into frontend/ (vanilla) or public/ (frameworks)
 vesper sync-types   # generate TypeScript definitions from registered Python commands → vesper.d.ts
 vesper generate module|controller|service <name>   # scaffold a module (alias: vesper g)
+vesper sign         # sign the packaged binary (macOS codesign / Windows signtool)
 vesper doctor       # diagnose environment and project issues
 vesper info         # show installed versions and project info
 vesper clean        # remove dist/, package/, .pyinstaller/, __pycache__, etc.
@@ -60,9 +71,23 @@ template = "react"         # vanilla | react | vue | svelte
 styles = "tailwind"        # none | bootstrap | tailwind
 bundler = "pyinstaller"    # pyinstaller | nuitka
 package_manager = "pnpm"   # npm | pnpm | yarn
+
+[plugins]
+store = "vesper-store"
+db    = "vesper-db"
+
+[sign]
+# macOS
+identity  = "Developer ID Application: Dannel LLC (TEAMID)"
+notarize  = "true"
+apple_id  = "you@example.com"
+team_id   = "TEAMID"
+# Windows
+certificate   = "cert.pfx"
+timestamp_url = "http://timestamp.digicert.com"
 ```
 
-`read_vesper_toml(project_dir)` in `commands/utils.py` parses it into a flat `dict[str, str]`. If `vesper.toml` is absent, commands fall back to sensible defaults (vanilla template, pyinstaller bundler, npm). `get_project_package_manager(project_dir)` reads `package_manager` from the toml; if absent, auto-detects from lock files (`pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn, else npm).
+`read_vesper_toml(project_dir)` in `commands/utils.py` parses it into a flat `dict[str, str]`. If `vesper.toml` is absent, commands fall back to sensible defaults (vanilla template, pyinstaller bundler, npm). `get_project_package_manager(project_dir)` reads `package_manager` from the toml; if absent, auto-detects from lock files (`pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn, else npm). `read_vesper_toml_section(project_dir, section)` returns a `dict[str, str]` for a named TOML section (e.g. `[plugins]`, `[sign]`).
 
 ## Project structures
 
@@ -116,7 +141,7 @@ The framework has two distinct layers: the **core runtime** (used by app develop
 
 The data flow for every IPC call: `JavaScript invoke() → Window.API.invoke() → IPC.handle() → guard chain → middleware chain → CommandRegistry.get() → Python function → response`
 
-- **`core/app.py` — `App`**: The single public entry point for app developers. Instantiates `CommandRegistry`, `Window`, and `IPC`. Provides `@app.command` (three forms: bare, string alias, `name=` kwarg), `@app.middleware`, `@app.on(event)`, `app.emit()`, `app.notify()`, `app.tray()`, `app.register_module()`, and `app.register_window()`. Accepts `root_module=` kwarg to auto-register a `@Module` tree at construction. Registers built-in commands at construction: `vesper:dialog:open/save/folder`, `vesper:notify`, `vesper:fs:read/write/exists/list`.
+- **`core/app.py` — `App`**: The single public entry point for app developers. Instantiates `CommandRegistry`, `Window`, and `IPC`. Provides `@app.command` (three forms: bare, string alias, `name=` kwarg), `@app.middleware`, `@app.on(event)`, `app.emit()`, `app.notify()`, `app.tray()`, `app.register_module()`, `app.register_window()`, and `app.add_teardown()`. Accepts `root_module=` kwarg to auto-register a `@Module` tree at construction, `plugins=` list to register `VesperPlugin` instances (before `root_module`), and `update_url=` + `version=` for auto-update checks. Registers built-in commands at construction: `vesper:dialog:open/save/folder`, `vesper:notify`, `vesper:fs:read/write/exists/list`, `vesper:update:check/download/install`. Auto-update Python API: `app.check_update() -> dict | None`, `app.download_update(url, on_progress) -> str`, `app.install_update(path)`.
 - **`core/registry.py` — `CommandRegistry`**: A `dict[str, Callable]` of registered commands. Raises `CommandAlreadyRegisteredError` on duplicate registration and `CommandNotFoundError` on lookup miss.
 - **`core/ipc.py` — `IPC`**: Validates incoming message dicts (`{id, command, args}`), validates args against the command signature before execution (missing required args or unexpected keys → `ValidationError`), runs the guard chain, middleware chain, resolves the command, executes it (sync or async), and returns `{id, ok, result}` or `{id, ok, error}`. Runs a dedicated `asyncio` event loop on a background daemon thread; async commands and async middleware dispatch via `asyncio.run_coroutine_threadsafe`. In `debug=True` mode it appends a traceback to error responses. Shares `App._middleware` list by reference so middleware registered after construction is visible.
 - **`core/window.py` — `Window` + `WindowHandle`**: Wraps PyWebView. `Window.create()` checks `VESPER_DEV_URL` env var first (dev mode, skips file validation); otherwise validates `config.frontend` exists on disk. Accepts `secondary_windows: list[WindowHandle]` — each is created hidden and attached to the shared IPC. `Window.emit()` dispatches a `CustomEvent("vesper:<name>", {detail: payload})` to the frontend via `evaluate_js`. `Window.open_dialog/save_dialog/pick_folder()` wrap `webview.create_file_dialog`. Call `Window.create()` then `Window.show()` to start the event loop. `WindowHandle` is returned by `app.register_window()` and exposes `show()`, `hide()`, `close()`, `emit()`.
@@ -126,6 +151,8 @@ The data flow for every IPC call: `JavaScript invoke() → Window.API.invoke() �
 - **`core/tray.py` — `Tray` + `TrayMenuItem`**: System tray icon with a context menu. Started by `App.run()` before `webview.start()` and stopped in a `finally` block. Requires `vesper[tray]` (pystray + Pillow). `TrayMenuItem(label, action)` is the menu item dataclass; `None` in the menu list inserts a separator.
 - **`core/notify.py` — `send(title, body)`**: Fire-and-forget native desktop notifications via a background daemon thread. Platform dispatch: PowerShell `ShowBalloonTip` on Windows, `osascript` on macOS, `notify-send` on Linux. No extra dependencies.
 - **`core/fs.py` — filesystem helpers**: `read(path, encoding)`, `write(path, content, encoding)`, `exists(path)`, `list_dir(path)` — registered as `vesper:fs:*` built-in IPC commands. `write` creates parent directories automatically. `list_dir` returns `[{name, path, is_dir}]` sorted dirs-first.
+- **`core/plugin.py` — `VesperPlugin`**: Abstract base class for all Vesper plugins. Subclasses implement `register(app)` to add commands/middleware/hooks, and optionally override `sdk_path() -> Path | None` to ship a JS SDK file that `vesper sync-sdk` copies into the project frontend.
+- **`core/updater.py` — auto-updates**: `check(manifest_url, current_version) -> dict | None` fetches a JSON manifest and returns `{version, notes, download_url}` if a newer version exists for the current platform, else `None`. `download(url, on_progress) -> str` downloads the binary to a temp file. `install(path)` replaces the running executable and restarts: POSIX uses `os.execv`; Windows launches a detached `.bat` swap script. Manifest format: `{"version": "1.2.0", "notes": "...", "platforms": {"win32": "url", "darwin": "url", "linux": "url"}}`.
 
 ### Module System (`core/module.py`)
 
@@ -135,7 +162,7 @@ Inspired by NestJS. Organizes code into self-contained feature modules following
 - **`@Controller(prefix="", guards=[])`**: Marks a class whose `@command` methods become IPC endpoints under `"<prefix>.<name>"`. Guards passed here run before any method-level guards.
 - **`@command`**: Marks a method on a controller as an IPC command. Supports bare, string alias, and `name=` forms — same as `@app.command`.
 - **`@Module(controllers, providers, imports)`**: Defines a module. `imports` recursively registers other modules.
-- **`Container`**: Minimal IoC container. Resolves provider singletons by inspecting `__init__` type annotations via `inspect.signature()`. Only resolves params whose annotation is a concrete `type`; skips primitives and unannotated params.
+- **`Container`**: Minimal IoC container. Resolves provider singletons by inspecting `__init__` type annotations via `typing.get_type_hints()` (handles `from __future__ import annotations`). Only resolves params whose annotation is a concrete `type`; skips primitives and unannotated params. Class-level `_global: dict[type, Any]` registry allows plugins to inject global providers: `Container.register_global(type_, instance)` / `Container.clear_global()`.
 
 `App.register_module(module_cls)` wires the module tree:
 1. Recurses into `meta["imports"]`
@@ -167,10 +194,11 @@ Each CLI subcommand lives in its own file under `vesper/commands/` and follows t
 - **`dev`**: Reads `vesper.toml`. Vanilla: starts an internal HTTP server on a random port that serves `frontend/` and injects a polling script for hot reload; watches `*.py` for restart and `frontend/*.html/css/js` for browser reload. Frameworks: resolves PM, starts Vite subprocess, parses port from stdout (strips ANSI codes), polls HTTP until server responds, sets `VESPER_DEV_URL=http://localhost:{port}`, then runs `app.py`. Kills Vite/HTTP server on exit via `finally` block.
 - **`build`**: Resolves PM via `get_project_package_manager`. Frameworks: `check_node_modules` → `<pm> run build` (Vite → `dist/`). Vanilla: copies `frontend/` → `dist/`, bundles user `.js` files (excluding `vesper.js`) with esbuild via `<pm> dlx` into `dist/bundle.js`, updates `dist/index.html` to reference `bundle.js`.
 - **`package`**: Reads `bundler` from `vesper.toml`. Determines frontend data source (`dist/` for frameworks, `frontend/` for vanilla). PyInstaller path: `--windowed --onefile`, adds PyWebView hidden imports per platform, outputs to `package/`, work files to `.pyinstaller/`. Nuitka path: `python -m nuitka --standalone --onefile`, `--windows-disable-console` / `--macos-disable-console` per platform, outputs to `package/`.
-- **`sync-sdk`**: Copies the bundled `vesper.js` into `frontend/` (vanilla) or `public/` (frameworks).
+- **`sync-sdk`**: Copies the bundled `vesper.js` into `frontend/` (vanilla) or `public/` (frameworks). Also syncs JS SDK files from installed plugins: reads `[plugins]` section of `vesper.toml`, imports each package, calls `Plugin.sdk_path()`, and copies the JS file into the same SDK directory. Warns (does not fail) for packages that are not installed.
 - **`sync-types`**: Imports the app entrypoint (requires `if __name__ == "__main__":` guard on `app.run()`), finds the `App` instance, inspects `app.registry._commands`, generates a `.d.ts` file. Output: `frontend/vesper.d.ts` (vanilla) or `src/types/vesper.d.ts` (frameworks). The file is always regenerated — never edit it manually. Uses a 5-second timeout to detect unguarded `app.run()` calls. Python type hints are optional; missing annotations fall back to `unknown`.
 - **`generate` / `g`**: Scaffolds `modules/<name>/` with `__init__.py`, `<name>_service.py`, `<name>_controller.py`, `<name>_module.py`. `vesper g module users` / `vesper g controller users` / `vesper g service users`. On first module, auto-creates `modules/app_module.py`; on subsequent modules, prints the import line to add manually.
 - **`doctor`**: Checks Python version, Vesper install, PyWebView install, Node.js version (≥18), package manager availability (from `vesper.toml` or defaults to npm), `vesper.toml` schema validation (valid keys and values), entrypoint presence, frontend structure, SDK script tag in `index.html`.
+- **`sign`**: Signs `package/<app-name>[.exe]` after `vesper package`. Reads `[sign]` section from `vesper.toml`. macOS: `codesign --sign <identity> --deep --force --options runtime`; optional notarization via `xcrun notarytool` + `xcrun stapler` (reads `VESPER_NOTARIZE_PASSWORD` env var). Windows: `signtool.exe` (auto-discovered from Windows SDK paths) or `osslsigncode` as fallback; reads `VESPER_SIGN_PASSWORD` env var. Optional `--path` flag to sign an arbitrary binary instead of the default.
 - **`clean`**: Removes `dist/`, `build/`, `package/`, `.pyinstaller/`, `__pycache__/`, `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`, `*.pyc`.
 
 ### Guards (`vesper/core/guard.py`)
@@ -286,9 +314,109 @@ fs.list_dir(".")        # → [{name, path, is_dir}]
 
 `fs.write` creates parent directories automatically. `fs.list_dir` sorts directories before files. `vesper sync-types` filters all `vesper:` built-ins from the generated `.d.ts`.
 
+### Plugin Ecosystem (`vesper/core/plugin.py`, `plugins/`)
+
+`VesperPlugin` is the abstract base class for all plugins. Plugins register commands, middleware, and teardown hooks during `App.__init__` — before `root_module` so global DI providers are available when the module tree is wired.
+
+```python
+from vesper import App
+from vesper_db import DatabasePlugin, Base, DbSession
+from vesper_store import StorePlugin
+
+app = App(
+    plugins=[
+        DatabasePlugin(url="sqlite:///app.db"),
+        StorePlugin(app_name="my-app"),
+    ],
+    root_module=AppModule,
+)
+```
+
+Plugin DI integration — services declare the plugin type as a constructor param and receive the instance automatically:
+
+```python
+from vesper import Injectable
+from vesper_db import DbSession
+
+@Injectable()
+class UserService:
+    def __init__(self, db: DbSession):
+        self.db = db  # scoped_session injected by DatabasePlugin
+```
+
+**Plugin conventions:**
+- `Plugin` alias exported from `__init__.py` — used by `vesper sync-sdk` for JS discovery.
+- `sdk_path()` classmethod returns path to the JS file, or `None` if no JS SDK.
+- `[plugins]` in `vesper.toml` maps aliases to package names; `vesper sync-sdk` reads this to copy JS files.
+- `app.add_teardown(fn)` — register a zero-arg callable that runs in a `finally` block after every IPC `handle()` call. Used by plugins to release per-call resources (e.g. database session).
+
+**Official plugins (`plugins/`):**
+
+| Package | Injectable type | IPC prefix | JS namespace |
+|---|---|---|---|
+| `vesper-store` | — | `store:` | `vesper.store.*` |
+| `vesper-db` | `DbSession` | — | — |
+| `vesper-http` | `HttpClient` | `http:` | `vesper.http.*` |
+| `vesper-keychain` | `Keychain` | `keychain:` | `vesper.keychain.*` |
+| `vesper-mongodb` | `MongoDatabase` | `mongo:` | `vesper.mongo.*` |
+
+`vesper-db` details: `Base` (SQLAlchemy `DeclarativeBase`), `DbSession` (type marker → `scoped_session`), `DatabasePlugin(url=...)`. Plugin calls `Base.metadata.create_all()` on registration and registers `session.remove` as a teardown hook. Supports SQLite (including `sqlite:///:memory:` with `StaticPool`), PostgreSQL, MySQL. For file-based SQLite under concurrent writes, enable WAL mode on the engine.
+
+`vesper-mongodb` details: `MongoDatabase` (type marker → `pymongo.database.Database`), `MongoPlugin(uri=..., database=...)`. All IPC responses automatically convert `ObjectId` to `str` via `_serialize()`.
+
+### Auto-updates (`vesper/core/updater.py`)
+
+```python
+app = App(
+    update_url="https://example.com/releases/manifest.json",
+    version="1.0.0",
+    frontend="dist/index.html",
+)
+```
+
+Built-in IPC commands registered automatically: `vesper:update:check`, `vesper:update:download`, `vesper:update:install`. Python API: `app.check_update()`, `app.download_update(url, on_progress)`, `app.install_update(path)`.
+
+Manifest format hosted on any static server:
+```json
+{
+  "version": "1.2.0",
+  "notes": "Bug fixes",
+  "platforms": {
+    "win32":  "https://example.com/myapp-1.2.0.exe",
+    "darwin": "https://example.com/myapp-1.2.0",
+    "linux":  "https://example.com/myapp-1.2.0"
+  }
+}
+```
+
+`download()` streams the file to a temp path and calls `on_progress(percent: int)` for progress events (emit to frontend via `app.window.emit`). `install()` is destructive — it replaces `sys.executable` and restarts. Only meaningful in packaged apps.
+
+### Code Signing (`vesper/commands/sign.py`)
+
+Run after `vesper package`. Configure via `[sign]` in `vesper.toml`.
+
+**macOS** — uses `codesign`. Optional notarization via `xcrun notarytool` (set `notarize = "true"`, requires `VESPER_NOTARIZE_PASSWORD` env var):
+```toml
+[sign]
+identity    = "Developer ID Application: Your Name (TEAMID)"
+notarize    = "true"
+apple_id    = "you@apple.com"
+team_id     = "TEAMID"
+entitlements = "entitlements.plist"  # optional
+```
+
+**Windows** — uses `signtool.exe` (auto-discovered from Windows SDK) or `osslsigncode` as fallback. Set `VESPER_SIGN_PASSWORD` env var for the PFX password:
+```toml
+[sign]
+certificate   = "cert.pfx"
+timestamp_url = "http://timestamp.digicert.com"
+```
+
+`vesper sign --path /custom/binary` to sign an arbitrary path instead of `package/<name>[.exe]`.
+
 ### Public API (`vesper/__init__.py`)
 
-`App`, `Module`, `Controller`, `Injectable`, `command`, `guard`, `TrayMenuItem`, `WindowHandle`, `VesperError`, `CommandNotFoundError`, `CommandAlreadyRegisteredError`, `ForbiddenError` are exported. Internal modules are not part of the public API.
+`App`, `Module`, `Controller`, `Injectable`, `command`, `guard`, `TrayMenuItem`, `WindowHandle`, `VesperPlugin`, `VesperError`, `CommandNotFoundError`, `CommandAlreadyRegisteredError`, `ForbiddenError` are exported. Internal modules are not part of the public API.
 
 ## Key Design Constraints
 
@@ -301,6 +429,9 @@ fs.list_dir(".")        # → [{name, path, is_dir}]
 - **`app.run()` must be guarded**: All `app.py` templates wrap `app.run()` in `if __name__ == "__main__":`. This is required for `vesper sync-types` to safely import the entrypoint without launching the GUI.
 - **Async IPC**: `async def` commands are supported natively. `IPC` runs a dedicated asyncio event loop on a background daemon thread; async commands dispatch via `asyncio.run_coroutine_threadsafe`. Sync commands still run on the calling thread.
 - **Middleware shares the list by reference**: `App._middleware` is passed by reference to `IPC._middleware` so middleware registered after `IPC` construction is automatically visible.
+- **Plugins register before modules**: `App.__init__` runs `plugin.register(app)` for every plugin before calling `register_module(root_module)`. This guarantees `Container._global` is populated before the module DI tree resolves dependencies.
+- **Teardown runs after every IPC call**: `IPC._teardown` is a list of zero-arg callables executed in a `finally` block after every `handle()`. Exceptions in teardown are swallowed. Used by `vesper-db` to call `session.remove()`.
+- **Plugin DI uses a global registry**: `Container._global` is a class-level dict. Plugins call `Container.register_global(type_, instance)` to make a provider available across all per-module `Container` instances. Tests must call `Container.clear_global()` in teardown to avoid cross-test pollution.
 - **Dual bundler support**: PyInstaller (default, simpler) and Nuitka (native binary, requires C compiler). The choice is persisted in `vesper.toml` at `vesper init` time and read by `vesper package`.
 - **Package manager abstraction**: npm, pnpm, and yarn are all supported. All PM-aware operations go through `pm_add`, `pm_add_dev`, `pm_run`, `pm_dlx` in `commands/utils.py` — never call `npm`/`pnpm`/`yarn` directly elsewhere. `yarn add -D` uses `--dev` instead of `-D`.
 
@@ -388,7 +519,7 @@ vesper sync-types           # regenerate src/types/vesper.d.ts after adding comm
 | Core runtime (App, Registry, IPC, Window, Config) | `core/` | Foundation — M1 |
 | Module system (NestJS-style DI) | `core/module.py` | `@Module`, `@Controller`, `@Injectable`, `@command`, `Container` |
 | CLI — init, run, dev, build, package, clean | `commands/` | Full workflow for vanilla + frameworks |
-| CLI — generate, sync-sdk, doctor, info, version | `commands/` | Scaffolding + tooling |
+| CLI — generate, sync-sdk, doctor, info, version, sign | `commands/` | Scaffolding + tooling + code signing |
 | JavaScript SDK | `sdk/vesper.js` | `invoke`, `on`, `dialog.*`, `notify`, `fs.*` |
 | `vesper sync-types` | `commands/sync_types.py` | Generates `.d.ts` from registered commands; filters `vesper:` built-ins |
 | Guards (`@guard`, `@Controller(guards=[])`) | `core/guard.py`, `core/registry.py` | Run before middleware; sync + async; controller + method level |
@@ -400,12 +531,18 @@ vesper sync-types           # regenerate src/types/vesper.d.ts after adding comm
 | System tray | `core/tray.py`, `core/app.py` | `app.tray(icon, menu)`, `TrayMenuItem`; requires `vesper[tray]` |
 | Native notifications | `core/notify.py`, `core/app.py`, `sdk/vesper.js` | `app.notify()` + `vesper.notify()`; no extra deps |
 | Built-in filesystem API | `core/fs.py`, `core/app.py`, `sdk/vesper.js` | `vesper:fs:read/write/exists/list` built-ins + `vesper.fs.*` in JS |
+| Plugin ecosystem (M4) | `core/plugin.py`, `core/module.py`, `core/ipc.py`, `core/app.py` | `VesperPlugin` ABC, `Container.register_global`, `add_teardown`, `[plugins]` in vesper.toml, `sync-sdk` plugin support |
+| vesper-store | `plugins/vesper-store/` | Persistent JSON key-value store; `store:get/set/delete/has/clear/keys` |
+| vesper-db | `plugins/vesper-db/` | SQLAlchemy DI layer; `Base`, `DbSession`, `DatabasePlugin(url=...)` |
+| vesper-http | `plugins/vesper-http/` | HTTP proxy via httpx; `HttpClient`, `http:get/post/put/patch/delete` |
+| vesper-keychain | `plugins/vesper-keychain/` | OS keychain via keyring; `Keychain`, `keychain:get/set/delete/has` |
+| vesper-mongodb | `plugins/vesper-mongodb/` | MongoDB via PyMongo; `MongoDatabase`, `mongo:find/find_one/insert_one/insert_many/update_one/update_many/delete_one/delete_many/count` |
+| Auto-updates | `core/updater.py`, `core/app.py` | `App(update_url=..., version=...)`, `vesper:update:check/download/install` built-ins, `app.check_update()` / `download_update()` / `install_update()` |
+| Code signing | `commands/sign.py` | `vesper sign`; macOS codesign + notarization; Windows signtool + osslsigncode; config via `[sign]` in vesper.toml |
 
-### Pending — Long-term only
+### Pending
 
-- **Plugin ecosystem (M4)** — allow third-party packages to register commands, middleware, and lifecycle hooks into Vesper at install time. Needs a plugin loader and a stable plugin API surface.
-- **Auto-updates** — check for new app versions and prompt the user to update. Needs a server-side manifest and a download + replace flow per platform.
-- **Code signing** — sign the output of `vesper package` for macOS Gatekeeper and Windows SmartScreen.
+- **Documentation (next milestone)** — public-facing docs for the framework and all plugins. Structure: `README.md` at repo root as the entry point; `/docs/` folder with one `.md` per topic (getting-started, cli, ipc, module-system, plugins, guards, multiwindow, auto-updates, code-signing, file-transfers). Each plugin gets its own `README.md` + `docs/` folder under `plugins/<name>/`. No API reference generation — all handwritten.
 
 ---
 
