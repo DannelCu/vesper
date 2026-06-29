@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vesper-db"
+version = "0.1.0"
+description = "SQLAlchemy-backed SQL database plugin for Vesper"
+requires-python = ">=3.10"
+authors = [{ name = "Dannel LLC" }]
+license = "MIT"
+
+dependencies = [
+  "vesper",
+  "sqlalchemy>=2.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["vesper_db*"]
+
+[tool.setuptools.package-data]
+vesper_db = ["sdk/*.js"]
