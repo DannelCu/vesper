@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import typing
 from collections.abc import Callable
 from typing import Any
 
@@ -78,7 +79,23 @@ class Container:
     Resolves providers as singletons by inspecting __init__ type annotations.
     Only resolves parameters whose annotation is a concrete type — skips
     primitives and unannotated params.
+
+    Plugins can register globally-available instances via register_global()
+    so they are injectable into any module's services without being listed
+    in the module's providers.
     """
+
+    _global: dict[type, Any] = {}
+
+    @classmethod
+    def register_global(cls, type_: type, instance: Any) -> None:
+        """Register a globally-available provider instance (e.g. from a plugin)."""
+        cls._global[type_] = instance
+
+    @classmethod
+    def clear_global(cls) -> None:
+        """Remove all globally-registered providers. Useful in tests."""
+        cls._global.clear()
 
     def __init__(self, providers: list[type]) -> None:
         self._providers: set[type] = set(providers)
@@ -88,18 +105,21 @@ class Container:
         if cls in self._singletons:
             return self._singletons[cls]
 
+        if cls in Container._global:
+            return Container._global[cls]
+
         deps: dict[str, Any] = {}
         try:
-            sig = inspect.signature(cls.__init__)
-            for param_name, param in sig.parameters.items():
+            hints = typing.get_type_hints(cls.__init__)
+            for param_name, param in inspect.signature(cls.__init__).parameters.items():
                 if param_name == "self":
                     continue
-                ann = param.annotation
+                ann = hints.get(param_name, inspect.Parameter.empty)
                 if ann is inspect.Parameter.empty:
                     continue
                 if isinstance(ann, type):
                     deps[param_name] = self.resolve(ann)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, NameError):
             pass
 
         instance = cls(**deps)

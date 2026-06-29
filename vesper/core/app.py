@@ -134,11 +134,13 @@ class App:
 
         self.ipc = IPC(self.registry, middleware=self._middleware, debug=self.debug)
 
-        if root_module is not None:
-            self.register_module(root_module)
-
+        # Plugins register before modules so global DI providers (e.g. DbSession)
+        # are available when the module container resolves service dependencies.
         for plugin in (plugins or []):
             plugin.register(self)
+
+        if root_module is not None:
+            self.register_module(root_module)
 
     def command(
         self,
@@ -186,6 +188,20 @@ class App:
             return fn
 
         return decorator
+
+    def add_teardown(self, fn: Callable) -> None:
+        """
+        Register a teardown function that runs after every IPC call.
+
+        Teardown runs in a finally block — it executes whether the command
+        succeeded or failed. Exceptions in teardown are suppressed.
+
+        Used by plugins to clean up per-call resources (e.g. database sessions).
+
+        Args:
+            fn: Zero-argument callable to invoke after each IPC call.
+        """
+        self.ipc._teardown.append(fn)
 
     def middleware(self, fn: Callable) -> Callable:
         """

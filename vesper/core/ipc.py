@@ -76,6 +76,7 @@ class IPC:
         self.debug = debug
         self._middleware: list = middleware if middleware is not None else []
 
+        self._teardown: list = []
         self._loop = asyncio.new_event_loop()
         _started = threading.Event()
 
@@ -215,3 +216,9 @@ class IPC:
                 "ok": False,
                 "error": error
             }
+        finally:
+            for fn in self._teardown:
+                try:
+                    fn()
+                except Exception:
+                    pass

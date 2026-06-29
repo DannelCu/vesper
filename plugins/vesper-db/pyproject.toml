@@ -19,5 +19,3 @@ dependencies = [
 where = ["."]
 include = ["vesper_db*"]
 
-[tool.setuptools.package-data]
-vesper_db = ["sdk/*.js"]
