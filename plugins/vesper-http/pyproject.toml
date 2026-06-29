@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vesper-http"
+version = "0.1.0"
+description = "HTTP client plugin for Vesper — proxy external requests through Python to avoid CORS"
+requires-python = ">=3.10"
+authors = [{ name = "Dannel LLC" }]
+license = "MIT"
+
+dependencies = [
+  "vesper",
+  "httpx>=0.24",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["vesper_http*"]
+
+[tool.setuptools.package-data]
+vesper_http = ["sdk/*.js"]
