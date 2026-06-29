@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vesper-mongodb"
+version = "0.1.0"
+description = "MongoDB plugin for Vesper — injectable MongoDatabase with DI integration"
+requires-python = ">=3.10"
+authors = [{ name = "Dannel LLC" }]
+license = "MIT"
+
+dependencies = [
+  "vesper",
+  "pymongo>=4.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["vesper_mongodb*"]
+
+[tool.setuptools.package-data]
+vesper_mongodb = ["sdk/*.js"]
