@@ -75,6 +75,21 @@ def _to_file_types(filters: list[dict] | None) -> tuple:
     return tuple(result)
 
 
+def _to_webview_menu(items: list) -> list:
+    """Convert a Vesper menu list to the format PyWebView expects."""
+    from vesper.core.menu import MenuItem
+    result = []
+    for item in items:
+        if item is None:
+            result.append(webview.MenuSeparator())
+        elif isinstance(item, MenuItem) and item.submenu is not None:
+            result.append(webview.Menu(item.label, _to_webview_menu(item.submenu)))
+        else:
+            action = item.action if item.action is not None else (lambda: None)
+            result.append(webview.MenuAction(item.label, action))
+    return result
+
+
 class Window:
     """
     Window layer for Vesper.
@@ -90,6 +105,7 @@ class Window:
     def __init__(self) -> None:
         self.window = None
         self.ipc: IPC | None = None
+        self._menu: list | None = None
 
     def create(
         self,
@@ -97,6 +113,7 @@ class Window:
         config: WindowConfig,
         hooks: dict[str, list[Callable]] | None = None,
         secondary_windows: list[WindowHandle] | None = None,
+        menu: list | None = None,
     ) -> None:
         """
         Create the application window and bind IPC.
@@ -114,6 +131,8 @@ class Window:
                 Pre-declared secondary windows created hidden.
                 Each is attached to the IPC and shown on demand.
         """
+
+        self._menu = menu
 
         dev_url = os.environ.get("VESPER_DEV_URL")
 
@@ -303,4 +322,7 @@ class Window:
         if not self.window:
             raise RuntimeError("Window has not been created yet.")
 
-        webview.start()
+        if self._menu:
+            webview.start(menu=_to_webview_menu(self._menu))
+        else:
+            webview.start()

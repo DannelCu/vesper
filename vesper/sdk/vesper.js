@@ -134,6 +134,43 @@
         },
     };
 
+    var shell = {
+        /**
+         * Open a URL in the default system browser.
+         * @param {string} url
+         * @returns {Promise<void>}
+         */
+        openUrl: function(url) {
+            return invoke("vesper:shell:open_url", { url: url });
+        },
+        /**
+         * Reveal a file or folder in the native file manager.
+         * @param {string} path - Absolute path to the file or folder.
+         * @returns {Promise<void>}
+         */
+        reveal: function(path) {
+            return invoke("vesper:shell:reveal", { path: path });
+        },
+    };
+
+    var clipboard = {
+        /**
+         * Read text from the system clipboard.
+         * @returns {Promise<string>}
+         */
+        read: function() {
+            return invoke("vesper:clipboard:read", {});
+        },
+        /**
+         * Write text to the system clipboard.
+         * @param {string} text
+         * @returns {Promise<void>}
+         */
+        write: function(text) {
+            return invoke("vesper:clipboard:write", { text: text });
+        },
+    };
+
     var update = {
         /**
          * Check the configured manifest for a newer version.
@@ -182,6 +219,8 @@
         dialog,
         notify,
         fs,
+        shell,
+        clipboard,
         update,
     };
 })(window);

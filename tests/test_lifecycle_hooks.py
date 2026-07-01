@@ -190,7 +190,7 @@ def test_window_create_unknown_hook_silently_skipped(monkeypatch):
 def test_app_run_passes_hooks_to_window_create(monkeypatch):
     captured = {}
 
-    def fake_create(self, ipc_handler, config, hooks=None):
+    def fake_create(self, ipc_handler, config, hooks=None, **kwargs):
         captured["hooks"] = hooks
 
     monkeypatch.setattr(Window, "create", fake_create)
@@ -215,7 +215,7 @@ def test_app_run_passes_hooks_to_window_create(monkeypatch):
 def test_app_run_no_hooks_passes_none(monkeypatch):
     captured = {}
 
-    def fake_create(self, ipc_handler, config, hooks=None):
+    def fake_create(self, ipc_handler, config, hooks=None, **kwargs):
         captured["hooks"] = hooks
 
     monkeypatch.setattr(Window, "create", fake_create)

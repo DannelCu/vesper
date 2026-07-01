@@ -84,6 +84,7 @@ class App:
         self._hooks: dict[str, list[Callable]] = {}
         self._secondary_windows: list[WindowHandle] = []
         self._tray = None
+        self._menu_items: list | None = None
 
         # Built-in dialog commands — use vesper: prefix so sync-types skips them
         def _open_dialog(multiple: bool = False, filters=None, directory: str = ""):
@@ -112,6 +113,14 @@ class App:
         self.registry.register(_fs.write, name="vesper:fs:write")
         self.registry.register(_fs.exists, name="vesper:fs:exists")
         self.registry.register(_fs.list_dir, name="vesper:fs:list")
+
+        from vesper.core import shell as _shell
+        from vesper.core import clipboard as _clipboard
+
+        self.registry.register(_shell.open_url, name="vesper:shell:open_url")
+        self.registry.register(_shell.reveal, name="vesper:shell:reveal")
+        self.registry.register(_clipboard.read, name="vesper:clipboard:read")
+        self.registry.register(_clipboard.write, name="vesper:clipboard:write")
 
         from vesper.core import updater as _updater
 
@@ -425,6 +434,18 @@ class App:
         """
         self.window.emit(event, payload)
 
+    def menu(self, items: list) -> None:
+        """
+        Set the native menu bar.
+
+        Must be called before ``app.run()``. Items are :class:`MenuItem`
+        instances; pass ``None`` in a submenu list to insert a separator.
+
+        Args:
+            items: List of top-level :class:`MenuItem` objects.
+        """
+        self._menu_items = items
+
     def run(self) -> None:
         """
         Start the Vesper application.
@@ -437,6 +458,7 @@ class App:
             config=self.config,
             hooks=self._hooks or None,
             secondary_windows=self._secondary_windows or None,
+            menu=self._menu_items or None,
         )
 
         if self._tray is not None:
