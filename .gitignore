@@ -11,6 +11,7 @@
 # Keep project metadata
 !pyproject.toml
 !README.md
+!CHANGELOG.md
 
 # Keep documentation
 !docs/
