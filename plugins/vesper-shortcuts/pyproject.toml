@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vesper-shortcuts"
+version = "0.1.0"
+description = "Global keyboard shortcuts plugin for Vesper — shortcuts active even when the window is not focused"
+requires-python = ">=3.10"
+authors = [{ name = "Dannel LLC" }]
+license = "MIT"
+
+dependencies = [
+  "vesper",
+  "pynput>=1.7",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["vesper_shortcuts*"]
+
+[tool.setuptools.package-data]
+vesper_shortcuts = ["sdk/*.js"]

@@ -134,6 +134,78 @@
         },
     };
 
+    var window_controls = {
+        /** Minimize the application window. @returns {Promise<void>} */
+        minimize: function() { return invoke("vesper:window:minimize", {}); },
+        /** Maximize the application window. @returns {Promise<void>} */
+        maximize: function() { return invoke("vesper:window:maximize", {}); },
+        /** Restore the window from minimized or maximized state. @returns {Promise<void>} */
+        restore: function() { return invoke("vesper:window:restore", {}); },
+        /** Toggle fullscreen mode. @returns {Promise<void>} */
+        fullscreen: function() { return invoke("vesper:window:fullscreen", {}); },
+        /**
+         * Resize the window.
+         * @param {number} width
+         * @param {number} height
+         * @returns {Promise<void>}
+         */
+        resize: function(width, height) {
+            return invoke("vesper:window:resize", { width: width, height: height });
+        },
+        /**
+         * Move the window to the given screen coordinates.
+         * @param {number} x
+         * @param {number} y
+         * @returns {Promise<void>}
+         */
+        move: function(x, y) {
+            return invoke("vesper:window:move", { x: x, y: y });
+        },
+    };
+
+    var screen = {
+        /**
+         * Return info for all connected screens.
+         * @returns {Promise<{width:number, height:number, x:number, y:number}[]>}
+         */
+        list: function() { return invoke("vesper:screen:list", {}); },
+    };
+
+    var os = {
+        /**
+         * Return OS platform info.
+         * @returns {Promise<{platform:string, version:string, machine:string, python_version:string}>}
+         */
+        info: function() { return invoke("vesper:os:info", {}); },
+    };
+
+    function quit() {
+        return invoke("vesper:app:quit", {});
+    }
+
+    var drop = {
+        /**
+         * Attach a file-drop listener to an element.
+         * Calls callback(files, event) when files are dropped.
+         * @param {Element} element
+         * @param {function(FileList, DragEvent):void} callback
+         * @returns {function():void} Unsubscribe function.
+         */
+        onFiles: function(element, callback) {
+            function onDragOver(e) { e.preventDefault(); }
+            function onDrop(e) {
+                e.preventDefault();
+                callback(e.dataTransfer.files, e);
+            }
+            element.addEventListener("dragover", onDragOver);
+            element.addEventListener("drop", onDrop);
+            return function() {
+                element.removeEventListener("dragover", onDragOver);
+                element.removeEventListener("drop", onDrop);
+            };
+        },
+    };
+
     var shell = {
         /**
          * Open a URL in the default system browser.
@@ -216,6 +288,11 @@
     global.vesper = {
         invoke,
         on,
+        quit,
+        window: window_controls,
+        screen,
+        os,
+        drop,
         dialog,
         notify,
         fs,

@@ -106,6 +106,7 @@ class Window:
         self.window = None
         self.ipc: IPC | None = None
         self._menu: list | None = None
+        self._splash_win = None
 
     def create(
         self,
@@ -114,6 +115,7 @@ class Window:
         hooks: dict[str, list[Callable]] | None = None,
         secondary_windows: list[WindowHandle] | None = None,
         menu: list | None = None,
+        splash: dict | None = None,
     ) -> None:
         """
         Create the application window and bind IPC.
@@ -130,9 +132,14 @@ class Window:
             secondary_windows:
                 Pre-declared secondary windows created hidden.
                 Each is attached to the IPC and shown on demand.
+            menu:
+                Native menu bar items (converted from Vesper MenuItem list).
+            splash:
+                Splash screen config dict with keys: html, width, height.
         """
 
         self._menu = menu
+        self._splash_win = None
 
         dev_url = os.environ.get("VESPER_DEV_URL")
 
@@ -183,6 +190,7 @@ class Window:
             fullscreen=config.fullscreen,
             minimized=config.minimized,
             on_top=config.on_top,
+            hidden=splash is not None,
         )
 
         if hooks:
@@ -221,6 +229,33 @@ class Window:
                 hidden=True,
             )
             handle._attach(sec_win)
+
+        if splash is not None:
+            _DEFAULT_HTML = (
+                "<body style='background:#1a1a1a;display:flex;align-items:center;"
+                "justify-content:center;margin:0;font-family:sans-serif;color:#fff'>"
+                "<p>Loading…</p></body>"
+            )
+            html_src = splash.get("html", "")
+            sp_kwargs = (
+                {"url": html_src} if html_src.endswith(".html")
+                else {"html": html_src or _DEFAULT_HTML}
+            )
+            self._splash_win = webview.create_window(
+                "",
+                width=splash.get("width", 400),
+                height=splash.get("height", 300),
+                frameless=True,
+                **sp_kwargs,
+            )
+            _splash = self._splash_win
+            _main = self.window
+
+            def _dismiss():
+                _splash.destroy()
+                _main.show()
+
+            self.window.events.loaded += _dismiss
 
     def emit(self, event: str, payload=None) -> None:
         """
@@ -313,6 +348,53 @@ class Window:
             allow_multiple=multiple,
         )
         return list(result) if result else None
+
+    def minimize(self) -> None:
+        """Minimize the main window."""
+        if self.window is not None:
+            self.window.minimize()
+
+    def maximize(self) -> None:
+        """Maximize the main window."""
+        if self.window is not None:
+            self.window.maximize()
+
+    def restore(self) -> None:
+        """Restore the main window from minimized or maximized state."""
+        if self.window is not None:
+            self.window.restore()
+
+    def toggle_fullscreen(self) -> None:
+        """Toggle fullscreen mode on the main window."""
+        if self.window is not None:
+            self.window.toggle_fullscreen()
+
+    def resize(self, width: int, height: int) -> None:
+        """Resize the main window."""
+        if self.window is not None:
+            self.window.resize(width, height)
+
+    def move(self, x: int, y: int) -> None:
+        """Move the main window to the given screen coordinates."""
+        if self.window is not None:
+            self.window.move(x, y)
+
+    def quit(self) -> None:
+        """Destroy the main window and stop the event loop."""
+        if self.window is not None:
+            self.window.destroy()
+
+    def list_screens(self) -> list[dict]:
+        """Return info for all connected screens."""
+        return [
+            {
+                "width": s.width,
+                "height": s.height,
+                "x": getattr(s, "x", 0),
+                "y": getattr(s, "y", 0),
+            }
+            for s in webview.screens
+        ]
 
     def show(self) -> None:
         """

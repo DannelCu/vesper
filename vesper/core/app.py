@@ -1,3 +1,4 @@
+import sys as _sys
 from collections.abc import Callable
 
 from vesper.core.config import WindowConfig
@@ -6,7 +7,8 @@ from vesper.core.registry import CommandRegistry
 from vesper.core.window import Window, WindowHandle, _HOOK_TO_EVENT
 from vesper.core.ipc import IPC
 
-_VALID_HOOKS: frozenset[str] = frozenset(_HOOK_TO_EVENT)
+_VALID_HOOKS: frozenset[str] = frozenset(_HOOK_TO_EVENT) | {"deeplink"}
+_WEB_SCHEMES = ("http://", "https://", "ftp://", "ftps://")
 
 
 class App:
@@ -85,6 +87,14 @@ class App:
         self._secondary_windows: list[WindowHandle] = []
         self._tray = None
         self._menu_items: list | None = None
+        self._splash_config: dict | None = None
+
+        # Detect deep link URL passed via command-line argument
+        self._deeplink_url: str | None = None
+        for _arg in _sys.argv[1:]:
+            if "://" in _arg and not _arg.startswith(_WEB_SCHEMES):
+                self._deeplink_url = _arg
+                break
 
         # Built-in dialog commands — use vesper: prefix so sync-types skips them
         def _open_dialog(multiple: bool = False, filters=None, directory: str = ""):
@@ -116,11 +126,32 @@ class App:
 
         from vesper.core import shell as _shell
         from vesper.core import clipboard as _clipboard
+        from vesper.core import os_info as _os_info
 
         self.registry.register(_shell.open_url, name="vesper:shell:open_url")
         self.registry.register(_shell.reveal, name="vesper:shell:reveal")
         self.registry.register(_clipboard.read, name="vesper:clipboard:read")
         self.registry.register(_clipboard.write, name="vesper:clipboard:write")
+        self.registry.register(_os_info.get_info, name="vesper:os:info")
+
+        # Window controls — lambdas defer to the Window instance so they work
+        # even when registered before the PyWebView window is created.
+        _w = self.window
+        self.registry.register(lambda: _w.minimize(), name="vesper:window:minimize")
+        self.registry.register(lambda: _w.maximize(), name="vesper:window:maximize")
+        self.registry.register(lambda: _w.restore(), name="vesper:window:restore")
+        self.registry.register(lambda: _w.toggle_fullscreen(), name="vesper:window:fullscreen")
+
+        def _window_resize(width: int, height: int) -> None:
+            _w.resize(width, height)
+
+        def _window_move(x: int, y: int) -> None:
+            _w.move(x, y)
+
+        self.registry.register(_window_resize, name="vesper:window:resize")
+        self.registry.register(_window_move, name="vesper:window:move")
+        self.registry.register(lambda: _w.quit(), name="vesper:app:quit")
+        self.registry.register(lambda: _w.list_screens(), name="vesper:screen:list")
 
         from vesper.core import updater as _updater
 
@@ -434,6 +465,31 @@ class App:
         """
         self.window.emit(event, payload)
 
+    def quit(self) -> None:
+        """
+        Destroy the main window and stop the application.
+
+        Equivalent to the user clicking the close button. Can be called from
+        Python or triggered from JS via ``vesper.quit()``.
+        """
+        self.window.quit()
+
+    def splash(self, html: str = "", *, width: int = 400, height: int = 300) -> None:
+        """
+        Configure a splash screen shown while the main window loads.
+
+        Must be called before ``app.run()``. The splash is a frameless window
+        that is automatically destroyed once the main window fires its ``loaded``
+        event.
+
+        Args:
+            html:   Inline HTML string, or path to an ``.html`` file.
+                    Defaults to a built-in dark loading indicator.
+            width:  Splash window width in pixels.
+            height: Splash window height in pixels.
+        """
+        self._splash_config = {"html": html, "width": width, "height": height}
+
     def menu(self, items: list) -> None:
         """
         Set the native menu bar.
@@ -453,12 +509,25 @@ class App:
         This initializes the window and starts the IPC loop.
         """
 
+        # Wire deep link: fire Python callbacks and emit JS event on first load.
+        if self._deeplink_url:
+            _url = self._deeplink_url
+            _app = self
+
+            def _fire_deeplink():
+                for fn in _app._hooks.get("deeplink", []):
+                    fn(_url)
+                _app.window.emit("deeplink", {"url": _url})
+
+            self._hooks.setdefault("loaded", []).append(_fire_deeplink)
+
         self.window.create(
             ipc_handler=self.ipc,
             config=self.config,
             hooks=self._hooks or None,
             secondary_windows=self._secondary_windows or None,
             menu=self._menu_items or None,
+            splash=self._splash_config or None,
         )
 
         if self._tray is not None:
