@@ -172,7 +172,7 @@ class IPC:
                     ok = future.result()
                 else:
                     ok = guard_fn(command_name, args)
-                if ok is False:
+                if ok is not True and ok is not None:
                     raise ForbiddenError("Forbidden")
 
             for mw in self._middleware:
