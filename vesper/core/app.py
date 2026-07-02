@@ -89,6 +89,7 @@ class App:
         self._tray = None
         self._menu_items: list | None = None
         self._splash_config: dict | None = None
+        self._global_providers: dict = {}
 
         # Detect deep link URL passed via command-line argument
         self._deeplink_url: str | None = None
@@ -245,6 +246,16 @@ class App:
 
         return decorator
 
+    def register_global_provider(self, type_: type, instance) -> None:
+        """
+        Register a DI provider scoped to this App instance.
+
+        Makes *instance* injectable as *type_* in every module container
+        created by this App, without polluting other App instances (unlike
+        ``Container.register_global``). Used by plugins.
+        """
+        self._global_providers[type_] = instance
+
     def add_teardown(self, fn: Callable) -> None:
         """
         Register a teardown function that runs after every IPC call.
@@ -324,7 +335,7 @@ class App:
         for imported in meta["imports"]:
             self.register_module(imported)
 
-        container = Container(meta["providers"])
+        container = Container(meta["providers"], global_providers=self._global_providers)
 
         for ctrl_cls in meta["controllers"]:
             ctrl_meta = getattr(ctrl_cls, "__vesper_controller__", None)

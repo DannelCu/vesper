@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from vesper.core.plugin import VesperPlugin
-from vesper.core.module import Container
 from vesper_http.client import HttpClient
 
 
@@ -62,8 +61,8 @@ class HttpPlugin(VesperPlugin):
             timeout=self._timeout,
         )
 
-        # Register in global DI — services that declare http: HttpClient get this instance
-        Container.register_global(HttpClient, client)
+        # Register in per-App DI — services that declare http: HttpClient get this instance
+        app.register_global_provider(HttpClient, client)
 
         # Also expose as IPC commands for direct use from JS
         @app.command("http:get")

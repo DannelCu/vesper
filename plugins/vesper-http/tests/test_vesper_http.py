@@ -83,12 +83,12 @@ def test_sdk_js_exposes_all_methods():
 
 def test_plugin_registers_http_client_globally():
     app = App(plugins=[HttpPlugin()])
-    assert HttpClient in Container._global
+    assert HttpClient in app._global_providers
 
 
 def test_global_http_client_is_http_client_instance():
     app = App(plugins=[HttpPlugin()])
-    assert isinstance(Container._global[HttpClient], HttpClient)
+    assert isinstance(app._global_providers[HttpClient], HttpClient)
 
 
 def test_plugin_registers_ipc_commands():

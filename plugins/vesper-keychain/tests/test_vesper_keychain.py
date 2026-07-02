@@ -63,13 +63,13 @@ def test_plugin_custom_service():
 
 
 def test_plugin_registers_keychain_globally():
-    App(plugins=[KeychainPlugin(service="test-app")])
-    assert Keychain in Container._global
+    app = App(plugins=[KeychainPlugin(service="test-app")])
+    assert Keychain in app._global_providers
 
 
 def test_global_keychain_is_keychain_instance():
-    App(plugins=[KeychainPlugin(service="test-app")])
-    assert isinstance(Container._global[Keychain], Keychain)
+    app = App(plugins=[KeychainPlugin(service="test-app")])
+    assert isinstance(app._global_providers[Keychain], Keychain)
 
 
 def test_plugin_registers_ipc_commands():

@@ -68,14 +68,14 @@ def test_plugin_custom_uri_and_database():
 
 
 def test_plugin_registers_mongo_database_globally():
-    App(plugins=[MongoPlugin(database="test")])
-    assert MongoDatabase in Container._global
+    app = App(plugins=[MongoPlugin(database="test")])
+    assert MongoDatabase in app._global_providers
 
 
 def test_global_mongo_database_is_database_instance():
     import mongomock
-    App(plugins=[MongoPlugin(database="test")])
-    db = Container._global[MongoDatabase]
+    app = App(plugins=[MongoPlugin(database="test")])
+    db = app._global_providers[MongoDatabase]
     assert isinstance(db, mongomock.Database)
 
 
@@ -493,8 +493,8 @@ def test_mongo_database_injected_into_service():
         def __init__(self, db: MongoDatabase):
             self.db = db
 
-    App(plugins=[MongoPlugin(database="test")])
-    container = Container([ProductsService])
+    app = App(plugins=[MongoPlugin(database="test")])
+    container = Container([ProductsService], global_providers=app._global_providers)
     service = container.resolve(ProductsService)
     assert isinstance(service.db, mongomock.Database)
 
@@ -513,8 +513,8 @@ def test_di_service_can_query_via_injected_db():
             return [{"name": d["name"], "price": d["price"]}
                     for d in self._col.find()]
 
-    App(plugins=[MongoPlugin(database="test")])
-    container = Container([ProductsService])
+    app = App(plugins=[MongoPlugin(database="test")])
+    container = Container([ProductsService], global_providers=app._global_providers)
     svc = container.resolve(ProductsService)
 
     svc.add("Widget", 9.99)

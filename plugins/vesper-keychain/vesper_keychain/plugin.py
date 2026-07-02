@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from vesper.core.plugin import VesperPlugin
-from vesper.core.module import Container
 from vesper_keychain.keychain import Keychain
 
 
@@ -49,7 +48,7 @@ class KeychainPlugin(VesperPlugin):
     def register(self, app) -> None:
         keychain = Keychain(service=self._service)
 
-        Container.register_global(Keychain, keychain)
+        app.register_global_provider(Keychain, keychain)
 
         @app.command("keychain:get")
         def get(key: str) -> str | None:

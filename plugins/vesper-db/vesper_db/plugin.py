@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from vesper.core.plugin import VesperPlugin
-from vesper.core.module import Container
 from vesper_db.base import Base
 from vesper_db.session import DbSession
 
@@ -75,9 +74,9 @@ class DatabasePlugin(VesperPlugin):
         # IPC calls run on the calling thread, so each call gets an isolated session.
         session_factory = scoped_session(sessionmaker(bind=engine))
 
-        # Register the session in the global DI registry.
+        # Register the session in the per-App DI registry.
         # Services that declare db: DbSession will receive this proxy.
-        Container.register_global(DbSession, session_factory)
+        app.register_global_provider(DbSession, session_factory)
 
         # Remove the thread-local session after every IPC call.
         app.add_teardown(session_factory.remove)

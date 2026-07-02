@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from vesper.core.plugin import VesperPlugin
-from vesper.core.module import Container
 from vesper_mongodb.database import MongoDatabase, _serialize
 
 
@@ -22,7 +21,7 @@ class MongoPlugin(VesperPlugin):
 
         client = pymongo.MongoClient(self._uri)
         db = client[self._database]
-        Container.register_global(MongoDatabase, db)
+        app.register_global_provider(MongoDatabase, db)
 
         @app.command("mongo:find")
         def find(collection: str, filter: dict = None, limit: int = 0) -> list:

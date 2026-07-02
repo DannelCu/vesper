@@ -80,30 +80,39 @@ class Container:
     Only resolves parameters whose annotation is a concrete type — skips
     primitives and unannotated params.
 
-    Plugins can register globally-available instances via register_global()
-    so they are injectable into any module's services without being listed
-    in the module's providers.
+    Prefer passing per-App globals via the ``global_providers`` constructor
+    argument (populated by ``App.register_global_provider()``). The class-level
+    ``_global`` dict is retained for backward compatibility.
     """
 
     _global: dict[type, Any] = {}
 
     @classmethod
     def register_global(cls, type_: type, instance: Any) -> None:
-        """Register a globally-available provider instance (e.g. from a plugin)."""
+        """Register a globally-available provider (class-level, legacy API)."""
         cls._global[type_] = instance
 
     @classmethod
     def clear_global(cls) -> None:
-        """Remove all globally-registered providers. Useful in tests."""
+        """Remove all class-level globally-registered providers. Useful in tests."""
         cls._global.clear()
 
-    def __init__(self, providers: list[type]) -> None:
+    def __init__(
+        self,
+        providers: list[type],
+        global_providers: "dict[type, Any] | None" = None,
+    ) -> None:
         self._providers: set[type] = set(providers)
         self._singletons: dict[type, Any] = {}
+        self._global_providers: dict[type, Any] = global_providers if global_providers is not None else {}
 
     def resolve(self, cls: type) -> Any:
         if cls in self._singletons:
             return self._singletons[cls]
+
+        # Per-App globals (isolated) take priority over class-level globals.
+        if cls in self._global_providers:
+            return self._global_providers[cls]
 
         if cls in Container._global:
             return Container._global[cls]

@@ -138,8 +138,9 @@ def test_sdk_path_returns_none():
 
 
 def test_plugin_registers_db_session_globally():
-    DatabasePlugin(url="sqlite:///:memory:").register(App())
-    assert DbSession in Container._global
+    app = App()
+    DatabasePlugin(url="sqlite:///:memory:").register(app)
+    assert DbSession in app._global_providers
 
 
 def test_plugin_adds_teardown_to_ipc():
@@ -172,9 +173,9 @@ def test_models_registered_in_base_metadata():
 def test_db_session_injected_into_service():
     app = make_app()
     # UserService receives a scoped_session proxy via DI
-    container = Container([UserService])
+    container = Container([UserService], global_providers=app._global_providers)
     service = container.resolve(UserService)
-    assert service.db is Container._global[DbSession]
+    assert service.db is app._global_providers[DbSession]
 
 
 def test_create_user_via_ipc(tmp_path):
@@ -348,7 +349,7 @@ def test_concurrent_ipc_calls_do_not_corrupt(tmp_path):
     app = App(plugins=[DatabasePlugin(url=url)], root_module=UserModule)
 
     # Enable WAL mode so readers don't block writers
-    session = Container._global[DbSession]
+    session = app._global_providers[DbSession]
     with session() as s:
         s.execute(__import__("sqlalchemy").text("PRAGMA journal_mode=WAL"))
         s.commit()
