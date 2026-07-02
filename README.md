@@ -1,367 +1,278 @@
-# Vesper Architecture
+# Vesper
 
-## What is Vesper?
+> Build desktop apps with Python and web technologies.
 
-Vesper is an open-source desktop application framework for Python developers.
+Vesper is a Python-first desktop application framework. Write your backend in Python, your UI in HTML/CSS/JavaScript — Vesper connects them through a typed IPC bridge rendered in the system's native WebView.
 
-Its goal is to make it possible to build modern desktop applications using:
-
-* Python for backend logic
-* Web technologies for the user interface
-* Native system WebViews for rendering
-
-Vesper is inspired by the ideas pioneered by Tauri, but it is designed around a Python-first developer experience.
-
-The project does not aim to replace Tauri, PyWebView, or existing desktop frameworks. Instead, it aims to provide a modern, lightweight, and developer-friendly layer on top of existing technologies.
-
----
-
-# Why Vesper Exists
-
-Python is one of the most popular programming languages in the world, but its desktop application ecosystem has several limitations.
-
-Current options often require developers to:
-
-* Learn a completely different UI framework
-* Use outdated GUI toolkits
-* Accept heavyweight solutions
-* Build large amounts of boilerplate code
-
-Meanwhile, modern web technologies have become the preferred way to create rich user interfaces.
-
-Vesper aims to bridge that gap.
-
-The vision is simple:
-
-> Build desktop applications with Python and modern web technologies without forcing developers to learn Rust, C++, or a completely different UI framework.
-
----
-
-# Core Principles
-
-## 1. Python First
-
-Python is the primary backend language.
-
-The backend should never depend on Node.js or another runtime to execute application logic.
+**Inspired by Tauri. Built for Python developers.**
 
 ```python
+# app.py
 from vesper import App
 
-app = App()
-```
+app = App(title="My App", frontend="frontend/index.html")
 
----
-
-## 2. Frontend Agnostic
-
-Vesper should work with any frontend framework.
-
-Examples:
-
-* React
-* Vue
-* Svelte
-* Solid
-* Vanilla HTML/CSS/JavaScript
-
-The framework should never force a specific frontend technology.
-
----
-
-## 3. Lightweight Core
-
-The core of Vesper should remain small and focused.
-
-Only essential functionality belongs in the core:
-
-* Application lifecycle
-* Command registration
-* IPC communication
-* Window management
-
-Everything else should be optional.
-
----
-
-## 4. Explicit APIs
-
-Nothing should be exposed automatically.
-
-Developers must explicitly expose backend functionality.
-
-Example:
-
-```python
 @app.command
-def greet(name):
-    return f"Hello {name}"
+def greet(name: str) -> str:
+    return f"Hello, {name}!"
+
+if __name__ == "__main__":
+    app.run()
 ```
 
-Only registered commands can be called from the frontend.
-
----
-
-## 5. Secure by Default
-
-Security is a fundamental design principle.
-
-Frontend code should never gain unrestricted access to Python execution.
-
-Instead, communication must happen through a controlled command system.
-
-Allowed:
-
-```javascript
-await invoke("greet", {
-  name: "John"
-})
-```
-
-Not allowed:
-
-```javascript
-window.python.execute(...)
-```
-
----
-
-## 6. Message-Based Architecture
-
-Communication between frontend and backend should be message-based.
-
-All data crossing the frontend/backend boundary must be serializable.
-
-Supported types:
-
-* string
-* integer
-* float
-* boolean
-* list
-* dictionary
-* JSON-compatible structures
-
-Unsupported types:
-
-* database connections
-* sockets
-* threads
-* file handles
-* arbitrary Python objects
-
-This philosophy is heavily inspired by Tauri's IPC model.
-
----
-
-# Current Architecture
-
-```text
-Frontend
-    │
-    ▼
- invoke()
-    │
-    ▼
- IPC Layer
-    │
-    ▼
- Command Registry
-    │
-    ▼
- Python Commands
-```
-
-The frontend sends a message.
-
-The IPC layer validates and routes the message.
-
-The command registry locates the target command.
-
-The command is executed in Python.
-
-The result is returned back to the frontend.
-
----
-
-# Project Structure
-
-Current Milestone 1 structure:
-
-```text
-vesper/
-│
-├── __init__.py
-│
-└── core/
-    ├── __init__.py
-    ├── app.py
-    ├── registry.py
-    ├── ipc.py
-    └── window.py
-```
-
----
-
-# File Responsibilities
-
-## vesper/**init**.py
-
-Public API entry point.
-
-Responsibilities:
-
-* Expose public classes
-* Hide internal implementation details
-* Provide a clean developer experience
-
-Example:
-
-```python
-from vesper import App
-```
-
----
-
-## vesper/core/**init**.py
-
-Internal package entry point.
-
-Responsibilities:
-
-* Export internal core components
-* Organize core package imports
-* Define internal package boundaries
-
----
-
-## vesper/core/app.py
-
-Application lifecycle manager.
-
-Responsibilities:
-
-* Create the application instance
-* Initialize internal services
-* Register commands
-* Start the application
-
-Future responsibilities may include:
-
-* Plugin loading
-* Configuration management
-* Event management
-
----
-
-## vesper/core/registry.py
-
-Command registration system.
-
-Responsibilities:
-
-* Store registered commands
-* Retrieve commands by name
-* Validate command existence
-
-Example:
-
-```python
-@app.command
-def greet(name):
-    return f"Hello {name}"
-```
-
-Internally:
-
-```python
-{
-    "greet": greet
+```html
+<!-- frontend/index.html -->
+<button onclick="sayHello()">Greet</button>
+<p id="output"></p>
+<script src="vesper.js"></script>
+<script>
+async function sayHello() {
+    const msg = await vesper.invoke("greet", { name: "World" })
+    document.getElementById("output").textContent = msg
 }
+</script>
+```
+
+That is a complete, runnable desktop app. No Rust. No Node.js server. No boilerplate.
+
+---
+
+## Why Vesper?
+
+If you know Python, Vesper is the fastest path to a native desktop app with a modern UI.
+
+|  | Electron | Tauri | **Vesper** |
+|---|---|---|---|
+| Backend language | JavaScript / Node.js | Rust | **Python** |
+| WebView | Bundled Chromium | System WebView | System WebView |
+| Approximate binary size | ~150 MB | ~10 MB | ~15 MB |
+| Learning curve | Medium | High (Rust required) | **Low** |
+| Python ecosystem access | ❌ | ❌ | **✅** |
+
+Use any Python library — pandas, SQLAlchemy, PyMongo, OpenCV, scikit-learn — directly in your backend. No bridges or serialization workarounds needed.
+
+---
+
+## Features
+
+**IPC & Architecture**
+- Bidirectional IPC — call Python from JS, push events from Python to the frontend
+- Runtime argument validation — missing or unexpected args return a typed error before the command runs
+- Async support — `async def` commands and middleware work natively
+- NestJS-inspired module system — `@Module`, `@Controller`, `@Injectable`, dependency injection container
+- Guards — per-command or per-controller access control, sync or async
+- Middleware — cross-cutting logic on every IPC call (logging, auth, rate-limiting)
+
+**Windows & UI**
+- Multi-window — secondary windows sharing the same IPC registry
+- Native menu bar — top-level menus, submenus, separators
+- System tray — icon with context menu
+- Splash screen — frameless loading overlay, auto-dismissed when the app is ready
+- Window controls — minimize, maximize, restore, fullscreen, resize, move from Python or JS
+- Screen info — list connected monitors with dimensions and position
+
+**System Integration**
+- Native file dialogs — open, save, folder picker with file-type filters
+- Native notifications — no extra dependencies (PowerShell, osascript, notify-send)
+- Clipboard — read and write system clipboard
+- Shell integration — open URLs in the default browser, reveal files in the file manager
+- Filesystem API — read, write, exists, list directory from JS
+- Deep linking — handle `myapp://` protocol URLs via `@app.on("deeplink")`
+- OS info — platform, version, machine architecture
+
+**Developer Workflow**
+- Hot-reload dev server — Python restarts on backend changes, browser refreshes on frontend changes
+- Framework templates — vanilla, React, Vue, Svelte (Vite-based)
+- TypeScript definitions — `vesper sync-types` generates `.d.ts` from registered Python commands
+- Module scaffolding — `vesper g module users` generates the full module structure
+- Doctor — `vesper doctor` diagnoses environment and project issues
+- Packaging — PyInstaller (default) or Nuitka native binary
+- Code signing — macOS codesign + notarization, Windows signtool / osslsigncode
+- Auto-updates — manifest-based self-update with download progress events
+
+---
+
+## Plugin Ecosystem
+
+Plugins are separate packages installed with pip. They register IPC commands and injectable services automatically — no manual wiring required.
+
+```python
+from vesper import App
+from vesper_db import DatabasePlugin, Base, DbSession
+from vesper_store import StorePlugin
+
+app = App(
+    plugins=[
+        DatabasePlugin(url="sqlite:///app.db"),
+        StorePlugin(app_name="my-app"),
+    ],
+    root_module=AppModule,
+)
+```
+
+Services receive plugin types via dependency injection:
+
+```python
+from vesper import Injectable
+from vesper_db import DbSession
+
+@Injectable()
+class UserService:
+    def __init__(self, db: DbSession):
+        self.db = db  # injected automatically
+```
+
+| Plugin | What it adds | Injectable type |
+|---|---|---|
+| `vesper-store` | Persistent JSON key-value store | — |
+| `vesper-db` | SQLAlchemy ORM integration | `DbSession` |
+| `vesper-http` | HTTP client proxy (solves CORS) | `HttpClient` |
+| `vesper-keychain` | OS keychain (Credential Manager / Keychain / Secret Service) | `Keychain` |
+| `vesper-mongodb` | MongoDB via PyMongo | `MongoDatabase` |
+| `vesper-shortcuts` | Global keyboard shortcuts (active even when unfocused) | — |
+| `vesper-theme` | OS dark/light mode detection and change events | — |
+
+---
+
+## Requirements
+
+| Dependency | Version | Required for |
+|---|---|---|
+| Python | 3.10+ | Always |
+| pip | any | Always |
+| Node.js | 18+ | React / Vue / Svelte templates only |
+
+---
+
+## Installation
+
+```bash
+pip install vesper
+```
+
+With system tray support:
+
+```bash
+pip install "vesper[tray]"
+```
+
+Installing plugins:
+
+```bash
+pip install vesper-store vesper-db vesper-http vesper-keychain vesper-mongodb
+pip install vesper-shortcuts vesper-theme
 ```
 
 ---
 
-## vesper/core/ipc.py
+## Create a Project
 
-Inter-Process Communication layer.
+**Interactive wizard** (recommended for first-time users):
 
-Responsibilities:
+```bash
+vesper init app
+cd my-app
+vesper dev
+```
 
-* Receive frontend messages
-* Validate requests
-* Resolve commands
-* Execute commands
-* Return responses
-* Handle errors
+**With flags** (for experienced users):
 
-This file represents the communication bridge between JavaScript and Python.
-
-It is one of the most important components in the framework.
-
----
-
-## vesper/core/window.py
-
-Window abstraction layer.
-
-Responsibilities:
-
-* Create application windows
-* Load frontend content
-* Manage window lifecycle
-
-Initially this module will be implemented using PyWebView.
-
-However, the rest of the framework should not depend directly on PyWebView.
-
-The goal is to keep the implementation abstract and replaceable.
+```bash
+vesper init app --name "my-app" --template react --styles tailwind --pm pnpm
+cd my-app
+pnpm install
+vesper dev
+```
 
 ---
 
-# First Milestone
+## Project Structures
 
-Milestone 1 focuses only on the foundation.
+**Vanilla** (no Node.js required):
 
-Goals:
+```
+my-app/
+├── app.py            ← Python backend
+├── vesper.toml       ← project config
+└── frontend/
+    ├── index.html
+    └── vesper.js     ← IPC bridge (auto-generated)
+```
 
-* App class
-* Command registry
-* Command decorator
-* Basic architecture
+**React / Vue / Svelte** (Vite-based):
 
-Not included:
+```
+my-app/
+├── app.py
+├── vesper.toml
+├── package.json
+├── vite.config.js
+├── public/
+│   └── vesper.js     ← IPC bridge (served as static asset)
+└── src/
+    └── App.jsx       ← (or .vue / .svelte)
+```
 
-* Plugins
-* Packaging
-* Auto-updates
-* Filesystem APIs
-* Dialog APIs
-* Event system
+**Module-based** (for larger apps):
 
-The objective is to build a small, understandable, and stable foundation before adding more advanced features.
+```
+my-app/
+├── app.py
+├── vesper.toml
+└── modules/
+    ├── app_module.py
+    └── users/
+        ├── users_module.py
+        ├── users_controller.py
+        └── users_service.py
+```
 
 ---
 
-# Long-Term Vision
+## Documentation
 
-Vesper aims to become a modern desktop framework that gives Python developers an experience similar to what Tauri provides for Rust developers.
+| Guide | Description |
+|---|---|
+| [Getting Started](docs/getting-started.md) | Install, create, run, and build your first app |
+| [CLI Reference](docs/cli.md) | All CLI commands with flags and examples |
+| [Project Config](docs/project-config.md) | `vesper.toml` keys, sections, and defaults |
+| [IPC](docs/ipc.md) | How the Python ↔ JavaScript bridge works |
+| [Module System & DI](docs/module-system.md) | `@Module`, `@Controller`, `@Injectable`, container |
+| [Guards](docs/guards.md) | Command-level access control |
+| [Middleware](docs/middleware.md) | Cross-cutting IPC logic |
+| [Events](docs/events.md) | Pushing events from Python to the frontend |
+| [Multi-Window](docs/multiwindow.md) | Secondary windows, `WindowHandle` |
+| [Native Dialogs](docs/dialogs.md) | File open, save, folder picker |
+| [Notifications](docs/notifications.md) | Native desktop notifications |
+| [System Tray](docs/tray.md) | Tray icon and context menu |
+| [Menu Bar](docs/menu.md) | Native top-level application menu |
+| [Shell Integration](docs/shell.md) | Open URLs, reveal files |
+| [Clipboard](docs/clipboard.md) | Read and write the system clipboard |
+| [Window Controls](docs/window-controls.md) | Minimize, maximize, resize, screen info |
+| [Splash Screen](docs/splash.md) | Loading overlay before the app is ready |
+| [Deep Linking](docs/deeplink.md) | Handle custom `myapp://` protocol URLs |
+| [Filesystem API](docs/filesystem.md) | Read, write, list files from JS |
+| [File Transfers](docs/file-transfers.md) | Sending binary data across the IPC boundary |
+| [Auto-Updates](docs/auto-updates.md) | Self-updating apps via a manifest |
+| [Code Signing](docs/code-signing.md) | macOS and Windows code signing |
+| [Plugins](docs/plugins.md) | Using plugins and building your own |
+| [OS & Theme](docs/os-theme.md) | Platform info and dark/light mode |
 
-Future versions may include:
+**Recipes** — complete code examples for common patterns not built into the framework:
 
-* CLI tools
-* Frontend templates
-* Plugin ecosystem
-* Native APIs
-* Packaging tools
-* Event system
-* Developer tooling
+| Recipe | Description |
+|---|---|
+| [Authentication with Roles](docs/recipes/auth.md) | Session auth, role-based guards, localStorage persistence |
+| [Context Menus](docs/recipes/context-menus.md) | Native-looking right-click menus in HTML/CSS |
+| [Saving Files (drag-out alternative)](docs/recipes/drag-out.md) | Export generated content to disk |
+| [State Between Windows](docs/recipes/state-between-windows.md) | Share and sync state across multiple windows |
+| [IPC Logging Middleware](docs/recipes/logging-middleware.md) | Log and time every IPC call during development |
+| [User Preferences](docs/recipes/user-preferences.md) | Persistent settings panel with vesper-store |
+| [Dark / Light Mode Theming](docs/recipes/theming.md) | System theme detection with CSS variables |
+| [Real-Time Data Push](docs/recipes/real-time.md) | Stream live data from Python to the frontend |
 
-However, all future development must respect the original principles:
+---
 
-* Python First
-* Frontend Agnostic
-* Lightweight Core
-* Explicit APIs
-* Secure by Default
-* Message-Based Architecture
+## License
+
+MIT © Dannel LLC
