@@ -53,8 +53,9 @@ class WindowHandle:
         """Dispatch a named event to this window's frontend."""
         if self._win is None:
             return
+        event_name = json.dumps("vesper:" + event)
         data = json.dumps(payload)
-        js = f'window.dispatchEvent(new CustomEvent("vesper:{event}",{{detail:{data}}}))'
+        js = f"window.dispatchEvent(new CustomEvent({event_name},{{detail:{data}}}))"
         self._win.evaluate_js(js)
 
 
@@ -267,8 +268,9 @@ class Window:
         """
         if self.window is None:
             return
+        event_name = json.dumps("vesper:" + event)
         data = json.dumps(payload)
-        js = f'window.dispatchEvent(new CustomEvent("vesper:{event}",{{detail:{data}}}))'
+        js = f"window.dispatchEvent(new CustomEvent({event_name},{{detail:{data}}}))"
         self.window.evaluate_js(js)
 
     def open_dialog(

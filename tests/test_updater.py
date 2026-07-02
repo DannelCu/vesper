@@ -18,19 +18,23 @@ from vesper.core import updater
 
 
 def test_parse_version_basic():
-    assert updater._parse_version("1.2.3") == (1, 2, 3)
+    from packaging.version import Version
+    assert updater._parse_version("1.2.3") == Version("1.2.3")
 
 
 def test_parse_version_strips_v_prefix():
-    assert updater._parse_version("v2.0.0") == (2, 0, 0)
+    from packaging.version import Version
+    assert updater._parse_version("v2.0.0") == Version("2.0.0")
 
 
 def test_parse_version_single_segment():
-    assert updater._parse_version("5") == (5,)
+    from packaging.version import Version
+    assert updater._parse_version("5") == Version("5")
 
 
 def test_parse_version_invalid_returns_zero():
-    assert updater._parse_version("not-a-version") == (0,)
+    from packaging.version import Version
+    assert updater._parse_version("not-a-version") == Version("0")
 
 
 # ── _platform_key ──────────────────────────────────────────────────────────────
@@ -174,7 +178,7 @@ def test_install_posix_copies_and_reexecs(tmp_path):
     with patch("shutil.copy2") as mock_copy, \
          patch("os.chmod") as mock_chmod, \
          patch("os.execv") as mock_execv:
-        updater.install(str(new_bin))
+        updater.install(str(new_bin), allow_unverified=True)
 
     mock_copy.assert_called_once()
     mock_chmod.assert_called_once()
@@ -188,7 +192,7 @@ def test_install_windows_launches_bat_and_exits(tmp_path):
 
     with patch("subprocess.Popen") as mock_popen, \
          patch("sys.exit") as mock_exit:
-        updater.install(str(new_bin))
+        updater.install(str(new_bin), allow_unverified=True)
 
     mock_popen.assert_called_once()
     cmd = mock_popen.call_args[0][0]
