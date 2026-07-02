@@ -107,3 +107,57 @@ const config = await vesper.fs.read(configPath)
 The filesystem API reads entire files into memory as strings. For files larger than a few megabytes, prefer a streaming approach: read the file in a Python command and return only the portion the frontend needs, or use `vesper.fs.read` only for configuration files and small text assets.
 
 For binary files (images, PDFs), use [File Transfers](file-transfers.md) with Base64 encoding.
+
+---
+
+## Security — path scope
+
+By default the filesystem built-ins have **no access restrictions**: the frontend can read or write any path on the machine that the OS user has permission to access. This is intentional for development convenience, but you should restrict it in production.
+
+### Configuring a scope
+
+Pass `fs_scope` to `App` to limit filesystem access to a list of allowed root directories:
+
+```python
+import os
+from pathlib import Path
+
+app = App(
+    frontend="dist/index.html",
+    fs_scope=[
+        str(Path.home() / "Documents" / "my-app"),   # user data folder
+        os.environ.get("APPDATA", "") + "/my-app",   # Windows app data
+    ],
+)
+```
+
+Any path that resolves (after symlink resolution) outside every listed root raises `FsScopeError`, which the IPC layer returns as `{ok: false, error: {type: "FsScopeError"}}`.
+
+To allow unrestricted access explicitly (not recommended):
+
+```python
+app = App(fs_scope="*")
+```
+
+### Recommended practice
+
+Restrict `fs_scope` to the application's own data directory:
+
+```python
+from pathlib import Path
+import os
+
+if os.name == "nt":
+    data_dir = Path(os.environ["APPDATA"]) / "my-app"
+else:
+    data_dir = Path.home() / ".local" / "share" / "my-app"
+
+data_dir.mkdir(parents=True, exist_ok=True)
+
+app = App(
+    frontend="dist/index.html",
+    fs_scope=[str(data_dir)],
+)
+```
+
+Without a scope, a malicious or compromised frontend could exfiltrate `/etc/passwd`, private keys, or overwrite system files.

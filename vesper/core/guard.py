@@ -7,9 +7,11 @@ def guard(*guard_fns: Callable) -> Callable[[Callable], Callable]:
     """
     Attach guard functions to a @command method.
 
-    Guards run before global middleware. A guard returning False yields a
-    ForbiddenError response; raising an exception propagates it as an error
-    response; returning True or None allows the call to proceed.
+    Guards run before global middleware and are fail-safe: a guard must
+    return ``True`` or ``None`` to allow the call to proceed. Any other return
+    value — including ``False``, ``0``, ``""``, or any other falsy value —
+    raises ``ForbiddenError`` and short-circuits the call. Raising an exception
+    also short-circuits and propagates as an error response.
 
     Usage — single guard:
         @command

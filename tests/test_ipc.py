@@ -113,12 +113,12 @@ def test_response_preserves_request_id():
     assert resp["id"] == "req-abc-123"
 
 
-def test_args_as_non_dict_passed_positionally():
+def test_args_as_non_dict_returns_validation_error():
     ipc, registry = _make_ipc()
     registry.register(lambda x: x * 2, name="double")
     resp = ipc.handle({"id": "1", "command": "double", "args": 5})
-    assert resp["ok"] is True
-    assert resp["result"] == 10
+    assert resp["ok"] is False
+    assert resp["error"]["type"] == "ValidationError"
 
 
 # ── Async commands ────────────────────────────────────────────────────────────
@@ -235,9 +235,10 @@ def test_var_kwargs_command_accepts_any_args():
     assert resp["ok"] is True
 
 
-def test_validation_error_not_raised_for_non_dict_args():
+def test_non_dict_args_returns_validation_error():
     ipc, registry = _make_ipc()
     registry.register(lambda x: x * 2, name="double")
     resp = ipc.handle({"id": "1", "command": "double", "args": 5})
-    assert resp["ok"] is True
-    assert resp["result"] == 10
+    assert resp["ok"] is False
+    assert resp["error"]["type"] == "ValidationError"
+    assert "dict" in resp["error"]["message"].lower()

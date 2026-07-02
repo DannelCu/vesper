@@ -472,15 +472,18 @@ class App:
         from vesper.core import updater
         return updater.download(url, on_progress=on_progress)
 
-    def install_update(self, path: str) -> None:
+    def install_update(self, path: str, *, expected_sha256: str = "") -> None:
         """
         Replace the running executable with the binary at path and restart.
 
         On POSIX this re-execs the process. On Windows it launches a detached
         helper script and exits. Only meaningful for packaged apps.
+
+        Pass expected_sha256 (from the manifest sha256 field) to verify the
+        binary before installing. Raises ValueError on mismatch.
         """
         from vesper.core import updater
-        updater.install(path)
+        updater.install(path, expected_sha256=expected_sha256)
 
     def emit(self, event: str, payload=None) -> None:
         """

@@ -154,14 +154,20 @@ class IPC:
                 }
             }
 
-        if isinstance(args, dict):
-            err = _validate_args(command, args)
-            if err:
-                return {
-                    "id": request_id,
-                    "ok": False,
-                    "error": {"type": "ValidationError", "message": err},
-                }
+        if not isinstance(args, dict):
+            return {
+                "id": request_id,
+                "ok": False,
+                "error": {"type": "ValidationError", "message": "args must be an object/dict."},
+            }
+
+        err = _validate_args(command, args)
+        if err:
+            return {
+                "id": request_id,
+                "ok": False,
+                "error": {"type": "ValidationError", "message": err},
+            }
 
         try:
             for guard_fn in self.registry._guards.get(command_name, []):
@@ -184,18 +190,11 @@ class IPC:
                 else:
                     mw(command_name, args)
 
-            if isinstance(args, dict):
-                if inspect.iscoroutinefunction(command):
-                    future = asyncio.run_coroutine_threadsafe(command(**args), self._loop)
-                    result = future.result()
-                else:
-                    result = command(**args)
+            if inspect.iscoroutinefunction(command):
+                future = asyncio.run_coroutine_threadsafe(command(**args), self._loop)
+                result = future.result()
             else:
-                if inspect.iscoroutinefunction(command):
-                    future = asyncio.run_coroutine_threadsafe(command(args), self._loop)
-                    result = future.result()
-                else:
-                    result = command(args)
+                result = command(**args)
 
             return {
                 "id": request_id,

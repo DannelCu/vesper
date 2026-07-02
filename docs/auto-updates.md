@@ -41,6 +41,24 @@ Host a JSON file at `update_url` on any static server (S3, GitHub Releases, Clou
 
 If the manifest's `version` is greater than the running `version`, an update is available. If the manifest does not have an entry for the current platform, no update is offered.
 
+### Binary integrity (sha256)
+
+You can optionally include a SHA-256 digest per platform. Vesper will verify the downloaded binary before installing it:
+
+```json
+{
+  "version": "1.2.0",
+  "notes": "Bug fixes.",
+  "platforms": {
+    "win32":  { "url": "https://example.com/myapp-1.2.0.exe", "sha256": "abc123..." },
+    "darwin": { "url": "https://example.com/myapp-1.2.0",     "sha256": "def456..." },
+    "linux":  { "url": "https://example.com/myapp-1.2.0",     "sha256": "ghi789..." }
+  }
+}
+```
+
+When a `sha256` field is present, `install()` refuses to proceed if the downloaded binary's digest does not match. The string-URL format (no sha256) is still accepted for backward compatibility, but the binary will require `allow_unverified=True` to install — not recommended for production.
+
 ---
 
 ## Checking for updates
@@ -95,14 +113,15 @@ path = app.download_update(update["download_url"], on_progress=on_progress)
 ## Installing the update
 
 ```js
-await vesper.invoke("vesper:update:install", { path })
+// Pass sha256 from the check() result for verified installation
+await vesper.invoke("vesper:update:install", { path, sha256: update.sha256 })
 // App restarts immediately — no response is returned
 ```
 
 **From Python:**
 
 ```python
-app.install_update(path)
+app.install_update(path, expected_sha256=update["sha256"])
 # Replaces sys.executable and restarts the process
 ```
 
