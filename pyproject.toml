@@ -12,7 +12,8 @@ authors = [{ name = "Dannel LLC" }]
 license = "MIT"
 
 dependencies = [
-  "pywebview>=4.0"
+  "pywebview>=4.0",
+  "packaging>=21"
 ]
 
 [project.optional-dependencies]

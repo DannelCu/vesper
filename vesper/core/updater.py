@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import platform
 import shutil
@@ -10,12 +11,14 @@ import urllib.request
 from pathlib import Path
 from typing import Callable
 
+from packaging.version import InvalidVersion, Version
 
-def _parse_version(v: str) -> tuple[int, ...]:
+
+def _parse_version(v: str) -> Version:
     try:
-        return tuple(int(x) for x in v.strip().lstrip("v").split("."))
-    except ValueError:
-        return (0,)
+        return Version(v.strip().lstrip("v"))
+    except InvalidVersion:
+        return Version("0")
 
 
 def _platform_key() -> str:
@@ -60,7 +63,17 @@ def check(manifest_url: str, current_version: str) -> dict | None:
     if _parse_version(remote_version) <= _parse_version(current_version):
         return None
 
-    download_url = manifest.get("platforms", {}).get(_platform_key())
+    platform_entry = manifest.get("platforms", {}).get(_platform_key())
+    if not platform_entry:
+        return None
+
+    if isinstance(platform_entry, dict):
+        download_url = platform_entry.get("url", "")
+        sha256 = platform_entry.get("sha256", "")
+    else:
+        download_url = platform_entry
+        sha256 = ""
+
     if not download_url:
         return None
 
@@ -68,6 +81,7 @@ def check(manifest_url: str, current_version: str) -> dict | None:
         "version": remote_version,
         "notes": manifest.get("notes", ""),
         "download_url": download_url,
+        "sha256": sha256,
     }
 
 
@@ -93,9 +107,24 @@ def download(url: str, on_progress: Callable[[int], None] | None = None) -> str:
     return tmp.name
 
 
-def install(path: str) -> None:
+def verify_checksum(path: str, expected_sha256: str) -> bool:
+    """Return True if the file at *path* matches *expected_sha256* (hex, case-insensitive)."""
+    if not expected_sha256:
+        return False
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest().lower() == expected_sha256.strip().lower()
+
+
+def install(path: str, *, expected_sha256: str = "", allow_unverified: bool = False) -> None:
     """
-    Replace the running executable with the binary at path and restart the app.
+    Replace the running executable with the binary at *path* and restart the app.
+
+    Verifies the SHA-256 checksum before touching the running binary.
+    Pass *expected_sha256* from the manifest ``sha256`` field.
+    Set *allow_unverified=True* only for local development — never in production.
 
     On POSIX (macOS / Linux): copies the file in-place and re-execs the process.
     On Windows: launches a detached batch script that swaps the binary after the
@@ -104,6 +133,15 @@ def install(path: str) -> None:
     This is only meaningful for packaged apps (sys.executable points to the
     binary). In development (python app.py) sys.executable is the interpreter.
     """
+    if not allow_unverified:
+        if not expected_sha256:
+            raise ValueError(
+                "install() requires expected_sha256. "
+                "Pass allow_unverified=True only for local development."
+            )
+        if not verify_checksum(path, expected_sha256):
+            raise ValueError("Update binary failed checksum verification; aborting install.")
+
     current = Path(sys.executable)
     new = Path(path)
 
@@ -120,7 +158,9 @@ def _install_posix(current: Path, new: Path) -> None:
 
 
 def _install_windows(current: Path, new: Path) -> None:
-    bat = Path(tempfile.mktemp(suffix=".bat"))
+    fd, bat_name = tempfile.mkstemp(suffix=".bat")
+    os.close(fd)
+    bat = Path(bat_name)
     bat.write_text(
         "@echo off\n"
         ":wait\n"

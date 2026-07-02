@@ -278,10 +278,11 @@
         /**
          * Install the binary at path and restart the app.
          * @param {string} path - Local path returned by download().
+         * @param {string} [sha256] - Expected SHA-256 hex digest from the manifest.
          * @returns {Promise<void>}
          */
-        install: function(path) {
-            return invoke("vesper:update:install", { path: path });
+        install: function(path, sha256) {
+            return invoke("vesper:update:install", { path: path, sha256: sha256 || "" });
         },
     };
 
