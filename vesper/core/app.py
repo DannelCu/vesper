@@ -38,6 +38,7 @@ class App:
         version: str = "",
         update_url: str = "",
         plugins: list | None = None,
+        fs_scope: list[str] | str | None = None,
     ) -> None:
         """
         Initialize the Vesper application core systems.
@@ -118,11 +119,26 @@ class App:
         self.registry.register(_notify, name="vesper:notify")
 
         from vesper.core import fs as _fs
+        from vesper.core.fs_scope import FsScope
 
-        self.registry.register(_fs.read, name="vesper:fs:read")
-        self.registry.register(_fs.write, name="vesper:fs:write")
-        self.registry.register(_fs.exists, name="vesper:fs:exists")
-        self.registry.register(_fs.list_dir, name="vesper:fs:list")
+        _scope = FsScope(fs_scope) if fs_scope is not None else None
+
+        def _fs_read(path: str, encoding: str = "utf-8") -> str:
+            return _fs.read(path, encoding, scope=_scope)
+
+        def _fs_write(path: str, content: str, encoding: str = "utf-8") -> None:
+            return _fs.write(path, content, encoding, scope=_scope)
+
+        def _fs_exists(path: str) -> bool:
+            return _fs.exists(path, scope=_scope)
+
+        def _fs_list(path: str) -> list:
+            return _fs.list_dir(path, scope=_scope)
+
+        self.registry.register(_fs_read, name="vesper:fs:read")
+        self.registry.register(_fs_write, name="vesper:fs:write")
+        self.registry.register(_fs_exists, name="vesper:fs:exists")
+        self.registry.register(_fs_list, name="vesper:fs:list")
 
         from vesper.core import shell as _shell
         from vesper.core import clipboard as _clipboard
@@ -165,8 +181,8 @@ class App:
                 _app.window.emit("update:progress", {"percent": percent})
             return _updater.download(url, on_progress=_on_progress)
 
-        def _update_install(path: str = "") -> None:
-            _updater.install(path)
+        def _update_install(path: str = "", sha256: str = "") -> None:
+            _updater.install(path, expected_sha256=sha256)
 
         self.registry.register(_update_check, name="vesper:update:check")
         self.registry.register(_update_download, name="vesper:update:download")
