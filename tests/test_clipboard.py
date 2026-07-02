@@ -79,12 +79,15 @@ def test_write_windows_calls_powershell(monkeypatch):
     assert "Set-Clipboard" in " ".join(cmd)
 
 
-def test_write_windows_escapes_single_quotes(monkeypatch):
+def test_write_windows_passes_text_via_stdin(monkeypatch):
     monkeypatch.setattr(clip_mod.sys, "platform", "win32")
     with patch.object(clip_mod.subprocess, "run") as mock_run:
         clip_mod.write("it's here")
+    kwargs = mock_run.call_args[1]
+    # Text must arrive via stdin, not interpolated into the command string
+    assert kwargs["input"] == "it's here".encode("utf-8")
     cmd_str = " ".join(mock_run.call_args[0][0])
-    assert "it''s here" in cmd_str
+    assert "it's here" not in cmd_str
 
 
 def test_write_macos_calls_pbcopy(monkeypatch):

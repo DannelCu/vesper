@@ -6,7 +6,10 @@ import threading
 
 
 def _ps_escape(s: str) -> str:
-    return s.replace("'", "''").replace("\n", " ")
+    # Strip control characters (keep printable + tab); remove newlines.
+    s = "".join(c for c in s if c >= " " or c == "\t")
+    # Escape single-quotes (the only meaningful escape inside PS single-quoted strings).
+    return s.replace("'", "''")
 
 
 def _notify_windows(title: str, body: str) -> None:

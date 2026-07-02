@@ -26,9 +26,15 @@ def read() -> str:
 def write(text: str) -> None:
     """Write text to the system clipboard."""
     if sys.platform == "win32":
-        escaped = text.replace("'", "''")
+        # Pipe via stdin to avoid any injection through string interpolation.
         subprocess.run(
-            ["powershell", "-WindowStyle", "Hidden", "-Command", f"Set-Clipboard -Value '{escaped}'"],
+            [
+                "powershell", "-WindowStyle", "Hidden", "-NoProfile", "-Command",
+                "[Console]::InputEncoding=[System.Text.Encoding]::UTF8;"
+                "$s=[Console]::In.ReadToEnd();"
+                "Set-Clipboard -Value $s",
+            ],
+            input=text.encode("utf-8"),
             capture_output=True, check=False,
         )
     elif sys.platform == "darwin":
