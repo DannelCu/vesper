@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: "Python ${{ matrix.python }} on ${{ matrix.os }}"
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          allow-prereleases: true   # needed for 3.14 while it's in pre-release
+
+      - name: Install core + tray extras
+        run: pip install -e ".[tray]"
+
+      - name: Install plugins
+        run: |
+          pip install -e plugins/vesper-store
+          pip install -e plugins/vesper-db
+          pip install -e plugins/vesper-http
+          pip install -e plugins/vesper-keychain
+          pip install -e plugins/vesper-mongodb
+          pip install -e plugins/vesper-shortcuts
+          pip install -e plugins/vesper-theme
+
+      - name: Install test dependencies
+        run: pip install pytest sqlalchemy httpx pymongo mongomock keyring pynput
+
+      - name: Run tests
+        run: python -m pytest tests/ plugins/ --ignore=tests/test_lifecycle_hooks.py -q

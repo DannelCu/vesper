@@ -13,6 +13,10 @@
 !README.md
 !CHANGELOG.md
 
+# Keep GitHub Actions
+!.github/
+!.github/**
+
 # Keep documentation
 !docs/
 !docs/**
