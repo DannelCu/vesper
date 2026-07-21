@@ -146,9 +146,46 @@ class App:
         def _pick_folder(directory: str = "", multiple: bool = False):
             return self.window.pick_folder(directory=directory, multiple=multiple)
 
+        def _dialog_confirm(title: str = "", message: str = "") -> bool:
+            return self.window.confirm_dialog(title, message)
+
+        def _dialog_message(title: str = "", message: str = "") -> None:
+            self.window.message_dialog(title, message)
+
         self.registry.register(_open_dialog, name="vesper:dialog:open")
         self.registry.register(_save_dialog, name="vesper:dialog:save")
         self.registry.register(_pick_folder, name="vesper:dialog:folder")
+        self.registry.register(_dialog_message, name="vesper:dialog:message")
+        self.registry.register(_dialog_confirm, name="vesper:dialog:confirm")
+        # ask() is confirm() under a name that reads better for a yes/no question;
+        # PyWebView offers one dialog primitive, so they share an implementation.
+        self.registry.register(_dialog_confirm, name="vesper:dialog:ask")
+
+        from vesper.core import autostart as _autostart
+
+        def _autostart_enable() -> bool:
+            return _autostart.enable(self.config.title)
+
+        def _autostart_disable() -> bool:
+            return _autostart.disable(self.config.title)
+
+        def _autostart_is_enabled() -> bool:
+            return _autostart.is_enabled(self.config.title)
+
+        self.registry.register(_autostart_enable, name="vesper:autostart:enable")
+        self.registry.register(_autostart_disable, name="vesper:autostart:disable")
+        self.registry.register(_autostart_is_enabled, name="vesper:autostart:is_enabled")
+
+        from vesper.core import power as _power
+
+        def _power_prevent_sleep(reason: str = "Vesper app is busy") -> bool:
+            return _power.prevent_sleep(reason)
+
+        def _power_allow_sleep() -> bool:
+            return _power.allow_sleep()
+
+        self.registry.register(_power_prevent_sleep, name="vesper:power:prevent_sleep")
+        self.registry.register(_power_allow_sleep, name="vesper:power:allow_sleep")
 
         from vesper.core.notify import send as _notify_send
 
@@ -174,10 +211,14 @@ class App:
         def _fs_list(path: str) -> list:
             return _fs.list_dir(path, scope=_scope)
 
+        def _fs_trash(path: str) -> bool:
+            return _fs.trash(path, scope=_scope)
+
         self.registry.register(_fs_read, name="vesper:fs:read")
         self.registry.register(_fs_write, name="vesper:fs:write")
         self.registry.register(_fs_exists, name="vesper:fs:exists")
         self.registry.register(_fs_list, name="vesper:fs:list")
+        self.registry.register(_fs_trash, name="vesper:fs:trash")
 
         from vesper.core import shell as _shell
         from vesper.core import clipboard as _clipboard

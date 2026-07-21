@@ -18,6 +18,9 @@ dependencies = [
 
 [project.optional-dependencies]
 tray = ["pystray>=0.19", "Pillow>=9.0"]
+# fs.trash() falls back to platform tools without this, but send2trash handles the
+# trash specifications properly — including the metadata that makes restore work.
+trash = ["send2trash>=1.8"]
 
 [project.scripts]
 vesper = "vesper.cli:main"

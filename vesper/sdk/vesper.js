@@ -90,6 +90,34 @@
         pickFolder: function(options) {
             return invoke("vesper:dialog:folder", options || {});
         },
+        /**
+         * Show a native message dialog with a single acknowledgement button.
+         * @param {string} message
+         * @param {string} [title]
+         * @returns {Promise<void>}
+         */
+        message: function(message, title) {
+            return invoke("vesper:dialog:message", { title: title || "", message: message || "" });
+        },
+        /**
+         * Ask the user to confirm an action.
+         * @param {string} message
+         * @param {string} [title]
+         * @returns {Promise<boolean>} True when confirmed.
+         */
+        confirm: function(message, title) {
+            return invoke("vesper:dialog:confirm", { title: title || "", message: message || "" });
+        },
+        /**
+         * Ask the user a yes/no question. Same dialog as confirm(), named for
+         * questions rather than for confirming a pending action.
+         * @param {string} message
+         * @param {string} [title]
+         * @returns {Promise<boolean>}
+         */
+        ask: function(message, title) {
+            return invoke("vesper:dialog:ask", { title: title || "", message: message || "" });
+        },
     };
 
     function notify(title, body) {
@@ -131,6 +159,161 @@
          */
         list: function(path) {
             return invoke("vesper:fs:list", { path: path });
+        },
+        /**
+         * Move a file or directory to the system trash.
+         *
+         * Recoverable, unlike a delete. Rejects rather than falling back to a
+         * permanent delete when no trash backend is available.
+         * @param {string} path
+         * @returns {Promise<boolean>}
+         */
+        trash: function(path) {
+            return invoke("vesper:fs:trash", { path: path });
+        },
+    };
+
+    var autostart = {
+        /**
+         * Launch this app when the user logs in.
+         *
+         * Only meaningful for a packaged app: running from source it resolves to
+         * the Python interpreter, so it is a no-op and resolves false.
+         * @returns {Promise<boolean>}
+         */
+        enable: function() { return invoke("vesper:autostart:enable", {}); },
+        /** Stop launching at login. @returns {Promise<boolean>} */
+        disable: function() { return invoke("vesper:autostart:disable", {}); },
+        /** Whether launch-at-login is currently registered. @returns {Promise<boolean>} */
+        isEnabled: function() { return invoke("vesper:autostart:is_enabled", {}); },
+    };
+
+    var power = {
+        /**
+         * Keep the system and display awake until allowSleep() is called.
+         *
+         * Resolves false when the platform offers no way to do it, so a caller
+         * that cares can tell "held" from "unavailable".
+         * @param {string} [reason] - Shown by the OS where it surfaces inhibitors.
+         * @returns {Promise<boolean>}
+         */
+        preventSleep: function(reason) {
+            return invoke("vesper:power:prevent_sleep", { reason: reason || "Vesper app is busy" });
+        },
+        /** Release a previous preventSleep(). @returns {Promise<boolean>} */
+        allowSleep: function() { return invoke("vesper:power:allow_sleep", {}); },
+    };
+
+    var security = {
+        /**
+         * Turn off browser behaviours that make a desktop app feel like a web page.
+         *
+         * Opt-in and off in dev: reload and devtools are exactly what you want while
+         * building. Detection is via the dev server URL, so a production build with
+         * no dev server locks down and `vesper dev` never does.
+         *
+         * Each flag is independent and defaults to true:
+         *
+         *   reload       F5, Ctrl/Cmd+R, Ctrl/Cmd+Shift+R
+         *   find         Ctrl/Cmd+F, and Ctrl/Cmd+G
+         *   contextMenu  right-click menu — still allowed in inputs and textareas
+         *                unless allowContextMenuInInputs is false, since cut/paste
+         *                there is a real loss
+         *   zoom         Ctrl+scroll and Ctrl/Cmd +/-/0
+         *   selection    text selection outside inputs; off by default because it
+         *                breaks copying from the UI, which users do expect
+         *   print        Ctrl/Cmd+P
+         *
+         * @param {object} [options]
+         * @returns {function} Call it to undo the lockdown.
+         */
+        lockdown: function(options) {
+            var opts = options || {};
+
+            function on(name, fallback) {
+                return opts[name] === undefined ? fallback : !!opts[name];
+            }
+
+            var cfg = {
+                reload: on("reload", true),
+                find: on("find", true),
+                contextMenu: on("contextMenu", true),
+                zoom: on("zoom", true),
+                selection: on("selection", false),
+                print: on("print", true),
+                allowContextMenuInInputs: on("allowContextMenuInInputs", true),
+                force: on("force", false),
+            };
+
+            // VESPER_DEV_URL is what the dev server sets; skip unless told otherwise.
+            var isDev = !!(global.VESPER_DEV_URL ||
+                (global.location && /^https?:/.test(global.location.protocol) &&
+                 /localhost|127\.0\.0\.1/.test(global.location.hostname)));
+
+            if (isDev && !cfg.force) {
+                return function() {};
+            }
+
+            function isEditable(el) {
+                if (!el) return false;
+                var tag = (el.tagName || "").toLowerCase();
+                return tag === "input" || tag === "textarea" || el.isContentEditable;
+            }
+
+            function onKeyDown(e) {
+                var mod = e.ctrlKey || e.metaKey;
+                var key = (e.key || "").toLowerCase();
+
+                if (cfg.reload && (key === "f5" || (mod && key === "r"))) {
+                    e.preventDefault();
+                    return;
+                }
+                if (cfg.find && mod && (key === "f" || key === "g")) {
+                    e.preventDefault();
+                    return;
+                }
+                if (cfg.print && mod && key === "p") {
+                    e.preventDefault();
+                    return;
+                }
+                if (cfg.zoom && mod && (key === "+" || key === "-" || key === "=" || key === "0")) {
+                    e.preventDefault();
+                }
+            }
+
+            function onContextMenu(e) {
+                if (cfg.allowContextMenuInInputs && isEditable(e.target)) return;
+                e.preventDefault();
+            }
+
+            function onWheel(e) {
+                if (e.ctrlKey) e.preventDefault();
+            }
+
+            function onSelectStart(e) {
+                if (!isEditable(e.target)) e.preventDefault();
+            }
+
+            var listeners = [];
+
+            function add(target, type, fn, opts2) {
+                target.addEventListener(type, fn, opts2);
+                listeners.push([target, type, fn, opts2]);
+            }
+
+            add(global, "keydown", onKeyDown);
+            if (cfg.contextMenu) add(global, "contextmenu", onContextMenu);
+            // passive:false is required or preventDefault() on wheel is ignored.
+            if (cfg.zoom) add(global, "wheel", onWheel, { passive: false });
+            if (cfg.selection) add(global, "selectstart", onSelectStart);
+
+            return function undo() {
+                for (var i = 0; i < listeners.length; i++) {
+                    var l = listeners[i];
+                    l[0].removeEventListener(l[1], l[2], l[3]);
+                }
+                listeners = [];
+            };
         },
     };
 
@@ -297,6 +480,9 @@
         dialog,
         notify,
         fs,
+        autostart,
+        power,
+        security,
         shell,
         clipboard,
         update,

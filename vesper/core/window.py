@@ -330,6 +330,28 @@ class Window:
         )
         return result[0] if result else None
 
+    def confirm_dialog(self, title: str, message: str) -> bool:
+        """
+        Show a native confirmation dialog.
+
+        Returns:
+            True when the user confirmed, False when they cancelled or dismissed it.
+        """
+        if self.window is None:
+            raise RuntimeError("Cannot open dialog: window is not created yet.")
+        return bool(self.window.create_confirmation_dialog(title, message))
+
+    def message_dialog(self, title: str, message: str) -> None:
+        """
+        Show a native message dialog with a single acknowledgement button.
+
+        PyWebView exposes only a confirmation dialog, so this is built on it and the
+        answer discarded — from the caller's side there is nothing to decide.
+        """
+        if self.window is None:
+            raise RuntimeError("Cannot open dialog: window is not created yet.")
+        self.window.create_confirmation_dialog(title, message)
+
     def pick_folder(
         self,
         directory: str = "",
