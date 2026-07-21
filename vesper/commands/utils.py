@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import importlib.metadata
+import os
 import re
 import shutil
 import subprocess
+import sys
 from importlib.resources import files
 from pathlib import Path
 
@@ -254,27 +256,121 @@ def get_project_package_manager(project_dir: Path) -> str:
     return detect_package_manager(project_dir)
 
 
+# ─── Colour ──────────────────────────────────────────────────────────────────
+#
+# Raw ANSI, no dependency. Colour is decoration: every code path here must be able
+# to produce the same text without it, because the output is piped into files and
+# CI logs at least as often as it is read on a terminal.
+
+_RESET = "\x1b[0m"
+_GREEN = "\x1b[32m"
+_YELLOW = "\x1b[33m"
+_RED = "\x1b[31m"
+_DIM = "\x1b[2m"
+
+# Check states. FAIL is reserved for what actually breaks the app; an optional
+# backend that is merely absent is WARN, and something the platform cannot do at all
+# is NA — there is nothing to install, so telling the user to fix it is noise.
+OK = "ok"
+WARN = "warn"
+FAIL = "fail"
+NA = "na"
+
+_STATUS_STYLE = {
+    OK: ("[OK]", _GREEN),
+    WARN: ("[WARN]", _YELLOW),
+    FAIL: ("[FAIL]", _RED),
+    NA: ("[N/A]", _DIM),
+}
+
+
+def _enable_windows_vt() -> bool:
+    """
+    Ask the Windows console to interpret ANSI escapes.
+
+    Windows 10 understands them but does not enable it by default for every console
+    host. Without this the codes would be printed literally, which is worse than no
+    colour at all — hence the caller treats a failure here as "no colour".
+    """
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32
+    handle = kernel32.GetStdHandle(-11)          # STD_OUTPUT_HANDLE
+    if handle in (0, -1):
+        return False
+
+    mode = ctypes.c_uint32()
+    if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+        return False
+
+    # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+    return bool(kernel32.SetConsoleMode(handle, mode.value | 0x0004))
+
+
+def supports_color() -> bool:
+    """
+    Whether it is safe to emit ANSI escapes on stdout right now.
+
+    Not cached: tests redirect stdout, and the cost is an isatty() call.
+    """
+    # NO_COLOR is honoured by presence, not value — https://no-color.org
+    if "NO_COLOR" in os.environ:
+        return False
+
+    try:
+        if not sys.stdout.isatty():
+            return False
+    except (AttributeError, ValueError):
+        # A replaced or closed stdout. Assume the worst and stay plain.
+        return False
+
+    if sys.platform == "win32":
+        try:
+            return _enable_windows_vt()
+        except Exception:
+            return False
+
+    return True
+
+
+def colorize(text: str, color: str) -> str:
+    """Wrap text in an ANSI colour, or return it unchanged when colour is off."""
+    if not color or not supports_color():
+        return text
+    return f"{color}{text}{_RESET}"
+
+
 # ─── Doctor helpers ──────────────────────────────────────────────────────────
 
 
 def print_check(
-    ok: bool, message: str, fix: str | None = None, *, critical: bool = True
+    ok: bool,
+    message: str,
+    fix: str | None = None,
+    *,
+    critical: bool = True,
+    status: str | None = None,
 ) -> None:
     """
-    Print one diagnostic line, with its fix underneath when it failed.
+    Print one diagnostic line, with its fix underneath when there is one.
 
-    `critical=False` marks the line [WARN] instead of [FAIL]. Optional features are
-    reported that way: a missing tray backend is not a broken install, and printing
-    [FAIL] next to something the app may never use sends people chasing it.
+    The state is derived from `ok` and `critical` unless `status` names it outright:
+
+        ok=True                      → [OK]    green
+        ok=False, critical=True      → [FAIL]  red     (breaks the app)
+        ok=False, critical=False     → [WARN]  yellow  (optional, installable)
+        status=NA                    → [N/A]   dim     (platform cannot do it)
+
+    NA never prints a fix. It means there is nothing to install — printing "Fix:"
+    beside it would send someone looking for a package that does not exist.
     """
-    if ok:
-        icon = "[OK]"
-    else:
-        icon = "[FAIL]" if critical else "[WARN]"
+    if status is None:
+        status = OK if ok else (FAIL if critical else WARN)
 
-    print(f"{icon} {message}")
+    icon, color = _STATUS_STYLE.get(status, _STATUS_STYLE[FAIL])
+    print(f"{colorize(icon, color)} {message}")
 
-    if not ok and fix:
+    if fix and status in (FAIL, WARN):
         print(f"     Fix: {fix}")
 
 
