@@ -322,6 +322,7 @@ app = App(
     single_instance=True,    # only one running copy; a second launch forwards its
                              # arguments to the first — see Single Instance
     remember_window=True,    # restore size and position from the previous run
+    power_events=True,       # emit power:suspend / resume / lock / unlock
     fs_scope=["./data"],     # confine the filesystem API to these directories
     debug=True,              # tracebacks in IPC errors, verbose logging
 )
@@ -331,6 +332,7 @@ app = App(
 |---|---|---|
 | `single_instance` | `False` | [Single Instance](single-instance.md) |
 | `remember_window` | `False` | [Window State](window-state.md) |
+| `power_events` | `False` | [Power Management](power.md) |
 | `fs_scope` | `None` | [Filesystem API](filesystem.md) |
 
 ---
