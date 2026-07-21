@@ -1,4 +1,5 @@
 import sys as _sys
+import threading
 from collections.abc import Callable
 
 from vesper.core.config import WindowConfig
@@ -9,6 +10,15 @@ from vesper.core.ipc import IPC
 
 _VALID_HOOKS: frozenset[str] = frozenset(_HOOK_TO_EVENT) | {"deeplink"}
 _WEB_SCHEMES = ("http://", "https://", "ftp://", "ftps://")
+
+# How long App.quit() waits before destroying the window. PyWebView answers every IPC
+# call by delivering the return value through evaluate_js on a non-daemon thread; that
+# call never returns if the WebView is already gone, and the process then hangs at
+# interpreter shutdown with the window closed. Quitting from inside a command handler
+# is the normal case (a "Quit" button calls vesper.quit()), so the reply needs a beat
+# to land first. Delivery is sub-millisecond in practice; this is deliberately generous
+# while staying imperceptible.
+_QUIT_DELAY_SECONDS = 0.05
 
 
 class App:
@@ -167,7 +177,9 @@ class App:
 
         self.registry.register(_window_resize, name="vesper:window:resize")
         self.registry.register(_window_move, name="vesper:window:move")
-        self.registry.register(lambda: _w.quit(), name="vesper:app:quit")
+        # Routed through App.quit() rather than Window.quit() so the frontend's
+        # vesper.quit() call gets its reply delivered before the WebView disappears.
+        self.registry.register(lambda: self.quit(), name="vesper:app:quit")
         self.registry.register(lambda: _w.list_screens(), name="vesper:screen:list")
 
         from vesper.core import updater as _updater
@@ -501,8 +513,15 @@ class App:
 
         Equivalent to the user clicking the close button. Can be called from
         Python or triggered from JS via ``vesper.quit()``.
+
+        The window is destroyed a moment later rather than immediately, so that a
+        call made from inside a command handler can still return its result to the
+        frontend. See ``_QUIT_DELAY_SECONDS``. Use ``app.window.quit()`` when you
+        need the window torn down synchronously and no IPC reply is pending.
         """
-        self.window.quit()
+        timer = threading.Timer(_QUIT_DELAY_SECONDS, self.window.quit)
+        timer.daemon = True
+        timer.start()
 
     def splash(self, html: str = "", *, width: int = 400, height: int = 300) -> None:
         """
