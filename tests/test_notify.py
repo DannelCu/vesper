@@ -13,59 +13,52 @@ from vesper.core import notify as notify_mod
 # ── Platform dispatch ─────────────────────────────────────────────────────────
 
 
-def test_send_dispatches_windows(monkeypatch):
-    monkeypatch.setattr(notify_mod.sys, "platform", "win32")
+def _run_send(monkeypatch, platform, *args):
+    """
+    Call send() and run the thread body inline.
+
+    send() wraps the platform backend so a missing notify-send is logged instead of
+    dumping a traceback from the thread, so these assert the backend actually invoked
+    rather than the Thread kwargs — which are an implementation detail.
+    """
+    monkeypatch.setattr(notify_mod.sys, "platform", platform)
 
     with patch.object(notify_mod, "threading") as mock_threading:
         mock_threading.Thread.return_value = MagicMock()
-        notify_mod.send("Hello", "World")
+        notify_mod.send(*args)
 
     target = mock_threading.Thread.call_args.kwargs["target"]
-    assert target is notify_mod._notify_windows
+    target()
+
+
+def test_send_dispatches_windows(monkeypatch):
+    with patch.object(notify_mod, "_notify_windows") as backend:
+        _run_send(monkeypatch, "win32", "Hello", "World")
+    backend.assert_called_once_with("Hello", "World")
 
 
 def test_send_dispatches_macos(monkeypatch):
-    monkeypatch.setattr(notify_mod.sys, "platform", "darwin")
-
-    with patch.object(notify_mod, "threading") as mock_threading:
-        mock_threading.Thread.return_value = MagicMock()
-        notify_mod.send("Hello", "World")
-
-    target = mock_threading.Thread.call_args.kwargs["target"]
-    assert target is notify_mod._notify_macos
+    with patch.object(notify_mod, "_notify_macos") as backend:
+        _run_send(monkeypatch, "darwin", "Hello", "World")
+    backend.assert_called_once_with("Hello", "World")
 
 
 def test_send_dispatches_linux(monkeypatch):
-    monkeypatch.setattr(notify_mod.sys, "platform", "linux")
-
-    with patch.object(notify_mod, "threading") as mock_threading:
-        mock_threading.Thread.return_value = MagicMock()
-        notify_mod.send("Hello", "World")
-
-    target = mock_threading.Thread.call_args.kwargs["target"]
-    assert target is notify_mod._notify_linux
+    with patch.object(notify_mod, "_notify_linux") as backend:
+        _run_send(monkeypatch, "linux", "Hello", "World")
+    backend.assert_called_once_with("Hello", "World")
 
 
 def test_send_passes_title_and_body(monkeypatch):
-    monkeypatch.setattr(notify_mod.sys, "platform", "linux")
-
-    with patch.object(notify_mod, "threading") as mock_threading:
-        mock_threading.Thread.return_value = MagicMock()
-        notify_mod.send("My Title", "My Body")
-
-    args = mock_threading.Thread.call_args.kwargs["args"]
-    assert args == ("My Title", "My Body")
+    with patch.object(notify_mod, "_notify_linux") as backend:
+        _run_send(monkeypatch, "linux", "My Title", "My Body")
+    backend.assert_called_once_with("My Title", "My Body")
 
 
 def test_send_default_body_is_empty(monkeypatch):
-    monkeypatch.setattr(notify_mod.sys, "platform", "linux")
-
-    with patch.object(notify_mod, "threading") as mock_threading:
-        mock_threading.Thread.return_value = MagicMock()
-        notify_mod.send("Title only")
-
-    args = mock_threading.Thread.call_args.kwargs["args"]
-    assert args == ("Title only", "")
+    with patch.object(notify_mod, "_notify_linux") as backend:
+        _run_send(monkeypatch, "linux", "Title only")
+    backend.assert_called_once_with("Title only", "")
 
 
 def test_send_spawns_daemon_thread(monkeypatch):

@@ -119,7 +119,10 @@ def test_middleware_exception_returns_error_response():
 
     resp = ipc.handle({"id": "1", "command": "secret", "args": {}})
     assert resp["ok"] is False
-    assert resp["error"]["type"] == "PermissionError"
+    # Middleware raising is a bug in the middleware, reported under its own type
+    # with the original class kept as the cause.
+    assert resp["error"]["type"] == "MiddlewareError"
+    assert resp["error"]["cause"] == "PermissionError"
     assert "Forbidden" in resp["error"]["message"]
 
 
@@ -185,7 +188,8 @@ def test_async_middleware_exception_returns_error():
     registry.register(lambda: "data", name="data")
     resp = ipc.handle({"id": "1", "command": "data", "args": {}})
     assert resp["ok"] is False
-    assert resp["error"]["type"] == "PermissionError"
+    assert resp["error"]["type"] == "MiddlewareError"
+    assert resp["error"]["cause"] == "PermissionError"
 
 
 def test_sync_and_async_middleware_coexist():

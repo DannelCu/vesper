@@ -3,6 +3,7 @@ import threading
 from collections.abc import Callable
 
 from vesper.core.config import WindowConfig
+from vesper.core.logging import configure as configure_logging
 from vesper.core.module import Container
 from vesper.core.registry import CommandRegistry
 from vesper.core.window import Window, WindowHandle, _HOOK_TO_EVENT
@@ -78,6 +79,7 @@ class App:
         """
 
         self.debug = debug
+        configure_logging(debug)
         self._version = version
         self._update_url = update_url
         self.config = WindowConfig(
@@ -587,3 +589,4 @@ class App:
         finally:
             if self._tray is not None:
                 self._tray.stop()
+            self.ipc.close()

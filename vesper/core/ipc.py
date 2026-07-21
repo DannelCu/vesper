@@ -7,7 +7,10 @@ import traceback
 from typing import Any
 
 from vesper.exceptions import CommandNotFoundError, ForbiddenError
+from vesper.core.logging import get_logger
 from vesper.core.registry import CommandRegistry
+
+logger = get_logger("ipc")
 
 
 def _validate_args(fn, args: dict) -> str | None:
@@ -89,6 +92,37 @@ class IPC:
         self._loop_thread.start()
         _started.wait(timeout=5)
 
+    def close(self, timeout: float = 2.0) -> None:
+        """
+        Stop the async event loop and join its thread.
+
+        The loop thread is a daemon, so the process can exit without this — but only
+        by abandoning the thread mid-task. Calling close() lets in-flight work settle
+        and releases the loop's resources deterministically, which also keeps test
+        runs from accumulating a live loop thread per App they construct.
+
+        Safe to call more than once.
+        """
+        if self._loop.is_closed():
+            return
+
+        self._loop.call_soon_threadsafe(self._loop.stop)
+        self._loop_thread.join(timeout=timeout)
+
+        if self._loop_thread.is_alive():
+            # A command is still blocking the loop. Leaving the loop open is the
+            # lesser evil: closing it underneath a running task raises there and can
+            # lose the task's own cleanup.
+            logger.warning(
+                "IPC loop thread did not stop within %.1fs; leaving it running", timeout
+            )
+            return
+
+        try:
+            self._loop.close()
+        except Exception:
+            logger.exception("Failed to close the IPC event loop")
+
     def handle(self, message: dict[str, Any]) -> dict[str, Any]:
         """
         Handle an incoming IPC message from the frontend.
@@ -169,55 +203,86 @@ class IPC:
                 "error": {"type": "ValidationError", "message": err},
             }
 
+        # Each phase reports failures under its own error type. A guard rejecting a
+        # call is policy and the frontend may act on it; a guard or middleware raising
+        # is a bug in the app. Collapsing both into the command's error shape, as this
+        # did before, left the frontend unable to tell "you may not do this" apart from
+        # "the check itself broke".
         try:
-            for guard_fn in self.registry._guards.get(command_name, []):
-                if inspect.iscoroutinefunction(guard_fn):
-                    future = asyncio.run_coroutine_threadsafe(
-                        guard_fn(command_name, args), self._loop
-                    )
-                    ok = future.result()
-                else:
-                    ok = guard_fn(command_name, args)
-                if ok is not True and ok is not None:
-                    raise ForbiddenError("Forbidden")
+            try:
+                for guard_fn in self.registry._guards.get(command_name, []):
+                    if inspect.iscoroutinefunction(guard_fn):
+                        future = asyncio.run_coroutine_threadsafe(
+                            guard_fn(command_name, args), self._loop
+                        )
+                        ok = future.result()
+                    else:
+                        ok = guard_fn(command_name, args)
+                    if ok is not True and ok is not None:
+                        raise ForbiddenError("Forbidden")
+            except ForbiddenError as e:
+                # Denial — either ours above or raised deliberately by the guard.
+                return self._error(request_id, "ForbiddenError", str(e))
+            except Exception as e:
+                return self._error(
+                    request_id, "GuardError", str(e), cause=e.__class__.__name__
+                )
 
-            for mw in self._middleware:
-                if inspect.iscoroutinefunction(mw):
-                    future = asyncio.run_coroutine_threadsafe(
-                        mw(command_name, args), self._loop
-                    )
-                    future.result()
-                else:
-                    mw(command_name, args)
+            try:
+                for mw in self._middleware:
+                    if inspect.iscoroutinefunction(mw):
+                        future = asyncio.run_coroutine_threadsafe(
+                            mw(command_name, args), self._loop
+                        )
+                        future.result()
+                    else:
+                        mw(command_name, args)
+            except ForbiddenError as e:
+                # Middleware is also allowed to reject a call outright.
+                return self._error(request_id, "ForbiddenError", str(e))
+            except Exception as e:
+                return self._error(
+                    request_id, "MiddlewareError", str(e), cause=e.__class__.__name__
+                )
 
-            if inspect.iscoroutinefunction(command):
-                future = asyncio.run_coroutine_threadsafe(command(**args), self._loop)
-                result = future.result()
-            else:
-                result = command(**args)
+            try:
+                if inspect.iscoroutinefunction(command):
+                    future = asyncio.run_coroutine_threadsafe(command(**args), self._loop)
+                    result = future.result()
+                else:
+                    result = command(**args)
+            except Exception as e:
+                return self._error(request_id, e.__class__.__name__, str(e))
 
             return {
                 "id": request_id,
                 "ok": True,
                 "result": result
             }
-        except Exception as e:
-            error = {
-                "type": e.__class__.__name__,
-                "message": str(e)
-            }
-
-            if self.debug:
-                error["traceback"] = traceback.format_exc()
-
-            return {
-                "id": request_id,
-                "ok": False,
-                "error": error
-            }
         finally:
             for fn in self._teardown:
                 try:
                     fn()
                 except Exception:
-                    pass
+                    logger.exception("Teardown callback %r failed", fn)
+
+    def _error(
+        self,
+        request_id: Any,
+        error_type: str,
+        message: str,
+        *,
+        cause: str | None = None,
+    ) -> dict[str, Any]:
+        """Build an error response for the exception currently being handled."""
+        error: dict[str, Any] = {"type": error_type, "message": message}
+
+        # The original exception class, when it is not already the reported type.
+        # Lets a frontend log the real cause without losing the phase distinction.
+        if cause is not None and cause != error_type:
+            error["cause"] = cause
+
+        if self.debug:
+            error["traceback"] = traceback.format_exc()
+
+        return {"id": request_id, "ok": False, "error": error}

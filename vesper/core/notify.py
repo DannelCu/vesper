@@ -4,6 +4,10 @@ import subprocess
 import sys
 import threading
 
+from vesper.core.logging import get_logger
+
+logger = get_logger("notify")
+
 
 def _ps_escape(s: str) -> str:
     # Strip control characters (keep printable + tab); remove newlines.
@@ -56,4 +60,13 @@ def send(title: str, body: str = "") -> None:
     else:
         fn = _notify_linux
 
-    threading.Thread(target=fn, args=(title, body), daemon=True).start()
+    def _run() -> None:
+        try:
+            fn(title, body)
+        except Exception:
+            # A missing notify-send / osascript raises in this thread, where the
+            # default handler dumps a bare traceback that looks like an app crash.
+            # Notifications are best-effort, so report it and carry on.
+            logger.exception("Failed to send notification %r", title)
+
+    threading.Thread(target=_run, daemon=True).start()

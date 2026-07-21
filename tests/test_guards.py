@@ -152,7 +152,10 @@ def test_guard_raises_exception_propagates():
     registry.register(lambda: None, name="cmd")
     resp = ipc.handle({"id": "1", "command": "cmd", "args": {}})
     assert resp["ok"] is False
-    assert resp["error"]["type"] == "PermissionError"
+    # A guard blowing up is a bug in the guard, not a denial, so it is reported as
+    # GuardError with the original class kept as the cause.
+    assert resp["error"]["type"] == "GuardError"
+    assert resp["error"]["cause"] == "PermissionError"
     assert "not allowed" in resp["error"]["message"]
 
 
@@ -272,7 +275,8 @@ def test_async_guard_raises_propagates():
     registry.register(lambda: None, name="cmd")
     resp = ipc.handle({"id": "1", "command": "cmd", "args": {}})
     assert resp["ok"] is False
-    assert resp["error"]["type"] == "PermissionError"
+    assert resp["error"]["type"] == "GuardError"
+    assert resp["error"]["cause"] == "PermissionError"
 
 
 # ── Controller-level guards ───────────────────────────────────────────────────
