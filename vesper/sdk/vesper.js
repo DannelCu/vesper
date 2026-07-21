@@ -317,6 +317,33 @@
         },
     };
 
+    var badge = {
+        /**
+         * Show a progress bar on the taskbar button or dock icon.
+         *
+         * Support is uneven — resolves false where the platform cannot do it, so
+         * treat it as a nicety rather than something to depend on.
+         * @param {number} fraction - 0.0 to 1.0, clamped.
+         * @returns {Promise<boolean>}
+         */
+        setProgress: function(fraction) {
+            return invoke("vesper:badge:set_progress", { fraction: fraction });
+        },
+        /** Remove the progress indicator. @returns {Promise<boolean>} */
+        clearProgress: function() { return invoke("vesper:badge:clear_progress", {}); },
+        /**
+         * Show a count on the dock or launcher icon. 0 clears it.
+         * Not supported on Windows.
+         * @param {number} count
+         * @returns {Promise<boolean>}
+         */
+        setBadge: function(count) {
+            return invoke("vesper:badge:set_badge", { count: count });
+        },
+        /** Remove the count. @returns {Promise<boolean>} */
+        clearBadge: function() { return invoke("vesper:badge:clear_badge", {}); },
+    };
+
     var window_controls = {
         /** Minimize the application window. @returns {Promise<void>} */
         minimize: function() { return invoke("vesper:window:minimize", {}); },
@@ -424,6 +451,22 @@
         write: function(text) {
             return invoke("vesper:clipboard:write", { text: text });
         },
+        /**
+         * Read an image from the clipboard as a PNG data URL, usable directly as
+         * an <img src>. Resolves null when the clipboard holds no image.
+         * @returns {Promise<string|null>}
+         */
+        readImage: function() {
+            return invoke("vesper:clipboard:read_image", {});
+        },
+        /**
+         * Put a PNG on the clipboard.
+         * @param {string} dataUrl - "data:image/png;base64,..." or bare base64.
+         * @returns {Promise<boolean>}
+         */
+        writeImage: function(dataUrl) {
+            return invoke("vesper:clipboard:write_image", { data_url: dataUrl });
+        },
     };
 
     var update = {
@@ -483,6 +526,7 @@
         autostart,
         power,
         security,
+        badge,
         shell,
         clipboard,
         update,

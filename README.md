@@ -74,7 +74,7 @@ Use any Python library — pandas, SQLAlchemy, PyMongo, OpenCV, scikit-learn —
 **System Integration**
 - Native file dialogs — open, save, folder picker, plus message/confirm/ask
 - Native notifications — no extra dependencies (PowerShell, osascript, notify-send)
-- Clipboard — read and write system clipboard
+- Clipboard — read and write text and images
 - Shell integration — open URLs in the default browser, reveal files in the file manager
 - Filesystem API — read, write, exists, list directory from JS
 - Deep linking — handle `myapp://` protocol URLs via `@app.on("deeplink")`, at startup or while running
@@ -272,6 +272,7 @@ my-app/
 | [Autostart](docs/autostart.md) | Launch the app at login |
 | [Power Management](docs/power.md) | Keep the machine awake during long work |
 | [Production Lockdown](docs/security-lockdown.md) | Disable browser behaviours in production |
+| [Taskbar & Badges](docs/badge.md) | Progress on the taskbar, counts on the dock |
 | [Filesystem API](docs/filesystem.md) | Read, write, list files from JS |
 | [File Transfers](docs/file-transfers.md) | Sending binary data across the IPC boundary |
 | [Auto-Updates](docs/auto-updates.md) | Self-updating apps via a manifest |

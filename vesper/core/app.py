@@ -226,6 +226,14 @@ class App:
 
         self.registry.register(_shell.open_url, name="vesper:shell:open_url")
         self.registry.register(_shell.reveal, name="vesper:shell:reveal")
+        from vesper.core import badge as _badge
+
+        self.registry.register(_badge.set_progress, name="vesper:badge:set_progress")
+        self.registry.register(_badge.clear_progress, name="vesper:badge:clear_progress")
+        self.registry.register(_badge.set_badge, name="vesper:badge:set_badge")
+        self.registry.register(_badge.clear_badge, name="vesper:badge:clear_badge")
+        self.registry.register(_clipboard.read_image, name="vesper:clipboard:read_image")
+        self.registry.register(_clipboard.write_image, name="vesper:clipboard:write_image")
         self.registry.register(_clipboard.read, name="vesper:clipboard:read")
         self.registry.register(_clipboard.write, name="vesper:clipboard:write")
         self.registry.register(_os_info.get_info, name="vesper:os:info")
