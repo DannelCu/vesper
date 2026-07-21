@@ -109,3 +109,52 @@ def test_get_pm_ignores_unknown_value_in_toml(tmp_path):
         encoding="utf-8",
     )
     assert get_project_package_manager(tmp_path) == "npm"
+
+# ── print_check ───────────────────────────────────────────────────────────────
+
+
+def test_print_check_ok(capsys):
+    from vesper.commands.utils import print_check
+
+    print_check(True, "everything is fine")
+    assert capsys.readouterr().out == "[OK] everything is fine\n"
+
+
+def test_print_check_failure_is_critical_by_default(capsys):
+    """The existing callers pass no flag and must keep printing [FAIL]."""
+    from vesper.commands.utils import print_check
+
+    print_check(False, "broken")
+    assert "[FAIL] broken" in capsys.readouterr().out
+
+
+def test_print_check_non_critical_failure_warns(capsys):
+    from vesper.commands.utils import print_check
+
+    print_check(False, "optional thing", critical=False)
+    out = capsys.readouterr().out
+    assert "[WARN] optional thing" in out
+    assert "[FAIL]" not in out
+
+
+def test_print_check_prints_the_fix_when_it_failed(capsys):
+    from vesper.commands.utils import print_check
+
+    print_check(False, "broken", "run this")
+    assert "Fix: run this" in capsys.readouterr().out
+
+
+def test_print_check_hides_the_fix_when_it_passed(capsys):
+    """Nothing to fix means nothing to print, whatever the caller passed."""
+    from vesper.commands.utils import print_check
+
+    print_check(True, "fine", "run this")
+    assert "Fix" not in capsys.readouterr().out
+
+
+def test_print_check_non_critical_still_shows_its_fix(capsys):
+    from vesper.commands.utils import print_check
+
+    print_check(False, "optional", "install it", critical=False)
+    out = capsys.readouterr().out
+    assert "[WARN]" in out and "Fix: install it" in out

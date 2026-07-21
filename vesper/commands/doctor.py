@@ -133,6 +133,52 @@ def _detect_webview_backend() -> tuple[bool, str, str | None]:
     return False, "WebView backend: none available", fix
 
 
+_CAPABILITY_LABELS = {
+    "clipboard_text": "Clipboard (text)",
+    "clipboard_image": "Clipboard (images)",
+    "notifications": "Notifications",
+    "trash": "Move to trash",
+    "keep_awake": "Keep awake",
+    "tray": "System tray",
+    "badge": "Taskbar / dock badge",
+    "global_shortcuts": "Global shortcuts",
+}
+
+
+def _print_optional_features() -> None:
+    """
+    Report the optional capability matrix.
+
+    Nothing here counts towards doctor's exit status. These features are optional by
+    definition — an app that never opens a tray icon is not broken for lacking
+    pystray — so a missing one is information, not a failure.
+    """
+    from vesper.core import capabilities
+
+    report = capabilities.probe()
+
+    print("")
+    print("Optional features")
+    print("-----------------")
+
+    for name, entry in report.items():
+        label = _CAPABILITY_LABELS.get(name, name)
+        print_check(
+            entry["available"],
+            f"{label}: {entry['detail']}",
+            entry["fix"],
+            critical=False,
+        )
+
+    missing = sum(1 for entry in report.values() if not entry["available"])
+    if missing:
+        print("")
+        print(
+            f"{missing} optional feature(s) unavailable. These degrade to no-ops "
+            "rather than errors; install the above only if your app uses them."
+        )
+
+
 def doctor() -> None:
     """
     Diagnose the current Vesper project and environment.
@@ -342,6 +388,10 @@ def doctor() -> None:
         'Add: <script src="./vesper.js"></script>'
     )
     has_failures = has_failures or not sdk_script_ok
+
+    # Last, and deliberately not folded into has_failures: this is its own titled
+    # section, and putting it between the critical checks would break their flow.
+    _print_optional_features()
 
     print("")
 

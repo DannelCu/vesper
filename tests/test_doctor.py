@@ -33,6 +33,26 @@ def stub_webview_backend():
         yield
 
 
+ALL_CAPABILITIES_OK = {
+    name: {"available": True, "detail": "stub", "fix": None}
+    for name in (
+        "clipboard_text", "clipboard_image", "notifications", "trash",
+        "keep_awake", "tray", "badge", "global_shortcuts",
+    )
+}
+
+
+@pytest.fixture(autouse=True)
+def stub_capabilities():
+    """
+    Same reason as stub_webview_backend: probe() reads the real PATH and the real
+    installed packages, so without this every doctor() test would report differently
+    depending on whether the machine happens to have xclip.
+    """
+    with patch("vesper.core.capabilities.probe", return_value=ALL_CAPABILITIES_OK):
+        yield
+
+
 def _run_doctor(tmp_path: Path, *, monkeypatch, node_version: str | None = "v20.0.0", pm: str = "npm"):
     """Helper that runs doctor() with a minimal project dir and mocked Node/npm."""
     monkeypatch.chdir(tmp_path)
@@ -599,3 +619,127 @@ def test_doctor_reports_backend_failure(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "[FAIL] WebView backend: none available" in out
     assert "Fix: install GTK" in out
+
+
+# ── Optional features section ─────────────────────────────────────────────────
+
+
+def _minimal_project(tmp_path):
+    (tmp_path / "app.py").write_text("")
+    frontend = tmp_path / "frontend"
+    frontend.mkdir()
+    (frontend / "index.html").write_text('<script src="./vesper.js"></script></body>')
+    (frontend / "vesper.js").write_text("")
+
+
+def _doctor_output(tmp_path, monkeypatch, capsys, capability_report):
+    """Run doctor() over a healthy project with a given capability report."""
+    monkeypatch.chdir(tmp_path)
+    _minimal_project(tmp_path)
+
+    def fake_run(cmd, **kwargs):
+        m = MagicMock()
+        m.returncode = 0
+        m.stdout = "v20.0.0"
+        return m
+
+    with patch("vesper.commands.doctor.shutil.which",
+               side_effect=lambda n: f"/usr/bin/{n}" if n in ("node", "npm") else None), \
+         patch("vesper.commands.doctor.subprocess.run", side_effect=fake_run), \
+         patch("vesper.commands.utils.importlib.metadata.version", return_value="1.0.0"), \
+         patch("vesper.core.capabilities.probe", return_value=capability_report):
+        try:
+            doctor()
+            exited = 0
+        except SystemExit as e:
+            exited = e.code
+
+    return capsys.readouterr().out, exited
+
+
+def test_optional_features_section_is_printed(tmp_path, monkeypatch, capsys):
+    out, _ = _doctor_output(tmp_path, monkeypatch, capsys, ALL_CAPABILITIES_OK)
+    assert "Optional features" in out
+
+
+def test_every_capability_gets_a_line(tmp_path, monkeypatch, capsys):
+    from vesper.commands.doctor import _CAPABILITY_LABELS
+
+    out, _ = _doctor_output(tmp_path, monkeypatch, capsys, ALL_CAPABILITIES_OK)
+    for label in _CAPABILITY_LABELS.values():
+        assert label in out, label
+
+
+def test_a_missing_capability_is_listed_with_its_fix(tmp_path, monkeypatch, capsys):
+    report = dict(ALL_CAPABILITIES_OK)
+    report["clipboard_image"] = {
+        "available": False,
+        "detail": "xclip not found",
+        "fix": "sudo apt install xclip",
+    }
+
+    out, _ = _doctor_output(tmp_path, monkeypatch, capsys, report)
+
+    assert "xclip not found" in out
+    assert "Fix: sudo apt install xclip" in out
+
+
+def test_a_missing_capability_is_a_warning_not_a_failure(tmp_path, monkeypatch, capsys):
+    """Optional means optional: [WARN], not the [FAIL] used for the WebView."""
+    report = dict(ALL_CAPABILITIES_OK)
+    report["tray"] = {"available": False, "detail": "missing: pystray", "fix": "x"}
+
+    out, _ = _doctor_output(tmp_path, monkeypatch, capsys, report)
+
+    assert "[WARN] System tray" in out
+    assert "[FAIL] System tray" not in out
+
+
+def test_a_missing_capability_does_not_fail_doctor(tmp_path, monkeypatch, capsys):
+    """The whole point: an unavailable optional backend must not exit non-zero."""
+    report = {
+        name: {"available": False, "detail": "gone", "fix": "install it"}
+        for name in ALL_CAPABILITIES_OK
+    }
+
+    out, exited = _doctor_output(tmp_path, monkeypatch, capsys, report)
+
+    assert exited == 0
+    assert "All checks passed." in out
+
+
+def test_missing_capabilities_are_counted(tmp_path, monkeypatch, capsys):
+    report = dict(ALL_CAPABILITIES_OK)
+    report["tray"] = {"available": False, "detail": "gone", "fix": "x"}
+    report["trash"] = {"available": False, "detail": "gone", "fix": "y"}
+
+    out, _ = _doctor_output(tmp_path, monkeypatch, capsys, report)
+
+    assert "2 optional feature(s) unavailable" in out
+
+
+def test_no_summary_line_when_everything_is_available(tmp_path, monkeypatch, capsys):
+    out, _ = _doctor_output(tmp_path, monkeypatch, capsys, ALL_CAPABILITIES_OK)
+    assert "unavailable" not in out
+
+
+def test_optional_section_comes_after_the_critical_checks(tmp_path, monkeypatch, capsys):
+    """Ordering matters: the critical checks must not be buried below optional ones."""
+    out, _ = _doctor_output(tmp_path, monkeypatch, capsys, ALL_CAPABILITIES_OK)
+    assert out.index("WebView backend") < out.index("Optional features")
+
+
+def test_a_critical_failure_still_fails_with_capabilities_present(
+    tmp_path, monkeypatch, capsys
+):
+    """Adding the section must not mask a real problem."""
+    monkeypatch.chdir(tmp_path)   # no project files at all
+
+    with patch("vesper.commands.doctor.shutil.which", return_value=None), \
+         patch("vesper.commands.utils.importlib.metadata.version", return_value="1.0.0"), \
+         patch("vesper.core.capabilities.probe", return_value=ALL_CAPABILITIES_OK):
+        with pytest.raises(SystemExit) as exc:
+            doctor()
+
+    assert exc.value.code == 1
+    assert "Optional features" in capsys.readouterr().out

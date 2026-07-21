@@ -257,8 +257,21 @@ def get_project_package_manager(project_dir: Path) -> str:
 # ─── Doctor helpers ──────────────────────────────────────────────────────────
 
 
-def print_check(ok: bool, message: str, fix: str | None = None) -> None:
-    icon = "[OK]" if ok else "[FAIL]"
+def print_check(
+    ok: bool, message: str, fix: str | None = None, *, critical: bool = True
+) -> None:
+    """
+    Print one diagnostic line, with its fix underneath when it failed.
+
+    `critical=False` marks the line [WARN] instead of [FAIL]. Optional features are
+    reported that way: a missing tray backend is not a broken install, and printing
+    [FAIL] next to something the app may never use sends people chasing it.
+    """
+    if ok:
+        icon = "[OK]"
+    else:
+        icon = "[FAIL]" if critical else "[WARN]"
+
     print(f"{icon} {message}")
 
     if not ok and fix:
