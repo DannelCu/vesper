@@ -135,6 +135,40 @@ def test_windows_enable_writes_the_run_key(monkeypatch, packaged):
     assert args[4] == '"/opt/MyApp/MyApp"'
 
 
+def test_windows_enable_creates_the_run_key_if_absent(monkeypatch, packaged):
+    """
+    The Run key does not exist until something registers a startup entry.
+
+    A fresh Windows profile — a GitHub runner among them — has no such key, and
+    OpenKey fails on it with "cannot find the file specified". This runs on every
+    platform so the regression cannot come back through a machine nobody tests on.
+    """
+    monkeypatch.setattr(autostart.sys, "platform", "win32")
+
+    winreg = MagicMock()
+    winreg.OpenKey.side_effect = FileNotFoundError(
+        2, "The system cannot find the file specified"
+    )
+
+    with patch.dict("sys.modules", {"winreg": winreg}):
+        assert autostart.enable("MyApp") is True
+
+    winreg.CreateKeyEx.assert_called_once()
+    winreg.OpenKey.assert_not_called()
+
+
+def test_windows_enable_writes_into_the_created_key(monkeypatch, packaged):
+    """The value must land in the handle CreateKeyEx returned, not a stray one."""
+    monkeypatch.setattr(autostart.sys, "platform", "win32")
+
+    winreg = MagicMock()
+    with patch.dict("sys.modules", {"winreg": winreg}):
+        autostart.enable("MyApp")
+
+    created = winreg.CreateKeyEx.return_value.__enter__.return_value
+    assert winreg.SetValueEx.call_args[0][0] is created
+
+
 def test_windows_disable_tolerates_a_missing_value(monkeypatch, packaged):
     monkeypatch.setattr(autostart.sys, "platform", "win32")
 

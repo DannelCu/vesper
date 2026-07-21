@@ -219,3 +219,11 @@ actually registered to launch.
 
 What this still does not prove is whether the OS acts on the entry at login — that
 needs a real login, which is out of reach of any test.
+
+**They immediately earned their keep.** The first CI run failed on Windows:
+`_windows_enable()` used `winreg.OpenKey`, which cannot create a key that does not
+exist, and the `Run` key does not exist on a profile where nothing has ever
+registered a startup entry — every fresh Windows image, GitHub runners included.
+Autostart was silently broken there for anyone in that situation. The mocked tests
+could not have found it: a `MagicMock` `OpenKey` never raises. Fixed with
+`CreateKeyEx`, which opens or creates.

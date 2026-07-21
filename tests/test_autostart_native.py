@@ -128,7 +128,14 @@ def test_windows_does_not_disturb_other_entries(app_name, packaged, cleanup_regi
 
     def value_names():
         names = []
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, autostart._RUN_KEY) as key:
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, autostart._RUN_KEY)
+        except FileNotFoundError:
+            # The key does not exist until something registers a startup entry, so
+            # "no key" and "key with no values" are the same answer here.
+            return set()
+
+        with key:
             index = 0
             while True:
                 try:

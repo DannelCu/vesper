@@ -109,7 +109,14 @@ def _macos_enable(app_name: str) -> bool:
 def _windows_enable(app_name: str) -> bool:
     import winreg
 
-    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
+    # CreateKeyEx, not OpenKey: the Run key is created by whatever first writes to
+    # it, so on a profile where nothing ever registered a startup entry it does not
+    # exist and OpenKey fails with "cannot find the file specified". Fresh Windows
+    # images — GitHub runners among them — are exactly that case. CreateKeyEx opens
+    # the key when it is there and creates it when it is not.
+    with winreg.CreateKeyEx(
+        winreg.HKEY_CURRENT_USER, _RUN_KEY, 0, winreg.KEY_SET_VALUE
+    ) as key:
         # Quoted so a path containing spaces is treated as one argument.
         winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, f'"{_app_command()}"')
     return True

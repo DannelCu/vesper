@@ -53,6 +53,14 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   for the per-platform table.
 
 ### Fixed
+- **`autostart.enable()` failed on Windows when no startup entry had ever been
+  registered.** It used `winreg.OpenKey`, which cannot create a missing key, and
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` does not exist on a profile
+  where nothing has registered a startup entry — including every fresh Windows
+  install. `enable()` logged the error and returned `False`. Now uses `CreateKeyEx`,
+  which opens the key or creates it. Found by converting the mocked Windows tests to
+  a real registry round trip; a `MagicMock` `OpenKey` never raises, so the mocks
+  could not have caught it.
 - **PyWebView deprecation warning on every dialog.** `open_dialog`, `save_dialog` and
   `pick_folder` used `webview.OPEN_DIALOG` / `SAVE_DIALOG` / `FOLDER_DIALOG`, which
   PyWebView 5 deprecated in favour of the `FileDialog` enum and which log
