@@ -183,6 +183,33 @@ def _probe_badge() -> dict:
     )
 
 
+def _probe_power_events() -> dict:
+    """
+    Whether suspend/resume/lock/unlock events can be delivered.
+
+    Windows and macOS need nothing installed — the message window and the
+    NSWorkspace observers use what ships with the OS (pyobjc arrives with
+    pywebview). Linux goes through D-Bus and needs jeepney.
+    """
+    if sys.platform == "win32":
+        return _entry(True, "WM_POWERBROADCAST + WTS session notifications")
+
+    if sys.platform == "darwin":
+        ok = _has_module("AppKit")
+        return _entry(
+            ok,
+            "NSWorkspace notifications" if ok else "pyobjc (AppKit) not importable",
+            "pip install pyobjc-framework-Cocoa",
+        )
+
+    ok = _has_module("jeepney")
+    return _entry(
+        ok,
+        "logind + screensaver over D-Bus" if ok else "jeepney not importable",
+        "pip install jeepney",
+    )
+
+
 def _probe_global_shortcuts() -> dict:
     # Belongs to the vesper-shortcuts plugin rather than the core, but it is
     # reported here because the frontend asking "can I offer this?" does not care
@@ -203,6 +230,7 @@ _PROBES = {
     "keep_awake": _probe_keep_awake,
     "tray": _probe_tray,
     "badge": _probe_badge,
+    "power_events": _probe_power_events,
     "global_shortcuts": _probe_global_shortcuts,
 }
 

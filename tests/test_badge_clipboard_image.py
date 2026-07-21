@@ -472,3 +472,95 @@ def test_progress_over_ipc(monkeypatch):
 
     assert resp["ok"] is True
     assert resp["result"] is True
+
+
+# ── clipboard text: degradation when the tool is missing ─────────────────────
+#
+# read_image() has always returned None for a missing xclip while read()/write() let
+# FileNotFoundError escape — an exception crossing the IPC bridge for a machine that
+# simply lacks a package. These pin the now-consistent behaviour.
+
+
+@pytest.fixture
+def no_clipboard_tool(monkeypatch):
+    """Every clipboard subprocess behaves as if its binary is not installed."""
+    def missing(cmd, *args, **kwargs):
+        raise FileNotFoundError(cmd[0] if cmd else "?")
+
+    monkeypatch.setattr(clipboard.subprocess, "run", missing)
+
+
+@pytest.mark.parametrize("platform", ["linux", "darwin", "win32"])
+def test_read_returns_empty_when_the_tool_is_missing(
+    monkeypatch, no_clipboard_tool, platform
+):
+    monkeypatch.setattr(clipboard.sys, "platform", platform)
+    assert clipboard.read() == ""
+
+
+@pytest.mark.parametrize("platform", ["linux", "darwin", "win32"])
+def test_write_is_a_noop_when_the_tool_is_missing(
+    monkeypatch, no_clipboard_tool, platform
+):
+    monkeypatch.setattr(clipboard.sys, "platform", platform)
+    assert clipboard.write("hello") is None
+
+
+def test_read_matches_read_image_on_a_missing_tool(monkeypatch, no_clipboard_tool):
+    """Both halves of the clipboard API degrade; neither raises."""
+    monkeypatch.setattr(clipboard.sys, "platform", "linux")
+    assert clipboard.read() == ""
+    assert clipboard.read_image() is None
+
+
+def test_missing_tool_logs_at_debug_not_error(monkeypatch, no_clipboard_tool, caplog):
+    """An app polling the clipboard must not produce a traceback per poll."""
+    import logging
+
+    monkeypatch.setattr(clipboard.sys, "platform", "linux")
+    with caplog.at_level(logging.DEBUG, logger="vesper.clipboard"):
+        clipboard.read()
+        clipboard.write("x")
+
+    assert "not available" in caplog.text
+    assert all(r.levelno <= logging.DEBUG for r in caplog.records)
+
+
+def test_a_real_clipboard_error_is_not_swallowed(monkeypatch):
+    """Only a missing binary degrades — a broken tool must still surface."""
+    monkeypatch.setattr(clipboard.sys, "platform", "linux")
+
+    def boom(cmd, *args, **kwargs):
+        raise OSError("xclip exploded")
+
+    monkeypatch.setattr(clipboard.subprocess, "run", boom)
+
+    with pytest.raises(OSError):
+        clipboard.read()
+    with pytest.raises(OSError):
+        clipboard.write("x")
+
+
+def test_read_still_returns_clipboard_contents(monkeypatch):
+    """The degradation must not have broken the normal path."""
+    monkeypatch.setattr(clipboard.sys, "platform", "linux")
+    result = MagicMock(stdout="hello world")
+    monkeypatch.setattr(clipboard.subprocess, "run", lambda *a, **k: result)
+
+    assert clipboard.read() == "hello world"
+
+
+def test_write_still_pipes_the_text(monkeypatch):
+    monkeypatch.setattr(clipboard.sys, "platform", "linux")
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["input"] = kwargs.get("input")
+        return MagicMock(returncode=0)
+
+    monkeypatch.setattr(clipboard.subprocess, "run", fake_run)
+    clipboard.write("hello")
+
+    assert captured["cmd"][0] == "xclip"
+    assert captured["input"] == b"hello"

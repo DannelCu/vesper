@@ -738,14 +738,14 @@ class App:
         """
         from vesper.core import capabilities
 
-        # Only the tray is both explicitly configured and covered by a capability.
-        # power_events has no capability key (its backend is jeepney/D-Bus, not one
-        # of the eight probed), and badge is never declared on the App at all — it
-        # is called ad hoc. Adding a key or detecting inline would put the answer in
-        # two places, so neither is preflighted. See the note in KNOWN-ISSUES.
+        # Badges are deliberately absent: they are never declared on the App, so
+        # there is no configuration to check against — calling set_badge() is the
+        # only signal, and that happens long after startup.
         configured = []
         if self._tray is not None:
             configured.append(("tray", "system tray"))
+        if self._power_events:
+            configured.append(("power_events", "power events"))
 
         if not configured:
             return

@@ -144,6 +144,7 @@ _CAPABILITY_LABELS = {
     "keep_awake": "Keep awake",
     "tray": "System tray",
     "badge": "Taskbar / dock badge",
+    "power_events": "Power events",
     "global_shortcuts": "Global shortcuts",
 }
 

@@ -10,26 +10,53 @@ logger = get_logger("clipboard")
 
 
 def read() -> str:
-    """Read text from the system clipboard."""
-    if sys.platform == "win32":
-        result = subprocess.run(
-            ["powershell", "-WindowStyle", "Hidden", "-Command", "Get-Clipboard"],
-            capture_output=True, text=True, check=False,
-        )
-        return result.stdout.rstrip("\r\n")
-    elif sys.platform == "darwin":
-        result = subprocess.run(["pbpaste"], capture_output=True, text=True, check=False)
-        return result.stdout
-    else:
-        result = subprocess.run(
-            ["xclip", "-selection", "clipboard", "-o"],
-            capture_output=True, text=True, check=False,
-        )
-        return result.stdout
+    """
+    Read text from the system clipboard.
+
+    Returns "" when the clipboard is empty *or* when the platform tool is missing.
+    The caller cannot act on the difference, and an exception crossing the IPC
+    bridge for a machine without xclip is exactly the kind of surprise this API
+    should not produce. Whether the backend exists is answered by
+    ``vesper.capabilities()`` and by ``vesper doctor``, where it is actionable.
+    """
+    try:
+        if sys.platform == "win32":
+            result = subprocess.run(
+                ["powershell", "-WindowStyle", "Hidden", "-Command", "Get-Clipboard"],
+                capture_output=True, text=True, check=False,
+            )
+            return result.stdout.rstrip("\r\n")
+        elif sys.platform == "darwin":
+            result = subprocess.run(["pbpaste"], capture_output=True, text=True, check=False)
+            return result.stdout
+        else:
+            result = subprocess.run(
+                ["xclip", "-selection", "clipboard", "-o"],
+                capture_output=True, text=True, check=False,
+            )
+            return result.stdout
+    except FileNotFoundError:
+        # Same contract as read_image(): a configuration fact, logged at debug so an
+        # app polling the clipboard does not produce a traceback per poll.
+        logger.debug("Clipboard tool not available")
+        return ""
 
 
 def write(text: str) -> None:
-    """Write text to the system clipboard."""
+    """
+    Write text to the system clipboard.
+
+    A no-op when the platform tool is missing, matching read(). Returns nothing —
+    callers that need to know whether the clipboard is usable should ask
+    ``vesper.capabilities()`` rather than infer it from a failure here.
+    """
+    try:
+        _write(text)
+    except FileNotFoundError:
+        logger.debug("Clipboard tool not available")
+
+
+def _write(text: str) -> None:
     if sys.platform == "win32":
         # Pipe via stdin to avoid any injection through string interpolation.
         subprocess.run(

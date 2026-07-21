@@ -22,7 +22,7 @@ def _report(**overrides) -> dict:
         name: {"available": True, "detail": "stub", "fix": None}
         for name in (
             "clipboard_text", "clipboard_image", "notifications", "trash",
-            "keep_awake", "tray", "badge", "global_shortcuts",
+            "keep_awake", "tray", "badge", "power_events", "global_shortcuts",
         )
     }
     for name, entry in overrides.items():
@@ -209,3 +209,63 @@ def test_preflight_is_skipped_when_another_instance_wins():
         app.run()
 
     probe.assert_not_called()
+
+
+MISSING_POWER_EVENTS = {
+    "available": False,
+    "detail": "jeepney not importable",
+    "fix": "pip install jeepney",
+}
+
+
+def test_preflight_warns_when_power_events_are_unavailable(caplog):
+    app = App(power_events=True)
+
+    with patch.object(
+        capabilities, "probe", return_value=_report(power_events=MISSING_POWER_EVENTS)
+    ):
+        with caplog.at_level(logging.WARNING):
+            _run_app(app)
+
+    assert "power events" in caplog.text
+    assert "jeepney not importable" in caplog.text
+    assert "Fix: pip install jeepney" in caplog.text
+
+
+def test_preflight_is_silent_when_power_events_are_available(caplog):
+    app = App(power_events=True)
+
+    with patch.object(capabilities, "probe", return_value=_report()):
+        with caplog.at_level(logging.WARNING):
+            _run_app(app)
+
+    assert caplog.text == ""
+
+
+def test_preflight_ignores_power_events_when_not_opted_in(caplog):
+    """An app that never asked for the events must not be told about jeepney."""
+    app = App()
+
+    with patch.object(
+        capabilities, "probe", return_value=_report(power_events=MISSING_POWER_EVENTS)
+    ):
+        with caplog.at_level(logging.WARNING):
+            _run_app(app)
+
+    assert "power events" not in caplog.text
+
+
+def test_preflight_warns_about_both_when_both_are_missing(caplog):
+    app = App(power_events=True)
+    app._tray = MagicMock()
+
+    with patch.object(
+        capabilities,
+        "probe",
+        return_value=_report(tray=MISSING_TRAY, power_events=MISSING_POWER_EVENTS),
+    ):
+        with caplog.at_level(logging.WARNING):
+            _run_app(app)
+
+    assert "system tray" in caplog.text
+    assert "power events" in caplog.text

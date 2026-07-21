@@ -19,6 +19,7 @@ ALL_CAPABILITIES = {
     "keep_awake",
     "tray",
     "badge",
+    "power_events",
     "global_shortcuts",
 }
 
@@ -350,3 +351,42 @@ def test_has_binary_uses_which(monkeypatch):
     )
     assert capabilities._has_binary("x") is True
     assert capabilities._has_binary("y") is False
+
+
+# ── power events ─────────────────────────────────────────────────────────────
+
+
+def test_power_events_on_windows_need_nothing(env):
+    """The message window is plain ctypes against what ships with the OS."""
+    env.set("win32")
+    assert capabilities.probe()["power_events"]["available"] is True
+
+
+def test_power_events_on_macos_need_pyobjc(env):
+    env.set("darwin", modules={"AppKit"})
+    assert capabilities.probe()["power_events"]["available"] is True
+
+    env.set("darwin")
+    entry = capabilities.probe()["power_events"]
+    assert entry["available"] is False
+    assert "pyobjc" in entry["fix"]
+
+
+def test_power_events_on_linux_need_jeepney(env):
+    env.set("linux", modules={"jeepney"})
+    entry = capabilities.probe()["power_events"]
+    assert entry["available"] is True
+    assert "D-Bus" in entry["detail"]
+
+    env.set("linux")
+    entry = capabilities.probe()["power_events"]
+    assert entry["available"] is False
+    assert "jeepney" in entry["fix"]
+
+
+def test_power_events_are_independent_of_keep_awake(env):
+    """Different backends entirely: systemd-inhibit is a binary, jeepney a module."""
+    env.set("linux", binaries={"systemd-inhibit"})
+    report = capabilities.probe()
+    assert report["keep_awake"]["available"] is True
+    assert report["power_events"]["available"] is False

@@ -37,7 +37,7 @@ ALL_CAPABILITIES_OK = {
     name: {"available": True, "detail": "stub", "fix": None}
     for name in (
         "clipboard_text", "clipboard_image", "notifications", "trash",
-        "keep_awake", "tray", "badge", "global_shortcuts",
+        "keep_awake", "tray", "badge", "power_events", "global_shortcuts",
     )
 }
 
