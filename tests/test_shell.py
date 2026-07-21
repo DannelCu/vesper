@@ -1,6 +1,7 @@
 """Tests for shell integration (vesper.core.shell + vesper:shell:* IPC commands)."""
 from __future__ import annotations
 
+import ntpath
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -29,6 +30,11 @@ def test_open_url_passes_url_unchanged():
 
 def test_reveal_windows_calls_explorer(monkeypatch):
     monkeypatch.setattr(shell_mod.sys, "platform", "win32")
+    # reveal() absolutizes the path, and posixpath does not recognize "C:\..." as
+    # absolute — so the Windows path rules have to be simulated too, or this asserts
+    # against a cwd-prefixed path that would never occur on Windows.
+    monkeypatch.setattr(shell_mod.os.path, "abspath", ntpath.abspath)
+
     with patch.object(shell_mod.subprocess, "run") as mock_run:
         shell_mod.reveal("C:\\Users\\user\\file.txt")
     cmd = mock_run.call_args[0][0]

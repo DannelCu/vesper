@@ -10,6 +10,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
@@ -91,7 +92,24 @@ def _make_dev_handler(frontend_dir: Path, version: list[int]) -> type:
             if path == "/":
                 path = "/index.html"
 
+            # Percent-decode before resolving, so the traversal check below sees the
+            # same path the filesystem will. Decoding after would let %2e%2e slip past.
+            path = urllib.parse.unquote(path)
+
             file_path = frontend_dir / path.lstrip("/")
+
+            # Confine every request to the frontend directory. resolve() collapses
+            # ".." segments and follows symlinks, so this covers both a crafted URL
+            # and a symlink inside the project pointing somewhere else.
+            try:
+                resolved = file_path.resolve()
+                resolved.relative_to(frontend_dir.resolve())
+            except (ValueError, OSError):
+                self.send_response(403)
+                self.end_headers()
+                return
+
+            file_path = resolved
 
             if not file_path.is_file():
                 self.send_response(404)

@@ -42,7 +42,9 @@ def _notify_macos(title: str, body: str) -> None:
 
 
 def _notify_linux(title: str, body: str) -> None:
-    subprocess.run(["notify-send", title, body], capture_output=True, check=False)
+    # "--" stops option parsing: without it a title like "--help" or "-u critical"
+    # would be read by notify-send as flags rather than as the text to display.
+    subprocess.run(["notify-send", "--", title, body], capture_output=True, check=False)
 
 
 def send(title: str, body: str = "") -> None:
