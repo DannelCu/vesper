@@ -204,6 +204,26 @@
         allowSleep: function() { return invoke("vesper:power:allow_sleep", {}); },
     };
 
+    /**
+     * Which optional backends are available on this machine.
+     *
+     * Vesper's optional features degrade to no-ops when their backend is missing —
+     * on a Linux box without xclip, `clipboard.readImage()` simply resolves null.
+     * Ask first so the UI can hide or disable the control instead of offering a
+     * button that does nothing.
+     *
+     *   const caps = await vesper.capabilities()
+     *   pasteButton.hidden = !caps.clipboard_image
+     *
+     * Keys: clipboard_text, clipboard_image, notifications, trash, keep_awake,
+     * tray, badge, global_shortcuts. Each is a boolean.
+     *
+     * @returns {Promise<Object<string, boolean>>}
+     */
+    function capabilities() {
+        return invoke("vesper:capabilities", {});
+    }
+
     var security = {
         /**
          * Turn off browser behaviours that make a desktop app feel like a web page.
@@ -516,6 +536,7 @@
         invoke,
         on,
         quit,
+        capabilities,
         window: window_controls,
         screen,
         os,

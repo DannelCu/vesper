@@ -194,6 +194,15 @@ class App:
         self.registry.register(_power_prevent_sleep, name="vesper:power:prevent_sleep")
         self.registry.register(_power_allow_sleep, name="vesper:power:allow_sleep")
 
+        from vesper.core import capabilities as _capabilities
+
+        def _capabilities_probe() -> dict:
+            # Booleans only. The `fix` strings are install instructions for whoever
+            # runs the app, not something a web UI should be rendering.
+            return _capabilities.available_map()
+
+        self.registry.register(_capabilities_probe, name="vesper:capabilities")
+
         from vesper.core.notify import send as _notify_send
 
         def _notify(title: str = "", body: str = "") -> None:
@@ -715,6 +724,44 @@ class App:
         """
         self._menu_items = items
 
+    def _preflight(self) -> None:
+        """
+        Warn once, at startup, about features this app configured whose backend is
+        missing on this machine.
+
+        Only what the app asked for explicitly is checked. Guessing intent would
+        mean warning about a clipboard the app may never touch, and a startup that
+        warns about everything trains people to ignore it.
+
+        This warns; it never aborts. The one hard failure is ``.tray()``, which
+        already raises when pystray is absent, and that stays as it is.
+        """
+        from vesper.core import capabilities
+
+        # Only the tray is both explicitly configured and covered by a capability.
+        # power_events has no capability key (its backend is jeepney/D-Bus, not one
+        # of the eight probed), and badge is never declared on the App at all — it
+        # is called ad hoc. Adding a key or detecting inline would put the answer in
+        # two places, so neither is preflighted. See the note in KNOWN-ISSUES.
+        configured = []
+        if self._tray is not None:
+            configured.append(("tray", "system tray"))
+
+        if not configured:
+            return
+
+        report = capabilities.probe()
+        for name, description in configured:
+            entry = report.get(name)
+            if entry is None or entry["available"]:
+                continue
+
+            fix = f" Fix: {entry['fix']}" if entry["fix"] else ""
+            logger.warning(
+                "%s is configured but unavailable on this system (%s).%s",
+                description, entry["detail"], fix,
+            )
+
     def run(self) -> None:
         """
         Start the Vesper application.
@@ -729,6 +776,8 @@ class App:
         if self._single_instance is not None and not self._single_instance.acquire():
             logger.debug("Another instance is running; handed it our arguments")
             return
+
+        self._preflight()
 
         if self._remember_window:
             self._restore_window_state()
