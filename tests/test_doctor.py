@@ -663,9 +663,16 @@ def test_optional_features_section_is_printed(tmp_path, monkeypatch, capsys):
 
 
 def test_every_capability_gets_a_line(tmp_path, monkeypatch, capsys):
+    """Every capability is accounted for, whether on its own row or a grouped one."""
     from vesper.commands.doctor import _CAPABILITY_LABELS
 
-    out, _ = _doctor_output(tmp_path, monkeypatch, capsys, ALL_CAPABILITIES_OK)
+    # Distinct details keep the clipboard rows from being merged, so each label shows.
+    report = {
+        name: {"available": True, "detail": f"stub-{name}", "fix": None}
+        for name in ALL_CAPABILITIES_OK
+    }
+
+    out, _ = _doctor_output(tmp_path, monkeypatch, capsys, report)
     for label in _CAPABILITY_LABELS.values():
         assert label in out, label
 
@@ -705,7 +712,7 @@ def test_a_missing_capability_does_not_fail_doctor(tmp_path, monkeypatch, capsys
     out, exited = _doctor_output(tmp_path, monkeypatch, capsys, report)
 
     assert exited == 0
-    assert "All checks passed." in out
+    assert "All required checks passed." in out
 
 
 def test_missing_capabilities_are_counted(tmp_path, monkeypatch, capsys):
@@ -743,3 +750,135 @@ def test_a_critical_failure_still_fails_with_capabilities_present(
 
     assert exc.value.code == 1
     assert "Optional features" in capsys.readouterr().out
+
+
+# ── Optional features: three states and grouping ──────────────────────────────
+
+
+def test_unavailable_with_a_fix_is_a_warning(tmp_path, monkeypatch, capsys):
+    report = dict(ALL_CAPABILITIES_OK)
+    report["tray"] = {"available": False, "detail": "missing: pystray", "fix": "install"}
+
+    out, _ = _doctor_output(tmp_path, monkeypatch, capsys, report)
+
+    assert "[WARN] System tray" in out
+    assert "Fix: install" in out
+
+
+def test_unavailable_without_a_fix_is_not_applicable(tmp_path, monkeypatch, capsys):
+    """A Linux taskbar badge is not something the user forgot to install."""
+    report = dict(ALL_CAPABILITIES_OK)
+    report["badge"] = {
+        "available": False,
+        "detail": "no cross-desktop badge protocol on Linux",
+        "fix": None,
+    }
+
+    out, _ = _doctor_output(tmp_path, monkeypatch, capsys, report)
+
+    assert "[N/A] Taskbar / dock badge" in out
+    assert "[WARN] Taskbar / dock badge" not in out
+
+
+def test_not_applicable_never_prints_a_fix_line(tmp_path, monkeypatch, capsys):
+    report = dict(ALL_CAPABILITIES_OK)
+    report["badge"] = {"available": False, "detail": "unsupported", "fix": None}
+
+    out, _ = _doctor_output(tmp_path, monkeypatch, capsys, report)
+
+    badge_line = [ln for ln in out.splitlines() if "Taskbar" in ln][0]
+    following = out.splitlines()[out.splitlines().index(badge_line) + 1]
+    assert "Fix:" not in following
+
+
+def test_fail_is_reserved_for_critical_checks(tmp_path, monkeypatch, capsys):
+    """No optional feature may print [FAIL], whatever its state."""
+    report = {
+        name: {"available": False, "detail": "gone", "fix": "install it"}
+        for name in ALL_CAPABILITIES_OK
+    }
+    report["badge"] = {"available": False, "detail": "unsupported", "fix": None}
+
+    out, _ = _doctor_output(tmp_path, monkeypatch, capsys, report)
+
+    optional_section = out.split("Optional features")[1]
+    assert "[FAIL]" not in optional_section
+
+
+def test_identical_clipboard_entries_are_grouped(tmp_path, monkeypatch, capsys):
+    """One xclip, one fix line — two rows would look like two problems."""
+    xclip = {"available": False, "detail": "xclip not found", "fix": "apt install xclip"}
+    report = dict(ALL_CAPABILITIES_OK)
+    report["clipboard_text"] = xclip
+    report["clipboard_image"] = dict(xclip)
+
+    out, _ = _doctor_output(tmp_path, monkeypatch, capsys, report)
+
+    assert "Clipboard (text + images)" in out
+    assert "Clipboard (text):" not in out
+    assert "Clipboard (images):" not in out
+    assert out.count("apt install xclip") == 1
+
+
+def test_differing_clipboard_entries_stay_separate(tmp_path, monkeypatch, capsys):
+    """If text works while images do not, merging them would hide it."""
+    report = dict(ALL_CAPABILITIES_OK)
+    report["clipboard_text"] = {"available": True, "detail": "xclip", "fix": None}
+    report["clipboard_image"] = {
+        "available": False, "detail": "xclip not found", "fix": "apt install xclip",
+    }
+
+    out, _ = _doctor_output(tmp_path, monkeypatch, capsys, report)
+
+    assert "Clipboard (text):" in out
+    assert "Clipboard (images):" in out
+    assert "Clipboard (text + images)" not in out
+
+
+def test_grouped_row_counts_once_towards_the_total(tmp_path, monkeypatch, capsys):
+    xclip = {"available": False, "detail": "xclip not found", "fix": "apt install xclip"}
+    report = dict(ALL_CAPABILITIES_OK)
+    report["clipboard_text"] = xclip
+    report["clipboard_image"] = dict(xclip)
+
+    out, _ = _doctor_output(tmp_path, monkeypatch, capsys, report)
+
+    assert "1 optional feature(s) unavailable" in out
+
+
+# ── Final verdict ─────────────────────────────────────────────────────────────
+
+
+def test_verdict_is_unqualified_when_nothing_is_missing(tmp_path, monkeypatch, capsys):
+    out, exited = _doctor_output(tmp_path, monkeypatch, capsys, ALL_CAPABILITIES_OK)
+
+    assert exited == 0
+    assert "All required checks passed." in out
+    assert "optional feature(s) unavailable" not in out
+
+
+def test_verdict_separates_required_from_optional(tmp_path, monkeypatch, capsys):
+    """"All checks passed" above a list of [WARN] lines reads as a contradiction."""
+    report = dict(ALL_CAPABILITIES_OK)
+    report["tray"] = {"available": False, "detail": "gone", "fix": "install"}
+
+    out, exited = _doctor_output(tmp_path, monkeypatch, capsys, report)
+
+    assert exited == 0
+    assert "All required checks passed." in out
+    assert "1 optional feature(s) unavailable (see above)" in out
+    assert "degrade to no-ops" in out
+
+
+def test_verdict_is_absent_when_a_required_check_failed(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+
+    with patch("vesper.commands.doctor.shutil.which", return_value=None), \
+         patch("vesper.commands.utils.importlib.metadata.version", return_value="1.0.0"), \
+         patch("vesper.core.capabilities.probe", return_value=ALL_CAPABILITIES_OK):
+        with pytest.raises(SystemExit):
+            doctor()
+
+    out = capsys.readouterr().out
+    assert "All required checks passed." not in out
+    assert "Doctor found issues" in out

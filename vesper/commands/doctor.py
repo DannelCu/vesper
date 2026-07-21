@@ -10,6 +10,9 @@ import sys
 from pathlib import Path
 
 from vesper.commands.utils import (
+    NA,
+    OK,
+    WARN,
     find_entrypoint,
     get_installed_version,
     print_check,
@@ -145,9 +148,44 @@ _CAPABILITY_LABELS = {
 }
 
 
-def _print_optional_features() -> None:
+# Capabilities that fail for the same reason and are fixed by the same command. On
+# Linux both clipboard entries are just "xclip", and printing that install line twice
+# makes it look like two separate problems.
+_CAPABILITY_GROUPS = (
+    (("clipboard_text", "clipboard_image"), "Clipboard (text + images)"),
+)
+
+
+def _grouped_rows(report: dict) -> list[tuple[str, dict]]:
     """
-    Report the optional capability matrix.
+    Collapse capabilities that share an identical outcome into one row.
+
+    Only merges when the entries agree on all three fields — if the text clipboard
+    ever works while images do not, they are worth reporting separately.
+    """
+    merged: dict[str, str] = {}   # capability name → row label it was folded into
+    rows: list[tuple[str, dict]] = []
+
+    for names, label in _CAPABILITY_GROUPS:
+        entries = [report[n] for n in names if n in report]
+        if len(entries) == len(names) and all(e == entries[0] for e in entries):
+            merged.update(dict.fromkeys(names, label))
+
+    seen_labels: set[str] = set()
+    for name, entry in report.items():
+        label = merged.get(name)
+        if label is None:
+            rows.append((_CAPABILITY_LABELS.get(name, name), entry))
+        elif label not in seen_labels:
+            seen_labels.add(label)
+            rows.append((label, entry))
+
+    return rows
+
+
+def _print_optional_features() -> int:
+    """
+    Report the optional capability matrix. Returns how many are unavailable.
 
     Nothing here counts towards doctor's exit status. These features are optional by
     definition — an app that never opens a tray icon is not broken for lacking
@@ -161,22 +199,29 @@ def _print_optional_features() -> None:
     print("Optional features")
     print("-----------------")
 
-    for name, entry in report.items():
-        label = _CAPABILITY_LABELS.get(name, name)
+    unavailable = 0
+    for label, entry in _grouped_rows(report):
+        if entry["available"]:
+            status = OK
+        elif entry["fix"]:
+            status = WARN
+        else:
+            # No fix means the platform itself cannot do it — a Linux taskbar badge
+            # is not something the user forgot to install. WARN would imply an
+            # action that does not exist.
+            status = NA
+
+        if not entry["available"]:
+            unavailable += 1
+
         print_check(
             entry["available"],
             f"{label}: {entry['detail']}",
             entry["fix"],
-            critical=False,
+            status=status,
         )
 
-    missing = sum(1 for entry in report.values() if not entry["available"])
-    if missing:
-        print("")
-        print(
-            f"{missing} optional feature(s) unavailable. These degrade to no-ops "
-            "rather than errors; install the above only if your app uses them."
-        )
+    return unavailable
 
 
 def doctor() -> None:
@@ -391,7 +436,7 @@ def doctor() -> None:
 
     # Last, and deliberately not folded into has_failures: this is its own titled
     # section, and putting it between the critical checks would break their flow.
-    _print_optional_features()
+    unavailable = _print_optional_features()
 
     print("")
 
@@ -399,7 +444,15 @@ def doctor() -> None:
         print("Doctor found issues in this Vesper project.")
         raise SystemExit(1)
 
-    print("All checks passed.")
+    # Two sentences rather than one. "All checks passed" above a list of [WARN]
+    # lines reads as a contradiction, and softening it to "some checks failed" would
+    # be wrong in the other direction — nothing here is broken.
+    print("All required checks passed.")
+    if unavailable:
+        print(
+            f"{unavailable} optional feature(s) unavailable (see above) — they "
+            "degrade to no-ops, install only what your app uses."
+        )
 
 
 def add_doctor_parser(subparsers: argparse._SubParsersAction) -> None:
