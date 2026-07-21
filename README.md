@@ -295,9 +295,22 @@ my-app/
 
 ---
 
+## Examples
+
+A complete runnable app lives in [examples/hello](examples/hello) — two files covering IPC, the scoped filesystem API, native dialogs and notifications:
+
+```bash
+cd examples/hello
+vesper dev
+```
+
+---
+
 ## Contributing
 
 Setup instructions for working on the framework itself — per-platform prerequisites, editable installs, and test conventions — are in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Deliberate limitations and deferred work are tracked in [KNOWN-ISSUES.md](KNOWN-ISSUES.md).
 
 ---
 

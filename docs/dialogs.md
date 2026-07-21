@@ -104,3 +104,37 @@ if (!path) return   // user cancelled
 ## Filtering from TypeScript definitions
 
 `vesper:dialog:*` built-ins are filtered from the generated `vesper.d.ts` — they are accessed via `vesper.dialog.*` methods, not via `vesper.invoke()`.
+
+---
+
+## Message, confirm and ask
+
+Beyond file pickers, Vesper exposes native message dialogs.
+
+```js
+await vesper.dialog.message("Export finished.", "Done")
+
+if (await vesper.dialog.confirm("Delete this project?", "Confirm")) {
+    await vesper.invoke("delete_project")
+}
+
+const wants = await vesper.dialog.ask("Save changes before closing?")
+```
+
+| Method | Returns | Use for |
+|---|---|---|
+| `message(text, title)` | nothing | Telling the user something |
+| `confirm(text, title)` | `boolean` | Confirming a pending action |
+| `ask(text, title)` | `boolean` | A yes/no question |
+
+`confirm()` and `ask()` show the same dialog — PyWebView provides one primitive — but
+read differently at the call site. Pick whichever matches the sentence you are asking.
+
+From Python, the same dialogs are on the window:
+
+```python
+if app.window.confirm_dialog("Confirm", "Delete this project?"):
+    delete_project()
+```
+
+Dialogs need a created window; calling them before `app.run()` raises.

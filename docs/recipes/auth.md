@@ -207,6 +207,9 @@ document.getElementById("admin-btn").onclick = async () => {
     } catch (err) {
         if (err.type === "ForbiddenError") {
             alert("You do not have admin access.")
+        } else {
+            // GuardError means the check itself broke — a bug, not a denial.
+            console.error(err.type, err.message)
         }
     }
 }

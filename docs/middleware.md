@@ -115,3 +115,31 @@ async def timing_middleware(command: str, args: dict, next):
 | Order | Before middleware | After guards |
 
 See [Guards](guards.md) for access control. See [Recipes — IPC Logging](recipes/logging-middleware.md) for a ready-to-use logging setup.
+
+---
+
+## When middleware fails
+
+A middleware that raises is a bug in the middleware, not a rejected call, so it is
+reported under its own error type with the original exception preserved as the cause:
+
+```json
+{ "type": "MiddlewareError", "cause": "RuntimeError", "message": "redis down" }
+```
+
+The command does not run.
+
+To *reject* a call from middleware — an auth check, a rate limit — raise
+`ForbiddenError` instead. That is treated as policy and reaches the frontend as
+`ForbiddenError`, the same as a guard rejection:
+
+```python
+from vesper import ForbiddenError
+
+@app.middleware
+def rate_limit(command, args):
+    if too_many_calls():
+        raise ForbiddenError("Rate limit exceeded")
+```
+
+See [IPC](ipc.md) for the full error type table.

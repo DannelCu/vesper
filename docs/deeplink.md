@@ -80,6 +80,33 @@ def on_deeplink(url: str):
 
 Vesper inspects `sys.argv[1:]` at `App.__init__` time. Any argument that does not start with a web scheme (`http://`, `https://`, `ftp://`, `ftps://`) and contains `://` is treated as a deep link URL. The URL is stored internally and fired as a `deeplink` event via a `loaded` hook when the window is ready.
 
+### Links arriving while the app is already running
+
+The above covers a *cold start*. If the app is already open when the user clicks a
+link, the OS launches a second copy of it — and by default that second copy just
+starts its own window.
+
+Enable [single-instance mode](single-instance.md) to route it to the running app
+instead:
+
+```python
+app = App(title="My App", single_instance=True)
+```
+
+The second process hands its `sys.argv` to the first and exits. The first fires the
+same `deeplink` hooks, so your handler does not need to distinguish the two cases:
+
+```python
+@app.on("deeplink")
+def handle(url: str):
+    # Fires whether the app was launched with this URL or already running.
+    open_document(url)
+```
+
+A handler that raises is logged and the remaining handlers still run — this path
+executes on the single-instance listener thread, where an escaping exception would
+otherwise stop the app accepting any further links.
+
 ---
 
 ## Testing without protocol registration

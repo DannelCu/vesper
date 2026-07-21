@@ -245,6 +245,80 @@ handled the command.
 
 ---
 
+## `.gitignore` is deny-by-default — read this before adding files
+
+This repository's `.gitignore` ignores **everything** and then re-allows specific
+paths:
+
+```gitignore
+# Ignore everything by default
+*
+
+# Keep core Vesper source
+!vesper/
+!vesper/**
+
+# Keep documentation
+!docs/
+!docs/**
+...
+```
+
+**A new top-level file or directory will not be committed unless you add it to the
+allowlist.** `git add` on an ignored path fails silently in the sense that nothing is
+staged, and `git status` will not show it as untracked — so the file looks handled
+and simply never lands. This has already bitten this project: `CONTRIBUTING.md` and
+`scripts/` were written, tested and "committed" while being invisible to git, which
+would have broken CI on a missing file.
+
+When you add something that belongs in the repository:
+
+```gitignore
+# Keep whatever it is
+!newthing/
+!newthing/**
+```
+
+Both lines matter. `!newthing/` un-ignores the directory; without `!newthing/**` its
+contents stay ignored.
+
+Then confirm before you commit. The unambiguous check is a dry-run add:
+
+```console
+$ git add -n path/to/your/file
+add 'path/to/your/file'                      # ← good, it will be committed
+
+$ git add -n path/to/your/file
+The following paths are ignored by one of your .gitignore files:
+path/to/your/file                            # ← still ignored, fix the allowlist
+```
+
+`git check-ignore -v` also works but is easy to misread — **its exit code does not
+tell you whether the file is ignored**, because a negation rule counts as a match too:
+
+```console
+$ git check-ignore -v newthing/file.py
+.gitignore:2:*            newthing/file.py   # ← ignored (catch-all matched)
+
+$ git check-ignore -v newthing/file.py
+.gitignore:20:!newthing/**  newthing/file.py # ← NOT ignored (a "!" rule matched)
+```
+
+Both exit `0`. What matters is whether the printed rule starts with `!`. Files that
+are already tracked print nothing and exit `1`, since `check-ignore` skips them.
+
+`git status` alone is not a sufficient check either: ignored files do not show up as
+untracked. Use `--untracked-files=all`:
+
+```bash
+git status --porcelain --untracked-files=all | grep newthing
+```
+
+Generated files stay ignored on purpose. `examples/**/notes.txt` is excluded because
+running the example writes it.
+
+---
+
 ## Conventions
 
 - **Python 3.10+.** Use `from __future__ import annotations` and modern typing syntax

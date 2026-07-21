@@ -174,10 +174,32 @@ def test_read_image_without_an_image_returns_none(monkeypatch):
         assert clipboard.read_image() is None
 
 
-def test_read_image_survives_a_missing_tool(monkeypatch):
+def test_read_image_survives_a_missing_tool(monkeypatch, caplog):
+    """
+    A missing helper is a configuration fact, not an error.
+
+    Apps poll the clipboard, so logging a traceback per call would bury the log.
+    """
+    import logging
+
     monkeypatch.setattr(clipboard.sys, "platform", "linux")
-    with patch.object(clipboard, "_linux_read_image", side_effect=FileNotFoundError("no xclip")):
+    with caplog.at_level(logging.DEBUG, logger="vesper.clipboard"), \
+         patch.object(clipboard, "_linux_read_image", side_effect=FileNotFoundError("no xclip")):
         assert clipboard.read_image() is None
+
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+
+
+def test_read_image_reports_a_real_failure(monkeypatch, caplog):
+    """An unexpected failure still surfaces, unlike a missing binary."""
+    import logging
+
+    monkeypatch.setattr(clipboard.sys, "platform", "linux")
+    with caplog.at_level(logging.ERROR, logger="vesper.clipboard"), \
+         patch.object(clipboard, "_linux_read_image", side_effect=RuntimeError("bus error")):
+        assert clipboard.read_image() is None
+
+    assert any(r.levelno >= logging.ERROR for r in caplog.records)
 
 
 def test_write_image_accepts_a_data_url(monkeypatch):

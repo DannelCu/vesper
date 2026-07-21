@@ -76,6 +76,12 @@ def read_image() -> str | None:
             data = _windows_read_image()
         else:
             data = _linux_read_image()
+    except FileNotFoundError:
+        # The helper binary is not installed. That is a configuration fact, not a
+        # failure, and apps poll the clipboard — an ERROR traceback per poll would
+        # bury the log.
+        logger.debug("Clipboard image tool not available")
+        return None
     except Exception:
         logger.exception("Could not read image from clipboard")
         return None

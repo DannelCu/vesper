@@ -1,6 +1,6 @@
 # Guards
 
-Guards control access to individual commands. A guard is a function that runs before middleware and the command itself. If it returns `False`, the call is rejected with a `ForbiddenError` and the command never executes.
+Guards control access to individual commands. A guard is a function that runs before middleware and the command itself. It must return `True` or `None` to allow the call — **any other return value, including any falsy value**, rejects it with a `ForbiddenError` and the command never executes.
 
 ---
 
@@ -77,10 +77,29 @@ Controller-level guards run before any method-level `@guard` decorators.
 
 ## What the frontend sees on rejection
 
-When a guard returns `False`, the JS Promise rejects with:
+When a guard rejects a call, the JS Promise rejects with:
 
 ```json
 { "type": "ForbiddenError", "message": "Forbidden" }
+```
+
+A guard that *raises* is a different situation — that is a bug in the guard, not a
+denial, and it is reported separately so the frontend does not mistake one for the
+other:
+
+```json
+{ "type": "GuardError", "cause": "PermissionError", "message": "not allowed" }
+```
+
+Raise `ForbiddenError` yourself when you want to deny with a custom message:
+
+```python
+from vesper import ForbiddenError
+
+def is_admin(command, args):
+    if not session.get("admin"):
+        raise ForbiddenError("Admin access required")
+    return True
 ```
 
 ```js

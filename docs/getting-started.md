@@ -310,6 +310,43 @@ Common failures:
 
 ---
 
+## Opt-in App Options
+
+A few behaviours are off by default because not every app wants them. Enable them on
+the `App` constructor:
+
+```python
+app = App(
+    title="My App",
+    frontend="frontend/index.html",
+    single_instance=True,    # only one running copy; a second launch forwards its
+                             # arguments to the first — see Single Instance
+    remember_window=True,    # restore size and position from the previous run
+    fs_scope=["./data"],     # confine the filesystem API to these directories
+    debug=True,              # tracebacks in IPC errors, verbose logging
+)
+```
+
+| Option | Default | Guide |
+|---|---|---|
+| `single_instance` | `False` | [Single Instance](single-instance.md) |
+| `remember_window` | `False` | [Window State](window-state.md) |
+| `fs_scope` | `None` | [Filesystem API](filesystem.md) |
+
+---
+
+## A Complete Example
+
+The repository ships a runnable app that exercises IPC, the scoped filesystem API,
+native dialogs and notifications in two files:
+
+```bash
+cd examples/hello
+vesper dev
+```
+
+---
+
 ## Next Steps
 
 | Topic | Guide |
@@ -320,4 +357,9 @@ Common failures:
 | Protect commands with guards | [Guards](guards.md) |
 | Persistent storage | [Plugins](plugins.md) → vesper-store |
 | Native menus, tray, splash | [Menu Bar](menu.md), [Tray](tray.md), [Splash Screen](splash.md) |
+| One running copy, deep links | [Single Instance](single-instance.md) |
+| Remember window size/position | [Window State](window-state.md) |
+| Launch at login | [Autostart](autostart.md) |
+| Keep the machine awake | [Power Management](power.md) |
+| Lock down a production build | [Production Lockdown](security-lockdown.md) |
 | Package and sign for distribution | [Code Signing](code-signing.md) |

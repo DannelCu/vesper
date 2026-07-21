@@ -140,9 +140,33 @@ Built-in error types:
 |---|---|
 | `ValidationError` | Missing or unexpected arguments |
 | `CommandNotFoundError` | No command registered under that name |
-| `ForbiddenError` | A guard returned `False` |
+| `ForbiddenError` | A guard or middleware rejected the call |
+| `GuardError` | A guard itself raised an exception |
+| `MiddlewareError` | A middleware itself raised an exception |
+| *(the exception's own class)* | The command raised — e.g. `KeyError`, `ValueError` |
 
-In debug mode (`App(debug=True)`), error responses include a Python traceback appended to `error.message`.
+The pipeline reports **which phase failed**, so the frontend can tell policy from
+breakage. `ForbiddenError` means "you may not do this" and is worth acting on;
+`GuardError` means the check itself is broken and is a bug in the app.
+
+```js
+try {
+    await vesper.invoke("delete_user", { user_id: 1 })
+} catch (err) {
+    if (err.type === "ForbiddenError") showLoginPrompt()
+    else if (err.type === "GuardError") reportBug(err)
+}
+```
+
+When a guard or middleware raises something other than `ForbiddenError`, the original
+exception class is preserved in an `error.cause` field so the real cause is not lost:
+
+```json
+{ "type": "GuardError", "cause": "PermissionError", "message": "not allowed" }
+```
+
+In debug mode (`App(debug=True)`), error responses carry a Python traceback in a
+separate `error.traceback` field.
 
 ---
 

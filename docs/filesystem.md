@@ -161,3 +161,39 @@ app = App(
 ```
 
 Without a scope, a malicious or compromised frontend could exfiltrate `/etc/passwd`, private keys, or overwrite system files.
+
+---
+
+## Moving files to the trash
+
+`trash()` sends a file or directory to the system trash, where the user can restore
+it — unlike a delete.
+
+```js
+await vesper.fs.trash("/path/to/file.txt")
+```
+
+```python
+from vesper.core import fs
+
+fs.trash("/path/to/file.txt", scope=my_scope)
+```
+
+It honours `fs_scope` exactly like the rest of the filesystem API, so a scoped app
+cannot trash files outside its allowed roots.
+
+**It never falls back to deleting.** When no trash backend is available it raises
+`RuntimeError` rather than removing the file permanently — silently turning a
+recoverable operation into an irreversible one would be a far worse failure than
+reporting that trash is unavailable.
+
+For the best behaviour install the optional dependency, which implements the
+platform trash specifications properly, including the metadata that makes "restore"
+work on Linux:
+
+```bash
+pip install "vesper[trash]"
+```
+
+Without it, Vesper falls back to `gio trash`, the Finder, or the Windows Recycle Bin
+API.
