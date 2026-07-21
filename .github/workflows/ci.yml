@@ -44,3 +44,67 @@ jobs:
 
       - name: Run tests
         run: python -m pytest tests/ plugins/ --ignore=tests/test_lifecycle_hooks.py -q
+
+  smoke:
+    name: "Window smoke test on ${{ matrix.os }}"
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Linux deliberately uses the distribution's Python instead of setup-python.
+      # The GTK bindings (python3-gi) are an apt package installed into the system
+      # site-packages, and a setup-python interpreter cannot import them — the venv
+      # below is created with --system-site-packages for exactly that reason, which
+      # also dogfoods the setup CONTRIBUTING.md documents.
+      - name: Install system WebView runtime (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3-gi \
+            python3-venv \
+            gir1.2-webkit2-4.1 \
+            libwebkit2gtk-4.1-0 \
+            xvfb
+
+      - name: Set up Python (macOS / Windows)
+        if: runner.os != 'Linux'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Vesper (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          python3 -m venv --system-site-packages .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -e ".[tray]"
+
+      - name: Install Vesper (macOS / Windows)
+        if: runner.os != 'Linux'
+        run: pip install -e ".[tray]"
+
+      # Fails the job when no native WebView resolved, so a backend problem is
+      # reported as such instead of surfacing as an opaque smoke test timeout.
+      - name: Verify WebView backend (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a .venv/bin/python -c "from vesper.commands.doctor import _detect_webview_backend; ok, msg, fix = _detect_webview_backend(); print(msg); raise SystemExit(0 if ok else 1)"
+
+      - name: Verify WebView backend (macOS / Windows)
+        if: runner.os != 'Linux'
+        run: python -c "from vesper.commands.doctor import _detect_webview_backend; ok, msg, fix = _detect_webview_backend(); print(msg); raise SystemExit(0 if ok else 1)"
+
+      - name: Open a real window and exercise IPC (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a .venv/bin/python scripts/smoke_window.py
+
+      - name: Open a real window and exercise IPC (macOS / Windows)
+        if: runner.os != 'Linux'
+        run: python scripts/smoke_window.py
