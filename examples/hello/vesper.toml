@@ -1,0 +1,6 @@
+[project]
+name = "vesper-hello"
+template = "vanilla"
+styles = "none"
+bundler = "pyinstaller"
+package_manager = "npm"

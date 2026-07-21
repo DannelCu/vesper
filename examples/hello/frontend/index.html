@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Vesper Hello</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 2rem;
+      font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: Canvas;
+      color: CanvasText;
+    }
+    h1 { margin: 0 0 .25rem; font-size: 1.5rem; }
+    .sub { opacity: .65; margin: 0 0 2rem; }
+    section {
+      border: 1px solid color-mix(in srgb, CanvasText 15%, transparent);
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1rem;
+    }
+    h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em;
+         opacity: .6; margin: 0 0 .75rem; }
+    button {
+      font: inherit; padding: .45rem .9rem; border-radius: 7px; cursor: pointer;
+      border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+      background: color-mix(in srgb, CanvasText 6%, transparent);
+      color: inherit;
+    }
+    button:hover { background: color-mix(in srgb, CanvasText 12%, transparent); }
+    input, textarea {
+      font: inherit; padding: .45rem .6rem; border-radius: 7px; color: inherit;
+      border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+      background: Canvas;
+    }
+    textarea { width: 100%; min-height: 90px; resize: vertical; }
+    .row { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; }
+    output {
+      display: block; margin-top: .75rem; padding: .6rem .75rem; border-radius: 7px;
+      background: color-mix(in srgb, CanvasText 7%, transparent);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: .85rem; white-space: pre-wrap; min-height: 1.2em;
+    }
+  </style>
+</head>
+<body>
+  <h1>Vesper Hello</h1>
+  <p class="sub">Every button below calls Python. View source — it is one file each side.</p>
+
+  <section>
+    <h2>Calling a Python command</h2>
+    <div class="row">
+      <input id="name" value="world" aria-label="Your name">
+      <button onclick="doGreet()">Greet</button>
+      <button onclick="doReport()">System info</button>
+    </div>
+    <output id="out-invoke"></output>
+  </section>
+
+  <section>
+    <h2>Filesystem</h2>
+    <div class="row">
+      <button onclick="loadNotes()">Read notes.txt</button>
+      <button onclick="saveNotes()">Save</button>
+    </div>
+    <textarea id="notes" placeholder="Press Read to load notes.txt"></textarea>
+    <output id="out-fs"></output>
+  </section>
+
+  <section>
+    <h2>Native dialogs &amp; notifications</h2>
+    <div class="row">
+      <button onclick="pickFile()">Pick a file</button>
+      <button onclick="askUser()">Ask a question</button>
+      <button onclick="doNotify()">Send a notification</button>
+    </div>
+    <output id="out-native"></output>
+  </section>
+
+  <script src="./vesper.js"></script>
+  <script>
+    const show = (id, value) =>
+      document.getElementById(id).textContent =
+        typeof value === "string" ? value : JSON.stringify(value, null, 2);
+
+    async function doGreet() {
+      const name = document.getElementById("name").value;
+      show("out-invoke", await vesper.invoke("greet", { name }));
+    }
+
+    async function doReport() {
+      show("out-invoke", await vesper.invoke("system_report"));
+    }
+
+    async function loadNotes() {
+      document.getElementById("notes").value = await vesper.invoke("read_notes");
+      show("out-fs", "Loaded notes.txt");
+    }
+
+    async function saveNotes() {
+      const content = document.getElementById("notes").value;
+      await vesper.invoke("save_notes", { content });
+      show("out-fs", "Saved.");
+    }
+
+    async function pickFile() {
+      const picked = await vesper.dialog.open();
+      if (!picked || !picked.length) return show("out-native", "Cancelled.");
+
+      // fs.read is scoped to the example directory by fs_scope in app.py, so
+      // picking a file elsewhere is refused — deliberately.
+      try {
+        const text = await vesper.fs.read(picked[0]);
+        show("out-native", `${picked[0]}\n\n${text.slice(0, 300)}`);
+      } catch (err) {
+        show("out-native", `${picked[0]}\n\nOutside fs_scope: ${err}`);
+      }
+    }
+
+    async function askUser() {
+      const yes = await vesper.dialog.ask("Do you like Vesper?", "A question");
+      show("out-native", yes ? "Glad to hear it." : "Noted.");
+    }
+
+    async function doNotify() {
+      await vesper.notify("Vesper", "This came from Python.");
+      show("out-native", "Notification sent.");
+    }
+  </script>
+</body>
+</html>

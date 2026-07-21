@@ -19,6 +19,13 @@
 !scripts/
 !scripts/**
 
+# Keep runnable examples
+!examples/
+!examples/**
+
+# ...but not what running them produces
+examples/**/notes.txt
+
 # Keep GitHub Actions
 !.github/
 !.github/**

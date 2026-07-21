@@ -72,12 +72,17 @@ Use any Python library — pandas, SQLAlchemy, PyMongo, OpenCV, scikit-learn —
 - Screen info — list connected monitors with dimensions and position
 
 **System Integration**
-- Native file dialogs — open, save, folder picker with file-type filters
+- Native file dialogs — open, save, folder picker, plus message/confirm/ask
 - Native notifications — no extra dependencies (PowerShell, osascript, notify-send)
 - Clipboard — read and write system clipboard
 - Shell integration — open URLs in the default browser, reveal files in the file manager
 - Filesystem API — read, write, exists, list directory from JS
-- Deep linking — handle `myapp://` protocol URLs via `@app.on("deeplink")`
+- Deep linking — handle `myapp://` protocol URLs via `@app.on("deeplink")`, at startup or while running
+- Single instance — a second launch forwards its arguments to the running app
+- Window state — remember size and position, with disconnected-monitor handling
+- Autostart — launch at login on all three platforms
+- Power management — keep the system awake during long operations
+- System trash — `fs.trash()` instead of a permanent delete
 - OS info — platform, version, machine architecture
 
 **Developer Workflow**
@@ -262,6 +267,11 @@ my-app/
 | [Window Controls](docs/window-controls.md) | Minimize, maximize, resize, screen info |
 | [Splash Screen](docs/splash.md) | Loading overlay before the app is ready |
 | [Deep Linking](docs/deeplink.md) | Handle custom `myapp://` protocol URLs |
+| [Single Instance](docs/single-instance.md) | One running copy, with argv forwarding |
+| [Window State](docs/window-state.md) | Remember size and position across restarts |
+| [Autostart](docs/autostart.md) | Launch the app at login |
+| [Power Management](docs/power.md) | Keep the machine awake during long work |
+| [Production Lockdown](docs/security-lockdown.md) | Disable browser behaviours in production |
 | [Filesystem API](docs/filesystem.md) | Read, write, list files from JS |
 | [File Transfers](docs/file-transfers.md) | Sending binary data across the IPC boundary |
 | [Auto-Updates](docs/auto-updates.md) | Self-updating apps via a manifest |
