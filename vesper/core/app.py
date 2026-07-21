@@ -64,6 +64,7 @@ class App:
         fs_scope: list[str] | str | None = None,
         single_instance: bool = False,
         remember_window: bool = False,
+        power_events: bool = False,
     ) -> None:
         """
         Initialize the Vesper application core systems.
@@ -97,6 +98,11 @@ class App:
             remember_window:
                 Restore the window's size and position from the previous run, and
                 save them on close.
+            power_events:
+                Emit ``power:suspend`` / ``power:resume`` / ``power:lock`` /
+                ``power:unlock`` to the frontend. Opt-in because it costs a D-Bus
+                connection or a message window, and best-effort because not every
+                platform publishes every event — see docs/power.md.
         """
 
         self.debug = debug
@@ -128,6 +134,7 @@ class App:
         self._deeplink_url: str | None = _extract_deeplink(_sys.argv[1:])
 
         self._remember_window = remember_window
+        self._power_events = power_events
         self._single_instance = None
         if single_instance:
             from vesper.core.single_instance import SingleInstance
@@ -745,6 +752,13 @@ class App:
         if self._tray is not None:
             self._tray.start()
 
+        if self._power_events:
+            # Started after the window exists, since the events are delivered to it.
+            from vesper.core import power as _power_mod
+
+            if not _power_mod.start_power_monitor(self.window.emit):
+                logger.debug("Power events unavailable on this system")
+
         try:
             self.window.show()
         finally:
@@ -756,6 +770,10 @@ class App:
                 self._save_window_state()
             if self._tray is not None:
                 self._tray.stop()
+            if self._power_events:
+                from vesper.core import power as _power_mod
+
+                _power_mod.stop_power_monitor()
             self.ipc.close()
             if self._single_instance is not None:
                 self._single_instance.release()

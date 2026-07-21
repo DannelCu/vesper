@@ -26,6 +26,15 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   this closes that gap. CI runs it on Linux, macOS, and Windows as a separate `smoke`
   job, headless under xvfb on Linux.
 
+- **System power events** — `App(power_events=True)` emits `power:suspend`,
+  `power:resume`, `power:lock` and `power:unlock` to the frontend, listened to with
+  `vesper.on("power:suspend", cb)`. Backed by NSWorkspace + distributed notifications
+  on macOS, `WM_POWERBROADCAST` / `WTS_SESSION_CHANGE` on a message-only window on
+  Windows, and systemd-logind + the desktop screensaver over D-Bus (jeepney) on Linux.
+  Opt-in and best-effort: an absent optional dependency or a desktop that publishes
+  nothing degrades to no events, never to an error. See [docs/power.md](docs/power.md)
+  for the per-platform table.
+
 ### Fixed
 - **PyWebView deprecation warning on every dialog.** `open_dialog`, `save_dialog` and
   `pick_folder` used `webview.OPEN_DIALOG` / `SAVE_DIALOG` / `FOLDER_DIALOG`, which
