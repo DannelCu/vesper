@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import ntpath
 import os
-import posixpath
 from unittest.mock import patch
 
 import pytest
@@ -50,11 +49,16 @@ def test_notify_linux_option_like_body_stays_data():
 
 
 def _argv_for_reveal(path: str, platform: str, *, isdir: bool = True):
-    # The path rules of the simulated platform must be simulated too, in both
-    # directions. os.path is whatever the *host* uses: on Linux it would leave
-    # "/select,evil" looking like a Windows switch, and on Windows it would rewrite
-    # a POSIX path to "D:\\...". Either way the assertion would not mean what it says.
-    abspath = ntpath.abspath if platform == "win32" else posixpath.abspath
+    # Only the Windows case needs its path rules simulated: on a POSIX host,
+    # os.path would leave "/select,evil" looking like a Windows switch.
+    #
+    # The reverse is deliberately NOT simulated. abspath() on a relative path calls
+    # os.getcwd(), which always returns a *host* path, so posixpath.abspath("-R") on
+    # Windows yields the hybrid "D:\\a\\repo/-R" — neither POSIX-absolute nor
+    # meaningful. The host's own abspath is fine here, because what these tests
+    # assert is that the result cannot be read as an option, and that holds under
+    # either set of path rules.
+    abspath = ntpath.abspath if platform == "win32" else os.path.abspath
 
     with patch("vesper.core.shell.sys.platform", platform), \
          patch("vesper.core.shell.os.path.abspath", abspath), \
@@ -87,11 +91,12 @@ def test_reveal_never_passes_an_option_like_argument(platform):
 
 
 @pytest.mark.parametrize("hostile", ["-R", "--version", "-a", "/select,"])
-def test_reveal_linux_makes_path_absolute(hostile):
+def test_reveal_linux_hostile_path_is_not_an_option(hostile):
     argv = _argv_for_reveal(hostile, "linux")
     assert argv[0] == "xdg-open"
-    assert posixpath.isabs(argv[1])
-    assert not argv[1].startswith("-")
+    # Absoluteness is the mechanism; not being parseable as a flag is the point.
+    # Asserting the mechanism would mean asserting the host's path rules.
+    _assert_not_option_like(argv[1], "linux")
 
 
 def test_reveal_linux_does_not_use_dash_dash():
@@ -103,11 +108,11 @@ def test_reveal_linux_does_not_use_dash_dash():
     assert "--" not in argv
 
 
-def test_reveal_macos_keeps_its_flag_and_absolute_path():
+def test_reveal_macos_keeps_its_flag_and_a_safe_path():
     argv = _argv_for_reveal("-R", "darwin")
     assert argv[0] == "open"
+    # The framework's own flag survives; the user-supplied value does not become one.
     assert argv[1] == "-R"
-    assert posixpath.isabs(argv[2])
     _assert_not_option_like(argv[2], "darwin")
 
 
