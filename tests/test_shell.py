@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ntpath
+import posixpath
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -48,6 +49,11 @@ def test_reveal_windows_calls_explorer(monkeypatch):
 
 def test_reveal_macos_calls_open_r(monkeypatch):
     monkeypatch.setattr(shell_mod.sys, "platform", "darwin")
+    # Faking sys.platform is not enough: reveal() absolutizes the path, and on a
+    # Windows host os.path is ntpath, which rewrites "/Users/..." to "D:\Users\...".
+    # The path rules of the simulated platform have to be simulated too.
+    monkeypatch.setattr(shell_mod.os.path, "abspath", posixpath.abspath)
+
     with patch.object(shell_mod.subprocess, "run") as mock_run:
         shell_mod.reveal("/Users/user/file.txt")
     cmd = mock_run.call_args[0][0]

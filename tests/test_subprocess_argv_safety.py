@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ntpath
 import os
+import posixpath
 from unittest.mock import patch
 
 import pytest
@@ -49,10 +50,11 @@ def test_notify_linux_option_like_body_stays_data():
 
 
 def _argv_for_reveal(path: str, platform: str, *, isdir: bool = True):
-    # Windows path rules must be simulated as well as the platform string: posixpath
-    # treats "/select,evil" as already absolute and would leave it looking like a
-    # switch, so a posix-only run would assert nothing on the case that matters.
-    abspath = ntpath.abspath if platform == "win32" else os.path.abspath
+    # The path rules of the simulated platform must be simulated too, in both
+    # directions. os.path is whatever the *host* uses: on Linux it would leave
+    # "/select,evil" looking like a Windows switch, and on Windows it would rewrite
+    # a POSIX path to "D:\\...". Either way the assertion would not mean what it says.
+    abspath = ntpath.abspath if platform == "win32" else posixpath.abspath
 
     with patch("vesper.core.shell.sys.platform", platform), \
          patch("vesper.core.shell.os.path.abspath", abspath), \
@@ -88,7 +90,7 @@ def test_reveal_never_passes_an_option_like_argument(platform):
 def test_reveal_linux_makes_path_absolute(hostile):
     argv = _argv_for_reveal(hostile, "linux")
     assert argv[0] == "xdg-open"
-    assert os.path.isabs(argv[1])
+    assert posixpath.isabs(argv[1])
     assert not argv[1].startswith("-")
 
 
@@ -105,7 +107,7 @@ def test_reveal_macos_keeps_its_flag_and_absolute_path():
     argv = _argv_for_reveal("-R", "darwin")
     assert argv[0] == "open"
     assert argv[1] == "-R"
-    assert os.path.isabs(argv[2])
+    assert posixpath.isabs(argv[2])
     _assert_not_option_like(argv[2], "darwin")
 
 
