@@ -40,7 +40,7 @@ try:
 except Exception:
     __version__ = "0.1.0"
 
-__author__ = "Dannel LLC"
+__author__ = "DannelCu"
 __license__ = "MIT"
 
 __all__ = [

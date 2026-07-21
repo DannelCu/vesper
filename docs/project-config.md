@@ -20,7 +20,7 @@ db    = "vesper-db"
 
 [sign]
 # macOS
-identity  = "Developer ID Application: Dannel LLC (TEAMID)"
+identity  = "Developer ID Application: DannelCu (TEAMID)"
 notarize  = "true"
 apple_id  = "you@example.com"
 team_id   = "TEAMID"

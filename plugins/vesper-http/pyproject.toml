@@ -7,7 +7,7 @@ name = "vesper-http"
 version = "0.1.0"
 description = "HTTP client plugin for Vesper — proxy external requests through Python to avoid CORS"
 requires-python = ">=3.10"
-authors = [{ name = "Dannel LLC" }]
+authors = [{ name = "DannelCu" }]
 license = "MIT"
 
 dependencies = [

@@ -7,7 +7,7 @@ name = "vesper-shortcuts"
 version = "0.1.0"
 description = "Global keyboard shortcuts plugin for Vesper — shortcuts active even when the window is not focused"
 requires-python = ">=3.10"
-authors = [{ name = "Dannel LLC" }]
+authors = [{ name = "DannelCu" }]
 license = "MIT"
 
 dependencies = [

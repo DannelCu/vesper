@@ -7,7 +7,7 @@ name = "vesper-theme"
 version = "0.1.0"
 description = "OS dark/light mode detection plugin for Vesper — react to system theme changes from Python and JavaScript"
 requires-python = ">=3.10"
-authors = [{ name = "Dannel LLC" }]
+authors = [{ name = "DannelCu" }]
 license = "MIT"
 
 dependencies = [

@@ -7,7 +7,7 @@ name = "vesper-keychain"
 version = "0.1.0"
 description = "Secure OS keychain plugin for Vesper — Windows Credential Manager, macOS Keychain, Linux Secret Service"
 requires-python = ">=3.10"
-authors = [{ name = "Dannel LLC" }]
+authors = [{ name = "DannelCu" }]
 license = "MIT"
 
 dependencies = [

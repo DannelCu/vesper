@@ -7,7 +7,7 @@ name = "vesper-mongodb"
 version = "0.1.0"
 description = "MongoDB plugin for Vesper — injectable MongoDatabase with DI integration"
 requires-python = ">=3.10"
-authors = [{ name = "Dannel LLC" }]
+authors = [{ name = "DannelCu" }]
 license = "MIT"
 
 dependencies = [

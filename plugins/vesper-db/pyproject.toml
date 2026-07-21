@@ -7,7 +7,7 @@ name = "vesper-db"
 version = "0.1.0"
 description = "SQLAlchemy-backed SQL database plugin for Vesper"
 requires-python = ">=3.10"
-authors = [{ name = "Dannel LLC" }]
+authors = [{ name = "DannelCu" }]
 license = "MIT"
 
 dependencies = [
