@@ -7,7 +7,30 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vesper.commands.doctor import _PROJECT_VALID_KEYS, _PROJECT_VALID_VALUES, doctor
+from vesper.commands.doctor import (
+    _PROJECT_VALID_KEYS,
+    _PROJECT_VALID_VALUES,
+    _candidate_backends,
+    _detect_webview_backend,
+    doctor,
+)
+
+
+@pytest.fixture(autouse=True)
+def stub_webview_backend():
+    """
+    Keep doctor() hermetic.
+
+    The WebView backend check probes real system libraries (GTK/WebKit, PyObjC,
+    pythonnet), so without this every doctor() test would depend on what happens to be
+    installed on the machine running them. Tests that exercise the check itself call
+    _detect_webview_backend directly instead.
+    """
+    with patch(
+        "vesper.commands.doctor._detect_webview_backend",
+        return_value=(True, "WebView backend available: stub", None),
+    ):
+        yield
 
 
 def _run_doctor(tmp_path: Path, *, monkeypatch, node_version: str | None = "v20.0.0", pm: str = "npm"):
@@ -397,3 +420,182 @@ def test_toml_update_unknown_key_fails(tmp_path, monkeypatch, capsys):
             doctor()
     out = capsys.readouterr().out
     assert "[update] unknown key 'bad_key'" in out
+
+
+# ── WebView backend detection ─────────────────────────────────────────────────
+
+
+def test_backend_order_linux_prefers_gtk(monkeypatch):
+    monkeypatch.setattr("vesper.commands.doctor.platform.system", lambda: "Linux")
+    monkeypatch.delenv("PYWEBVIEW_GUI", raising=False)
+    monkeypatch.delenv("KDE_FULL_SESSION", raising=False)
+    assert _candidate_backends() == ["gtk", "qt"]
+
+
+def test_backend_order_linux_kde_prefers_qt(monkeypatch):
+    monkeypatch.setattr("vesper.commands.doctor.platform.system", lambda: "Linux")
+    monkeypatch.delenv("PYWEBVIEW_GUI", raising=False)
+    monkeypatch.setenv("KDE_FULL_SESSION", "true")
+    assert _candidate_backends() == ["qt", "gtk"]
+
+
+def test_backend_order_respects_pywebview_gui_env(monkeypatch):
+    monkeypatch.setattr("vesper.commands.doctor.platform.system", lambda: "Linux")
+    monkeypatch.setenv("PYWEBVIEW_GUI", "qt")
+    assert _candidate_backends() == ["qt", "gtk"]
+
+
+def test_backend_order_macos_prefers_cocoa(monkeypatch):
+    monkeypatch.setattr("vesper.commands.doctor.platform.system", lambda: "Darwin")
+    monkeypatch.delenv("PYWEBVIEW_GUI", raising=False)
+    monkeypatch.delenv("KDE_FULL_SESSION", raising=False)
+    assert _candidate_backends() == ["cocoa", "qt"]
+
+
+def test_backend_order_windows_is_winforms(monkeypatch):
+    monkeypatch.setattr("vesper.commands.doctor.platform.system", lambda: "Windows")
+    monkeypatch.delenv("PYWEBVIEW_GUI", raising=False)
+    monkeypatch.delenv("KDE_FULL_SESSION", raising=False)
+    assert _candidate_backends() == ["winforms"]
+
+
+def test_backend_detected_when_import_succeeds(monkeypatch):
+    monkeypatch.setattr("vesper.commands.doctor.platform.system", lambda: "Linux")
+    monkeypatch.delenv("PYWEBVIEW_GUI", raising=False)
+    monkeypatch.delenv("KDE_FULL_SESSION", raising=False)
+    monkeypatch.setattr(
+        "vesper.commands.doctor.importlib.import_module", lambda name: MagicMock()
+    )
+
+    ok, message, fix = _detect_webview_backend()
+    assert ok is True
+    assert "GTK / WebKit2" in message
+    assert fix is None
+
+
+def test_backend_missing_reports_platform_fix(monkeypatch):
+    """The Linux failure a fresh clone hits: pywebview installed, no GTK bindings."""
+    monkeypatch.setattr("vesper.commands.doctor.platform.system", lambda: "Linux")
+    monkeypatch.delenv("PYWEBVIEW_GUI", raising=False)
+    monkeypatch.delenv("KDE_FULL_SESSION", raising=False)
+
+    def boom(name):
+        raise ImportError("No module named 'gi'")
+
+    monkeypatch.setattr("vesper.commands.doctor.importlib.import_module", boom)
+
+    ok, message, fix = _detect_webview_backend()
+    assert ok is False
+    assert "none available" in message
+    assert "--system-site-packages" in fix
+    assert "gir1.2-webkit2-4.1" in fix
+
+
+def test_backend_probe_survives_non_import_errors(monkeypatch):
+    """gi.require_version raises ValueError, not ImportError."""
+    monkeypatch.setattr("vesper.commands.doctor.platform.system", lambda: "Linux")
+    monkeypatch.delenv("PYWEBVIEW_GUI", raising=False)
+    monkeypatch.delenv("KDE_FULL_SESSION", raising=False)
+
+    def boom(name):
+        raise ValueError("Namespace WebKit2 not available for version 4.0")
+
+    monkeypatch.setattr("vesper.commands.doctor.importlib.import_module", boom)
+
+    ok, _, fix = _detect_webview_backend()
+    assert ok is False
+    assert "sudo apt install" in fix
+
+
+def test_backend_falls_back_to_qt_when_gtk_missing(monkeypatch):
+    monkeypatch.setattr("vesper.commands.doctor.platform.system", lambda: "Linux")
+    monkeypatch.delenv("PYWEBVIEW_GUI", raising=False)
+    monkeypatch.delenv("KDE_FULL_SESSION", raising=False)
+
+    def selective(name):
+        if name.endswith("gtk"):
+            raise ImportError("No module named 'gi'")
+        return MagicMock()
+
+    monkeypatch.setattr("vesper.commands.doctor.importlib.import_module", selective)
+
+    ok, message, _ = _detect_webview_backend()
+    assert ok is True
+    assert "Qt / QtWebEngine" in message
+
+
+def test_backend_macos_missing_pyobjc_mentions_framework_build(monkeypatch):
+    monkeypatch.setattr("vesper.commands.doctor.platform.system", lambda: "Darwin")
+    monkeypatch.delenv("PYWEBVIEW_GUI", raising=False)
+    monkeypatch.delenv("KDE_FULL_SESSION", raising=False)
+
+    def boom(name):
+        raise ImportError("No module named 'Foundation'")
+
+    monkeypatch.setattr("vesper.commands.doctor.importlib.import_module", boom)
+
+    ok, _, fix = _detect_webview_backend()
+    assert ok is False
+    assert "pyobjc" in fix
+    assert "framework build" in fix
+
+
+def test_backend_windows_mshtml_fallback_fails(monkeypatch):
+    """pythonnet imports fine but WebView2 is absent — pywebview degrades to IE11."""
+    monkeypatch.setattr("vesper.commands.doctor.platform.system", lambda: "Windows")
+    monkeypatch.delenv("PYWEBVIEW_GUI", raising=False)
+    monkeypatch.delenv("KDE_FULL_SESSION", raising=False)
+
+    winforms = MagicMock()
+    winforms.renderer = "mshtml"
+    monkeypatch.setattr(
+        "vesper.commands.doctor.importlib.import_module", lambda name: winforms
+    )
+
+    ok, message, fix = _detect_webview_backend()
+    assert ok is False
+    assert "MSHTML" in message
+    assert "WebView2" in fix
+
+
+def test_backend_windows_edgechromium_passes(monkeypatch):
+    monkeypatch.setattr("vesper.commands.doctor.platform.system", lambda: "Windows")
+    monkeypatch.delenv("PYWEBVIEW_GUI", raising=False)
+    monkeypatch.delenv("KDE_FULL_SESSION", raising=False)
+
+    winforms = MagicMock()
+    winforms.renderer = "edgechromium"
+    monkeypatch.setattr(
+        "vesper.commands.doctor.importlib.import_module", lambda name: winforms
+    )
+
+    ok, message, fix = _detect_webview_backend()
+    assert ok is True
+    assert "WinForms / WebView2" in message
+    assert fix is None
+
+
+def test_backend_unsupported_platform(monkeypatch):
+    monkeypatch.setattr("vesper.commands.doctor.platform.system", lambda: "Haiku")
+    ok, message, _ = _detect_webview_backend()
+    assert ok is False
+    assert "Unsupported platform" in message
+
+
+def test_doctor_reports_backend_failure(tmp_path, monkeypatch, capsys):
+    """A missing backend must make doctor exit non-zero, not report all-green."""
+    fake_which, fake_run = _make_project(tmp_path, monkeypatch, '[project]\nname = "app"\n')
+
+    with patch("vesper.commands.doctor.shutil.which", side_effect=fake_which), \
+         patch("vesper.commands.doctor.subprocess.run", side_effect=fake_run), \
+         patch("vesper.commands.utils.importlib.metadata.version", return_value="1.0.0"), \
+         patch(
+             "vesper.commands.doctor._detect_webview_backend",
+             return_value=(False, "WebView backend: none available", "install GTK"),
+         ):
+        with pytest.raises(SystemExit):
+            doctor()
+
+    out = capsys.readouterr().out
+    assert "[FAIL] WebView backend: none available" in out
+    assert "Fix: install GTK" in out

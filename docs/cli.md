@@ -184,6 +184,7 @@ Checks:
 - Python version (3.10+ required)
 - Vesper install (importable)
 - PyWebView install
+- System WebView backend — resolves the backend pywebview will actually use (GTK/WebKit2, Cocoa/WKWebView, or WinForms/WebView2). PyWebView is pure Python, so installing it proves nothing about whether a usable native WebView exists; this check catches a missing GTK, PyObjC, or WebView2 runtime before it fails at `app.run()`. On Windows it also fails when pywebview silently degrades to the legacy MSHTML renderer.
 - Node.js version (≥ 18, for framework templates)
 - Package manager availability (from `vesper.toml` or defaults to npm)
 - `vesper.toml` schema (valid keys and values)

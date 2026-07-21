@@ -356,6 +356,16 @@ from vesper.commands.doctor import _SIGN_VALID_KEYS, _SIGN_VALID_VALUES, doctor
 from unittest.mock import MagicMock, patch as _patch
 
 
+@pytest.fixture(autouse=True)
+def stub_webview_backend():
+    """Keep doctor() off the real GTK/PyObjC/pythonnet probe — see tests/test_doctor.py."""
+    with _patch(
+        "vesper.commands.doctor._detect_webview_backend",
+        return_value=(True, "WebView backend available: stub", None),
+    ):
+        yield
+
+
 def _doctor_env(tmp_path, monkeypatch, toml_content):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "app.py").write_text("")

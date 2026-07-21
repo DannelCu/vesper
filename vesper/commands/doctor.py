@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import importlib
+import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -26,6 +29,108 @@ _SIGN_VALID_KEYS = {"identity", "entitlements", "notarize", "apple_id", "team_id
 _SIGN_VALID_VALUES: dict[str, set[str]] = {
     "notarize": {"true", "false"},
 }
+
+
+_BACKEND_LABELS = {
+    "gtk": "GTK / WebKit2",
+    "qt": "Qt / QtWebEngine",
+    "cocoa": "Cocoa / WKWebView",
+    "winforms": "WinForms / WebView2",
+}
+
+_LINUX_BACKEND_FIX = (
+    "Install the system WebView runtime, then recreate your venv with "
+    "--system-site-packages (the GTK bindings are a distro package, not a pip package). "
+    "Debian/Ubuntu: sudo apt install python3-gi gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0. "
+    "Fedora: sudo dnf install python3-gobject webkit2gtk4.1. "
+    "Arch: sudo pacman -S python-gobject webkit2gtk-4.1. "
+    "Alternative: pip install pyqt5 pyqtwebengine"
+)
+
+_MACOS_BACKEND_FIX = (
+    "Install the Cocoa bindings: pip install pyobjc-core pyobjc-framework-Cocoa "
+    "pyobjc-framework-WebKit. If they are already installed, your Python is likely not a "
+    "framework build - use python.org, Xcode, or `brew install python-tk` style framework "
+    "Python, since Cocoa windows require one."
+)
+
+_WINDOWS_BACKEND_FIX = (
+    "Install pythonnet (pip install pythonnet) and the Microsoft Edge WebView2 Runtime "
+    "from https://developer.microsoft.com/microsoft-edge/webview2/"
+)
+
+
+def _candidate_backends() -> list[str]:
+    """
+    Backend import order pywebview will use on this platform.
+
+    Mirrors webview.guilib.initialize() without importing pywebview itself, so the
+    check stays cheap and never constructs a GUI application.
+    """
+
+    forced = os.environ.get("PYWEBVIEW_GUI", "").lower()
+    if not forced and "KDE_FULL_SESSION" in os.environ:
+        forced = "qt"
+
+    system = platform.system()
+
+    if system == "Darwin":
+        return ["qt", "cocoa"] if forced == "qt" else ["cocoa", "qt"]
+    if system in ("Linux", "OpenBSD"):
+        return ["qt", "gtk"] if forced == "qt" else ["gtk", "qt"]
+    if system == "Windows":
+        return ["qt", "winforms"] if forced == "qt" else ["winforms"]
+
+    return []
+
+
+def _detect_webview_backend() -> tuple[bool, str, str | None]:
+    """
+    Resolve the WebView backend pywebview would actually use.
+
+    pywebview is a pure-Python package, so `pip install pywebview` succeeding says
+    nothing about whether a usable native WebView exists. Importing the backend module
+    is what surfaces a missing GTK/WebKit, PyObjC, or pythonnet install - which would
+    otherwise only fail at app.run(), long after doctor reported everything green.
+    """
+
+    system = platform.system()
+
+    if system not in ("Darwin", "Linux", "OpenBSD", "Windows"):
+        return False, f"Unsupported platform: {system or 'unknown'}", None
+
+    fix = {
+        "Darwin": _MACOS_BACKEND_FIX,
+        "Linux": _LINUX_BACKEND_FIX,
+        "OpenBSD": _LINUX_BACKEND_FIX,
+        "Windows": _WINDOWS_BACKEND_FIX,
+    }[system]
+
+    for backend in _candidate_backends():
+        try:
+            module = importlib.import_module(f"webview.platforms.{backend}")
+        except BaseException:
+            # gi.require_version raises ValueError, pythonnet can raise beyond
+            # ImportError, and a broken install can raise almost anything. A probe
+            # must never take doctor down with it.
+            continue
+
+        label = _BACKEND_LABELS.get(backend, backend)
+
+        # On Windows pywebview silently degrades to the legacy MSHTML (IE11) renderer
+        # when the WebView2 runtime is absent. It "works", but modern CSS and JS break,
+        # so surface it as a failure rather than a passing check.
+        if backend == "winforms" and getattr(module, "renderer", None) == "mshtml":
+            return (
+                False,
+                "WebView backend: WinForms fell back to MSHTML (legacy IE11 renderer)",
+                "Install the Microsoft Edge WebView2 Runtime from "
+                "https://developer.microsoft.com/microsoft-edge/webview2/",
+            )
+
+        return True, f"WebView backend available: {label}", None
+
+    return False, "WebView backend: none available", fix
 
 
 def doctor() -> None:
@@ -66,6 +171,11 @@ def doctor() -> None:
         "Run `pip install pywebview` or reinstall Vesper with `pip install -e .`."
     )
     has_failures = has_failures or not pywebview_ok
+
+    if pywebview_ok:
+        backend_ok, backend_message, backend_fix = _detect_webview_backend()
+        print_check(backend_ok, backend_message, backend_fix)
+        has_failures = has_failures or not backend_ok
 
     node_path = shutil.which("node")
     node_version: str | None = None
