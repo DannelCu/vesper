@@ -1,10 +1,75 @@
 """Tests for native file dialog support."""
+import enum
+import types
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from vesper import App
-from vesper.core.window import Window, _to_file_types
+from vesper.core import window as window_mod
+from vesper.core.window import Window, _file_dialog_const, _to_file_types
+
+
+# ── _file_dialog_const — PyWebView version tolerance ──────────────────────────
+
+
+class _FakeFileDialog(enum.IntEnum):
+    OPEN = 10
+    FOLDER = 20
+    SAVE = 30
+
+
+def test_file_dialog_const_prefers_the_enum(monkeypatch):
+    """PyWebView 5: the enum exists, so the deprecated name is never touched."""
+    modern = types.SimpleNamespace(FileDialog=_FakeFileDialog)
+    monkeypatch.setattr(window_mod, "webview", modern)
+
+    assert _file_dialog_const("OPEN", "OPEN_DIALOG") is _FakeFileDialog.OPEN
+    assert _file_dialog_const("SAVE", "SAVE_DIALOG") is _FakeFileDialog.SAVE
+    assert _file_dialog_const("FOLDER", "FOLDER_DIALOG") is _FakeFileDialog.FOLDER
+
+
+def test_file_dialog_const_falls_back_to_legacy_names(monkeypatch):
+    """PyWebView 4: no FileDialog enum at all, only the module-level constants."""
+    legacy = types.SimpleNamespace(OPEN_DIALOG=10, FOLDER_DIALOG=20, SAVE_DIALOG=30)
+    assert not hasattr(legacy, "FileDialog")
+    monkeypatch.setattr(window_mod, "webview", legacy)
+
+    assert _file_dialog_const("OPEN", "OPEN_DIALOG") == 10
+    assert _file_dialog_const("SAVE", "SAVE_DIALOG") == 30
+    assert _file_dialog_const("FOLDER", "FOLDER_DIALOG") == 20
+
+
+def test_file_dialog_const_falls_back_when_enum_lacks_the_member(monkeypatch):
+    """A FileDialog that exists but is missing a member must not resolve to None."""
+    partial = types.SimpleNamespace(
+        FileDialog=types.SimpleNamespace(OPEN=10), SAVE_DIALOG=30
+    )
+    monkeypatch.setattr(window_mod, "webview", partial)
+
+    assert _file_dialog_const("SAVE", "SAVE_DIALOG") == 30
+
+
+def test_resolved_constants_are_not_none():
+    """Whatever PyWebView is installed, all three resolved at import time."""
+    assert window_mod._FD_OPEN is not None
+    assert window_mod._FD_SAVE is not None
+    assert window_mod._FD_FOLDER is not None
+
+
+def test_dialogs_pass_the_resolved_constants():
+    """The deprecated spelling must not reach create_file_dialog."""
+    w = Window()
+    w.window = MagicMock()
+    w.window.create_file_dialog.return_value = ("/f.txt",)
+
+    for call, expected in (
+        (w.open_dialog, window_mod._FD_OPEN),
+        (w.save_dialog, window_mod._FD_SAVE),
+        (w.pick_folder, window_mod._FD_FOLDER),
+    ):
+        call()
+        assert w.window.create_file_dialog.call_args[0][0] is expected
 
 
 # ── _to_file_types ────────────────────────────────────────────────────────────
@@ -60,79 +125,61 @@ def test_open_dialog_raises_when_no_window():
         w.open_dialog()
 
 
-def test_open_dialog_returns_list_of_paths(monkeypatch):
+def test_open_dialog_returns_list_of_paths():
     w = Window()
     mock_win = MagicMock()
     mock_win.create_file_dialog.return_value = ("/home/user/a.pdf", "/home/user/b.pdf")
     w.window = mock_win
 
-    import webview
-    monkeypatch.setattr(webview, "OPEN_DIALOG", 10)
-
     result = w.open_dialog(multiple=True)
     assert result == ["/home/user/a.pdf", "/home/user/b.pdf"]
 
 
-def test_open_dialog_returns_none_on_cancel(monkeypatch):
+def test_open_dialog_returns_none_on_cancel():
     w = Window()
     mock_win = MagicMock()
     mock_win.create_file_dialog.return_value = None
     w.window = mock_win
 
-    import webview
-    monkeypatch.setattr(webview, "OPEN_DIALOG", 10)
-
     assert w.open_dialog() is None
 
 
-def test_open_dialog_returns_none_on_empty_tuple(monkeypatch):
+def test_open_dialog_returns_none_on_empty_tuple():
     w = Window()
     mock_win = MagicMock()
     mock_win.create_file_dialog.return_value = ()
     w.window = mock_win
 
-    import webview
-    monkeypatch.setattr(webview, "OPEN_DIALOG", 10)
-
     assert w.open_dialog() is None
 
 
-def test_open_dialog_passes_multiple_flag(monkeypatch):
+def test_open_dialog_passes_multiple_flag():
     w = Window()
     mock_win = MagicMock()
     mock_win.create_file_dialog.return_value = ("/f.txt",)
     w.window = mock_win
-
-    import webview
-    monkeypatch.setattr(webview, "OPEN_DIALOG", 10)
 
     w.open_dialog(multiple=True)
     _, kwargs = mock_win.create_file_dialog.call_args
     assert kwargs["allow_multiple"] is True
 
 
-def test_open_dialog_passes_filters(monkeypatch):
+def test_open_dialog_passes_filters():
     w = Window()
     mock_win = MagicMock()
     mock_win.create_file_dialog.return_value = ("/f.pdf",)
     w.window = mock_win
-
-    import webview
-    monkeypatch.setattr(webview, "OPEN_DIALOG", 10)
 
     w.open_dialog(filters=[{"name": "PDF", "extensions": ["pdf"]}])
     _, kwargs = mock_win.create_file_dialog.call_args
     assert kwargs["file_types"] == ("PDF (*.pdf)",)
 
 
-def test_open_dialog_passes_directory(monkeypatch):
+def test_open_dialog_passes_directory():
     w = Window()
     mock_win = MagicMock()
     mock_win.create_file_dialog.return_value = ("/f.txt",)
     w.window = mock_win
-
-    import webview
-    monkeypatch.setattr(webview, "OPEN_DIALOG", 10)
 
     w.open_dialog(directory="/home/user")
     _, kwargs = mock_win.create_file_dialog.call_args
@@ -148,39 +195,30 @@ def test_save_dialog_raises_when_no_window():
         w.save_dialog()
 
 
-def test_save_dialog_returns_string(monkeypatch):
+def test_save_dialog_returns_string():
     w = Window()
     mock_win = MagicMock()
     mock_win.create_file_dialog.return_value = ("/home/user/report.pdf",)
     w.window = mock_win
 
-    import webview
-    monkeypatch.setattr(webview, "SAVE_DIALOG", 20)
-
     result = w.save_dialog(filename="report.pdf")
     assert result == "/home/user/report.pdf"
 
 
-def test_save_dialog_returns_none_on_cancel(monkeypatch):
+def test_save_dialog_returns_none_on_cancel():
     w = Window()
     mock_win = MagicMock()
     mock_win.create_file_dialog.return_value = None
     w.window = mock_win
 
-    import webview
-    monkeypatch.setattr(webview, "SAVE_DIALOG", 20)
-
     assert w.save_dialog() is None
 
 
-def test_save_dialog_passes_filename(monkeypatch):
+def test_save_dialog_passes_filename():
     w = Window()
     mock_win = MagicMock()
     mock_win.create_file_dialog.return_value = ("/out.pdf",)
     w.window = mock_win
-
-    import webview
-    monkeypatch.setattr(webview, "SAVE_DIALOG", 20)
 
     w.save_dialog(filename="out.pdf")
     _, kwargs = mock_win.create_file_dialog.call_args
@@ -196,39 +234,30 @@ def test_pick_folder_raises_when_no_window():
         w.pick_folder()
 
 
-def test_pick_folder_returns_list(monkeypatch):
+def test_pick_folder_returns_list():
     w = Window()
     mock_win = MagicMock()
     mock_win.create_file_dialog.return_value = ("/home/user/docs",)
     w.window = mock_win
 
-    import webview
-    monkeypatch.setattr(webview, "FOLDER_DIALOG", 30)
-
     result = w.pick_folder()
     assert result == ["/home/user/docs"]
 
 
-def test_pick_folder_returns_none_on_cancel(monkeypatch):
+def test_pick_folder_returns_none_on_cancel():
     w = Window()
     mock_win = MagicMock()
     mock_win.create_file_dialog.return_value = None
     w.window = mock_win
 
-    import webview
-    monkeypatch.setattr(webview, "FOLDER_DIALOG", 30)
-
     assert w.pick_folder() is None
 
 
-def test_pick_folder_multiple(monkeypatch):
+def test_pick_folder_multiple():
     w = Window()
     mock_win = MagicMock()
     mock_win.create_file_dialog.return_value = ("/a", "/b")
     w.window = mock_win
-
-    import webview
-    monkeypatch.setattr(webview, "FOLDER_DIALOG", 30)
 
     result = w.pick_folder(multiple=True)
     assert result == ["/a", "/b"]
@@ -270,10 +299,7 @@ def test_dialog_commands_not_in_user_namespace():
 # ── IPC routes dialog commands ────────────────────────────────────────────────
 
 
-def test_ipc_routes_open_dialog(monkeypatch):
-    import webview
-    monkeypatch.setattr(webview, "OPEN_DIALOG", 10)
-
+def test_ipc_routes_open_dialog():
     app = App()
     mock_win = MagicMock()
     mock_win.create_file_dialog.return_value = ("/selected.pdf",)
@@ -289,10 +315,7 @@ def test_ipc_routes_open_dialog(monkeypatch):
     assert resp["result"] == ["/selected.pdf"]
 
 
-def test_ipc_routes_save_dialog(monkeypatch):
-    import webview
-    monkeypatch.setattr(webview, "SAVE_DIALOG", 20)
-
+def test_ipc_routes_save_dialog():
     app = App()
     mock_win = MagicMock()
     mock_win.create_file_dialog.return_value = ("/out/report.pdf",)
@@ -308,10 +331,7 @@ def test_ipc_routes_save_dialog(monkeypatch):
     assert resp["result"] == "/out/report.pdf"
 
 
-def test_ipc_dialog_returns_none_on_cancel(monkeypatch):
-    import webview
-    monkeypatch.setattr(webview, "OPEN_DIALOG", 10)
-
+def test_ipc_dialog_returns_none_on_cancel():
     app = App()
     mock_win = MagicMock()
     mock_win.create_file_dialog.return_value = None

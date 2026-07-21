@@ -27,6 +27,12 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   job, headless under xvfb on Linux.
 
 ### Fixed
+- **PyWebView deprecation warning on every dialog.** `open_dialog`, `save_dialog` and
+  `pick_folder` used `webview.OPEN_DIALOG` / `SAVE_DIALOG` / `FOLDER_DIALOG`, which
+  PyWebView 5 deprecated in favour of the `FileDialog` enum and which log
+  `[pywebview] OPEN_DIALOG is deprecated ...` on each call. The constants are now
+  resolved once at import, preferring `FileDialog` and falling back to the old names
+  so `pywebview>=4.0` installations keep working.
 - **`app.quit()` / `vesper.quit()` could hang the process at exit.** The window was
   destroyed synchronously inside the IPC command handler, so PyWebView was left
   delivering that command's return value through `evaluate_js` to a WebView that no

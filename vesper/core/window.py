@@ -8,6 +8,31 @@ import webview
 from vesper.core.config import WindowConfig
 from vesper.core.ipc import IPC
 
+
+def _file_dialog_const(name: str, legacy: str):
+    """
+    Resolve one PyWebView file-dialog constant, new spelling first.
+
+    PyWebView 5 moved these onto a ``FileDialog`` enum and deprecated the
+    module-level names, which print a warning to stdout on *every* dialog. The
+    old names still work, and pyproject allows ``pywebview>=4.0``, where the enum
+    does not exist — so both spellings have to be supported.
+
+    Resolved once at import rather than per call: the answer cannot change while
+    the process runs, and a per-call getattr would put the fallback on the hot
+    path of every dialog.
+    """
+    enum = getattr(webview, "FileDialog", None)
+    value = getattr(enum, name, None)
+    if value is None:
+        value = getattr(webview, legacy)  # pywebview < 5
+    return value
+
+
+_FD_OPEN = _file_dialog_const("OPEN", "OPEN_DIALOG")
+_FD_SAVE = _file_dialog_const("SAVE", "SAVE_DIALOG")
+_FD_FOLDER = _file_dialog_const("FOLDER", "FOLDER_DIALOG")
+
 # Maps Vesper hook names → PyWebView window.events attribute names
 _HOOK_TO_EVENT: dict[str, str] = {
     "close":    "closed",
@@ -296,7 +321,7 @@ class Window:
         if self.window is None:
             raise RuntimeError("Cannot open dialog: window is not created yet.")
         result = self.window.create_file_dialog(
-            webview.OPEN_DIALOG,
+            _FD_OPEN,
             directory=directory,
             allow_multiple=multiple,
             file_types=_to_file_types(filters),
@@ -323,7 +348,7 @@ class Window:
         if self.window is None:
             raise RuntimeError("Cannot open dialog: window is not created yet.")
         result = self.window.create_file_dialog(
-            webview.SAVE_DIALOG,
+            _FD_SAVE,
             directory=directory,
             save_filename=filename,
             file_types=_to_file_types(filters),
@@ -370,7 +395,7 @@ class Window:
         if self.window is None:
             raise RuntimeError("Cannot open dialog: window is not created yet.")
         result = self.window.create_file_dialog(
-            webview.FOLDER_DIALOG,
+            _FD_FOLDER,
             directory=directory,
             allow_multiple=multiple,
         )
