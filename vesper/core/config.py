@@ -19,6 +19,12 @@ class WindowConfig:
     on_top: bool = False
     frontend: str = "frontend/index.html"
 
+    # Screen position. None means "let the backend place the window", which is the
+    # default centring. Negative values are legitimate: a monitor arranged to the
+    # left of or above the primary one has negative coordinates.
+    x: int | None = None
+    y: int | None = None
+
     def __post_init__(self) -> None:
         self.title = self._validate_non_empty_string("title", self.title)
         self.width = self._validate_positive_integer("width", self.width)
@@ -28,6 +34,18 @@ class WindowConfig:
         self.minimized = self._validate_boolean("minimized", self.minimized)
         self.on_top = self._validate_boolean("on_top", self.on_top)
         self.frontend = self._validate_frontend(self.frontend)
+        self.x = self._validate_optional_integer("x", self.x)
+        self.y = self._validate_optional_integer("y", self.y)
+
+    @staticmethod
+    def _validate_optional_integer(field_name: str, value: int | None) -> int | None:
+        if value is None:
+            return None
+
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise TypeError(f"{field_name} must be an integer or None.")
+
+        return value
 
     @staticmethod
     def _validate_non_empty_string(field_name: str, value: str) -> str:

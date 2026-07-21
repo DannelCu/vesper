@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 from vesper.core.config import WindowConfig
 from vesper.core.logging import configure as configure_logging
+from vesper.core.logging import get_logger
 from vesper.core.module import Container
 from vesper.core.registry import CommandRegistry
 from vesper.core.window import Window, WindowHandle, _HOOK_TO_EVENT
@@ -11,6 +12,17 @@ from vesper.core.ipc import IPC
 
 _VALID_HOOKS: frozenset[str] = frozenset(_HOOK_TO_EVENT) | {"deeplink"}
 _WEB_SCHEMES = ("http://", "https://", "ftp://", "ftps://")
+
+
+logger = get_logger("app")
+
+
+def _extract_deeplink(argv: list[str]) -> str | None:
+    """Find a custom-scheme URL in argv, ignoring ordinary web URLs."""
+    for arg in argv:
+        if "://" in arg and not arg.startswith(_WEB_SCHEMES):
+            return arg
+    return None
 
 # How long App.quit() waits before destroying the window. PyWebView answers every IPC
 # call by delivering the return value through evaluate_js on a non-daemon thread; that
@@ -50,6 +62,8 @@ class App:
         update_url: str = "",
         plugins: list | None = None,
         fs_scope: list[str] | str | None = None,
+        single_instance: bool = False,
+        remember_window: bool = False,
     ) -> None:
         """
         Initialize the Vesper application core systems.
@@ -76,6 +90,13 @@ class App:
             root_module:
                 Optional root @Module class. All modules imported by it are
                 registered automatically, so app.py stays minimal.
+            single_instance:
+                Allow only one running copy. A second launch forwards its argv to
+                the first — so a deep link reaches the running window — and exits.
+                Opt-in because it costs a loopback listener and a lock file.
+            remember_window:
+                Restore the window's size and position from the previous run, and
+                save them on close.
         """
 
         self.debug = debug
@@ -104,11 +125,16 @@ class App:
         self._global_providers: dict = {}
 
         # Detect deep link URL passed via command-line argument
-        self._deeplink_url: str | None = None
-        for _arg in _sys.argv[1:]:
-            if "://" in _arg and not _arg.startswith(_WEB_SCHEMES):
-                self._deeplink_url = _arg
-                break
+        self._deeplink_url: str | None = _extract_deeplink(_sys.argv[1:])
+
+        self._remember_window = remember_window
+        self._single_instance = None
+        if single_instance:
+            from vesper.core.single_instance import SingleInstance
+
+            self._single_instance = SingleInstance(
+                self.config.title, on_message=self._on_second_instance
+            )
 
         # Built-in dialog commands — use vesper: prefix so sync-types skips them
         def _open_dialog(multiple: bool = False, filters=None, directory: str = ""):
@@ -509,6 +535,86 @@ class App:
         """
         self.window.emit(event, payload)
 
+    def _restore_window_state(self) -> None:
+        """Apply stored geometry to the window config before the window is created."""
+        try:
+            from vesper.core import window_state
+
+            screens = self._safe_list_screens()
+            geometry = window_state.restorable(self.config.title, screens)
+            if not geometry:
+                return
+
+            self.config.width = geometry["width"]
+            self.config.height = geometry["height"]
+
+            # x/y are absent when the stored position was off-screen; leaving the
+            # config untouched keeps the backend's default centring.
+            if "x" in geometry and "y" in geometry:
+                self.config.x = geometry["x"]
+                self.config.y = geometry["y"]
+        except Exception:
+            logger.exception("Could not restore window state; using defaults")
+
+    def _save_window_state(self) -> None:
+        """Persist the window's current geometry. Never raises."""
+        try:
+            from vesper.core import window_state
+
+            geometry = self.window.get_geometry()
+            if geometry:
+                window_state.save(self.config.title, geometry)
+        except Exception:
+            logger.exception("Could not save window state")
+
+    def _safe_list_screens(self) -> list:
+        """Screen list, or empty when the backend cannot report one yet."""
+        try:
+            return self.window.list_screens()
+        except Exception:
+            # Called before the GUI backend is up, so this is expected rather than
+            # exceptional; window_state treats an empty list as "cannot verify".
+            logger.debug("Screen list unavailable while restoring window state")
+            return []
+
+    def _fire_deeplink(self, url: str) -> None:
+        """
+        Deliver a deep link to the app.
+
+        Used both for a URL present in argv at startup and for one forwarded by a
+        second instance while this one is already running, so a link behaves the same
+        either way.
+        """
+        self._deeplink_url = url
+
+        for fn in self._hooks.get("deeplink", []):
+            try:
+                fn(url)
+            except Exception:
+                # One bad handler must not stop the others or kill the listener
+                # thread this may be running on.
+                logger.exception("Deep link handler %r failed", fn)
+
+        try:
+            self.window.emit("deeplink", {"url": url})
+        except Exception:
+            logger.exception("Failed to emit deeplink event to the frontend")
+
+    def _on_second_instance(self, argv: list[str]) -> None:
+        """
+        Handle argv forwarded by another copy of this app.
+
+        Runs on the single-instance listener thread. Raising here would kill that
+        thread and silently stop the app from accepting any further deep links, so
+        failures are logged instead.
+        """
+        try:
+            url = _extract_deeplink(argv[1:] if argv else [])
+            if url:
+                self._fire_deeplink(url)
+        except Exception:
+            logger.exception("Failed handling a second instance launch")
+
     def quit(self) -> None:
         """
         Destroy the main window and stop the application.
@@ -558,19 +664,25 @@ class App:
         Start the Vesper application.
 
         This initializes the window and starts the IPC loop.
+
+        Returns immediately without opening a window when ``single_instance`` is
+        enabled and another copy is already running; that copy has been handed this
+        process's argv by then.
         """
+
+        if self._single_instance is not None and not self._single_instance.acquire():
+            logger.debug("Another instance is running; handed it our arguments")
+            return
+
+        if self._remember_window:
+            self._restore_window_state()
 
         # Wire deep link: fire Python callbacks and emit JS event on first load.
         if self._deeplink_url:
             _url = self._deeplink_url
-            _app = self
-
-            def _fire_deeplink():
-                for fn in _app._hooks.get("deeplink", []):
-                    fn(_url)
-                _app.window.emit("deeplink", {"url": _url})
-
-            self._hooks.setdefault("loaded", []).append(_fire_deeplink)
+            self._hooks.setdefault("loaded", []).append(
+                lambda: self._fire_deeplink(_url)
+            )
 
         self.window.create(
             ipc_handler=self.ipc,
@@ -587,6 +699,14 @@ class App:
         try:
             self.window.show()
         finally:
+            # Geometry has to be read before the window is torn down, and the window
+            # is already gone by the time show() returns on some backends — so the
+            # save is driven by the "closing" hook where available and this is the
+            # fallback for a clean exit.
+            if self._remember_window:
+                self._save_window_state()
             if self._tray is not None:
                 self._tray.stop()
             self.ipc.close()
+            if self._single_instance is not None:
+                self._single_instance.release()

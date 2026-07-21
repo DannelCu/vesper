@@ -192,6 +192,9 @@ class Window:
             minimized=config.minimized,
             on_top=config.on_top,
             hidden=splash is not None,
+            # Only pass a position when one was set; PyWebView centres the window
+            # when x/y are None, which is what a fresh app should do.
+            **({"x": config.x, "y": config.y} if config.x is not None and config.y is not None else {}),
         )
 
         if hooks:
@@ -385,6 +388,27 @@ class Window:
         """Destroy the main window and stop the event loop."""
         if self.window is not None:
             self.window.destroy()
+
+    def get_geometry(self) -> dict[str, int] | None:
+        """
+        Current size and position, or None when the window is gone.
+
+        Read while the window still exists — after it is destroyed the backend either
+        returns stale values or raises, which is why callers grab this before
+        teardown rather than after.
+        """
+        if self.window is None:
+            return None
+
+        try:
+            return {
+                "width": int(self.window.width),
+                "height": int(self.window.height),
+                "x": int(self.window.x),
+                "y": int(self.window.y),
+            }
+        except (AttributeError, TypeError, ValueError):
+            return None
 
     def list_screens(self) -> list[dict]:
         """Return info for all connected screens."""
