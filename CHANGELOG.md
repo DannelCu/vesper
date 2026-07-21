@@ -9,6 +9,42 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **`vesper doctor` — system WebView backend check.** Resolves the backend pywebview
+  will actually use (GTK/WebKit2, Cocoa/WKWebView, WinForms/WebView2) by mirroring
+  `webview.guilib` import order, honoring `PYWEBVIEW_GUI` and `KDE_FULL_SESSION`.
+  pywebview is pure Python, so its presence never implied a usable native WebView —
+  doctor previously reported all-green on machines where `app.run()` could not open a
+  window. Failures print a platform-specific install command. On Windows, a silent
+  fallback to the legacy MSHTML (IE11) renderer is now reported as a failure instead of
+  surfacing later as broken CSS and JavaScript.
+- **`CONTRIBUTING.md`** — development setup, per-platform WebView prerequisites, editable
+  install of the framework and all seven plugins, test conventions, and repository layout.
+- **Window smoke test (`scripts/smoke_window.py`)** — opens a real native window, has the
+  frontend invoke a Python command over IPC, and verifies the returned value. The unit
+  suite mocks PyWebView, so it passed on machines that could not open a window at all;
+  this closes that gap. CI runs it on Linux, macOS, and Windows as a separate `smoke`
+  job, headless under xvfb on Linux.
+
+### Fixed
+- **`app.quit()` / `vesper.quit()` could hang the process at exit.** The window was
+  destroyed synchronously inside the IPC command handler, so PyWebView was left
+  delivering that command's return value through `evaluate_js` to a WebView that no
+  longer existed. That call never returns, and because PyWebView runs it on a
+  non-daemon thread the interpreter could not shut down — the window closed but the
+  process stayed alive, leaving a zombie behind for a packaged app. `App.quit()` now
+  defers the teardown by `_QUIT_DELAY_SECONDS` so the reply lands first, and
+  `vesper:app:quit` routes through it. `Window.quit()` is unchanged and still destroys
+  synchronously for callers with no pending IPC reply. Reproduced at a 62% failure
+  rate (5/8 runs) under Xvfb before the fix, 0/8 after.
+
+### Changed
+- **Docs — system WebView requirements.** `README.md` and `docs/getting-started.md` now
+  document the OS WebView runtime as a first-class requirement, including the Linux
+  `--system-site-packages` venv requirement (`python3-gi` is a distribution package that
+  pip cannot install) and macOS framework-build caveats. `docs/getting-started.md` gains
+  a troubleshooting table for the common startup failures.
+
 ### Planned
 - GitHub Actions CI — Windows + macOS + Linux test matrix
 - PyPI publish — `vesper` and all 7 plugins

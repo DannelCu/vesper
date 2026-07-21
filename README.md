@@ -140,7 +140,18 @@ class UserService:
 |---|---|---|
 | Python | 3.10+ | Always |
 | pip | any | Always |
+| System WebView | see below | Always |
 | Node.js | 18+ | React / Vue / Svelte templates only |
+
+Vesper renders in the OS WebView instead of bundling a browser, so that runtime comes from the system rather than from pip:
+
+| Platform | WebView runtime |
+|---|---|
+| macOS | Built in — nothing to install |
+| Windows | [Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) (preinstalled on Windows 11) |
+| Linux | GTK + WebKit2GTK — `sudo apt install python3-gi gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0` |
+
+On Linux, create virtual environments with `--system-site-packages` so the venv can see the GTK bindings, which pip cannot install. Full details in [Getting Started](docs/getting-started.md#system-webview); run `vesper doctor` to verify your setup.
 
 ---
 
@@ -273,6 +284,12 @@ my-app/
 
 ---
 
+## Contributing
+
+Setup instructions for working on the framework itself — per-platform prerequisites, editable installs, and test conventions — are in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+---
+
 ## License
 
-MIT © Dannel LLC
+MIT © DannelCu

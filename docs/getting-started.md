@@ -9,6 +9,43 @@ This guide walks you through installing Vesper, creating your first project, and
 - **Python 3.10+** — `python --version` to confirm
 - **pip** — included with all modern Python installations
 - **Node.js 18+** — only required for React, Vue, or Svelte templates
+- **A system WebView runtime** — see below
+
+### System WebView
+
+Vesper renders your UI in the operating system's native WebView rather than bundling a
+browser. That runtime comes from the OS, not from pip, so `pip install vesper` can
+succeed on a machine that still cannot open a window.
+
+**macOS** — nothing to install. The Cocoa/WKWebView backend ships with the system.
+
+**Windows** — needs the [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/),
+preinstalled on Windows 11 and on up-to-date Windows 10.
+
+**Linux** — install GTK and WebKit2GTK, including the GObject introspection bindings:
+
+```bash
+# Debian / Ubuntu
+sudo apt install python3-gi gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0
+
+# Fedora
+sudo dnf install python3-gobject webkit2gtk4.1
+
+# Arch
+sudo pacman -S python-gobject webkit2gtk-4.1
+```
+
+> **Using a virtual environment on Linux?** Create it with `--system-site-packages`:
+>
+> ```bash
+> python3 -m venv --system-site-packages .venv
+> ```
+>
+> `python3-gi` is a distribution package installed into the system `site-packages`, and
+> pip cannot provide it. A default venv is isolated from those packages, so the app
+> fails at startup with `ModuleNotFoundError: No module named 'gi'`.
+
+Run `vesper doctor` at any point to confirm which backend resolved on your machine.
 
 ---
 
@@ -258,7 +295,18 @@ The default bundler is PyInstaller. Nuitka (selected at `vesper init` time) prod
 vesper doctor
 ```
 
-Checks Python version, Vesper install, PyWebView, Node.js (if needed), package manager availability, `vesper.toml` validity, entrypoint presence, frontend structure, and whether the SDK script tag is present in `index.html`.
+Checks Python version, Vesper install, PyWebView, the system WebView backend, Node.js (if needed), package manager availability, `vesper.toml` validity, entrypoint presence, frontend structure, and whether the SDK script tag is present in `index.html`.
+
+Every failed check prints a `Fix:` line with the command to run.
+
+Common failures:
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `ModuleNotFoundError: No module named 'gi'` | Linux venv isolated from system GTK bindings | Recreate the venv with `--system-site-packages` |
+| `WebView backend: none available` | System WebView runtime not installed | See [System WebView](#system-webview) above |
+| `WinForms fell back to MSHTML` | WebView2 Runtime missing on Windows — the app runs on the legacy IE11 renderer and modern CSS/JS break | Install the [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) |
+| Window opens behind other apps on macOS, or never takes focus | Python is not a framework build | Use python.org, Xcode, or Homebrew Python; for pyenv, build with `PYTHON_CONFIGURE_OPTS="--enable-framework"` |
 
 ---
 
