@@ -156,7 +156,9 @@ Vesper renders in the OS WebView instead of bundling a browser, so that runtime 
 | Windows | [Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) (preinstalled on Windows 11) |
 | Linux | GTK + WebKit2GTK — `sudo apt install python3-gi gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0` |
 
-On Linux, create virtual environments with `--system-site-packages` so the venv can see the GTK bindings, which pip cannot install. Full details in [Getting Started](docs/getting-started.md#system-webview); run `vesper doctor` to verify your setup.
+On Linux, create virtual environments with `--system-site-packages` so the venv can see the GTK bindings, which pip cannot install. Full details in [Platform Requirements](docs/platform-requirements.md); run `vesper doctor` to verify your setup.
+
+Everything beyond the WebView is optional and degrades to a no-op when absent — see [Optional Features](docs/optional-features.md) for the per-platform matrix.
 
 ---
 
@@ -250,6 +252,8 @@ my-app/
 | Guide | Description |
 |---|---|
 | [Getting Started](docs/getting-started.md) | Install, create, run, and build your first app |
+| [Platform Requirements](docs/platform-requirements.md) | The native WebView each OS needs, and how to install it |
+| [Optional Features](docs/optional-features.md) | What each optional backend needs, and what happens without it |
 | [CLI Reference](docs/cli.md) | All CLI commands with flags and examples |
 | [Project Config](docs/project-config.md) | `vesper.toml` keys, sections, and defaults |
 | [IPC](docs/ipc.md) | How the Python ↔ JavaScript bridge works |

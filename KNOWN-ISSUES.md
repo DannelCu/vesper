@@ -130,6 +130,39 @@ return `False` and log once.
 
 ---
 
+## The text clipboard raises on Linux without `xclip`, unlike everything else
+
+`clipboard.read()` and `clipboard.write()` let `FileNotFoundError` escape when
+`xclip` is not installed. Every other optional backend degrades to a no-op, and the
+*image* clipboard sitting right beside it returns `None` for exactly this case.
+
+Found while writing [Optional Features](docs/optional-features.md): the table claimed
+a no-op, and executing the code showed otherwise.
+
+Left as-is for now because changing it changes an API's contract — a caller today can
+distinguish "no xclip" from "empty clipboard", and silently returning `""` would take
+that away. `vesper doctor` and `vesper.capabilities()` now both report the missing
+backend, which was the more urgent gap.
+
+**What would change it.** Deciding that consistency wins, and returning `""` with a
+debug log like `read_image()` does.
+
+---
+
+## Preflight only covers the tray
+
+`App._preflight()` warns at startup when a configured feature's backend is missing,
+but the tray is the only feature it can check.
+
+`power_events` has no entry in `capabilities.probe()` — its backend is jeepney, which
+is not one of the eight capabilities probed — and badges are never declared on the
+`App` at all, so there is no configuration to compare against.
+
+Adding a `power_events` capability would fix the first; the second needs the badge to
+become something the app declares rather than calls ad hoc.
+
+---
+
 ## `app.quit()` uses a timing heuristic
 
 `App.quit()` defers the window teardown by `_QUIT_DELAY_SECONDS` (50 ms) so that a

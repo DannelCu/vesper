@@ -26,6 +26,17 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   this closes that gap. CI runs it on Linux, macOS, and Windows as a separate `smoke`
   job, headless under xvfb on Linux.
 
+- **Optional-dependency detection (`vesper.core.capabilities`).** One source of truth
+  for which optional backends exist on this machine, consumed by three places:
+  `vesper doctor` prints an "Optional features" section with the exact install command
+  for anything missing (as `[WARN]`, which does not affect its exit status); the
+  frontend can call `vesper.capabilities()` to hide a control whose backend is absent
+  instead of offering one that does nothing; and `App.run()` warns once at startup when
+  a configured feature's backend is missing. Detection is `shutil.which` and
+  `find_spec` only — no imports, no subprocesses, no new dependencies.
+- **[Platform Requirements](docs/platform-requirements.md)** and
+  **[Optional Features](docs/optional-features.md)** — the native WebView each OS
+  needs, and the contract for what happens when an optional backend is absent.
 - **Taskbar badges on Windows.** `badge.set_badge()` was a no-op there. Windows has no
   numeric badge, so the count is now rendered into an overlay icon with Pillow and
   applied via `ITaskbarList3::SetOverlayIcon`; `clear_badge()` / `set_badge(0)` pass a
