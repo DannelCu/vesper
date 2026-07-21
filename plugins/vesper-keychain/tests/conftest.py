@@ -1,5 +1,13 @@
 import pytest
-import keyring
+
+# Skip this plugin's tests instead of failing collection when the plugin is not
+# installed. pytest's testpaths include plugins/, so a bare `pytest` from a fresh
+# clone would otherwise abort the entire run — core tests included — on an import
+# error here.
+keyring = pytest.importorskip(
+    "keyring",
+    reason="vesper-keychain not installed — run: pip install -e plugins/vesper-keychain",
+)
 import keyring.backend
 from vesper.core.module import Container
 
