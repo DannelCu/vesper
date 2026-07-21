@@ -26,6 +26,12 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   this closes that gap. CI runs it on Linux, macOS, and Windows as a separate `smoke`
   job, headless under xvfb on Linux.
 
+- **Taskbar badges on Windows.** `badge.set_badge()` was a no-op there. Windows has no
+  numeric badge, so the count is now rendered into an overlay icon with Pillow and
+  applied via `ITaskbarList3::SetOverlayIcon`; `clear_badge()` / `set_badge(0)` pass a
+  null icon to remove it. Pillow stays optional (`vesper[tray]`) — without it the badge
+  returns `False` as before while progress keeps working. Counts above 99 draw as a
+  dot, and the accessible description carries the real number.
 - **System power events** — `App(power_events=True)` emits `power:suspend`,
   `power:resume`, `power:lock` and `power:unlock` to the frontend, listened to with
   `vesper.on("power:suspend", cb)`. Backed by NSWorkspace + distributed notifications

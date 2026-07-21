@@ -22,7 +22,7 @@ badge.clear_progress()
 | Platform | Progress | Badge |
 |---|---|---|
 | macOS | Dock tile percentage (needs pyobjc) | Dock tile count (needs pyobjc) |
-| Windows | `ITaskbarList3` (needs comtypes) | Not implemented |
+| Windows | `ITaskbarList3` (needs comtypes) | Overlay icon (needs comtypes + Pillow) |
 | Linux | Unity LauncherEntry (needs dbus) | Unity LauncherEntry |
 
 Every function returns a boolean and never raises. `False` means the platform could
@@ -40,9 +40,12 @@ Three caveats worth knowing before you rely on this:
   implemented by KDE Plasma and by GNOME with Dash-to-Dock, but not by plain GNOME.
 - **macOS has no dock progress bar.** `setProgress()` writes a percentage into the
   badge instead, which is visible in the same place.
-- **Windows badges are unimplemented.** An overlay icon must be a real `HICON`, so
-  rendering a number means generating a bitmap at runtime — more machinery than the
-  feature earns. It returns `False` rather than pretending.
+- **Windows has no numeric badge.** It has an *overlay icon*: a small image drawn
+  over the corner of the taskbar button. Vesper renders the count into one at runtime
+  with Pillow, which is optional — `pip install "vesper[tray]"`. Without Pillow
+  `setBadge()` returns `False` while progress, which needs no image, keeps working.
+  Counts above 99 are drawn as a plain dot, because three digits inside a 16px circle
+  is a smudge; the accessible description still carries the real number.
 
 Native dependencies are imported lazily inside each backend, so a missing pyobjc or
 comtypes degrades to a no-op instead of breaking `import vesper`. Unavailability is

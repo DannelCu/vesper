@@ -114,10 +114,201 @@ def test_windows_without_comtypes_degrades(monkeypatch):
         assert badge.set_progress(0.5) is False
 
 
-def test_windows_badge_is_unsupported(monkeypatch):
-    """Documented as unimplemented rather than silently pretending to work."""
+# ── Windows badge — the taskbar overlay icon ─────────────────────────────────
+#
+# Windows exposes no numeric badge, so the count is rendered into an icon and
+# applied with ITaskbarList3::SetOverlayIcon. Two halves are tested separately:
+# turning a number into a picture (real Pillow, no Windows), and handing a handle
+# to the taskbar (mocked comtypes and ctypes, no GUI).
+
+
+@pytest.fixture
+def fake_taskbar(monkeypatch):
+    """A mocked ITaskbarList3 bound to a window handle, on a faked win32."""
     monkeypatch.setattr(badge.sys, "platform", "win32")
+    monkeypatch.setattr(badge, "_win_overlay_icon", None)
+    taskbar = MagicMock()
+    monkeypatch.setattr(badge, "_windows_taskbar", lambda: taskbar)
+    monkeypatch.setattr(badge, "_windows_hwnd", lambda: 1234)
+    return taskbar
+
+
+def test_windows_badge_sets_an_overlay_icon(fake_taskbar, monkeypatch):
+    monkeypatch.setattr(badge, "_windows_badge_hicon", lambda n: 0xBEEF)
+
+    assert badge.set_badge(3) is True
+
+    hwnd, hicon, description = fake_taskbar.SetOverlayIcon.call_args[0]
+    assert hwnd == 1234
+    assert hicon == 0xBEEF, "the overlay must receive a real icon handle"
+    assert "3" in description
+
+
+def test_windows_clear_badge_passes_a_null_icon(fake_taskbar):
+    assert badge.clear_badge() is True
+
+    hwnd, hicon, _ = fake_taskbar.SetOverlayIcon.call_args[0]
+    assert hwnd == 1234
+    assert hicon is None, "a null icon is how the taskbar is told to remove it"
+
+
+def test_windows_zero_count_clears_the_overlay(fake_taskbar, monkeypatch):
+    monkeypatch.setattr(badge, "_windows_badge_hicon", lambda n: 0xBEEF)
+
+    assert badge.set_badge(0) is True
+
+    assert fake_taskbar.SetOverlayIcon.call_args[0][1] is None
+
+
+def test_windows_badge_describes_the_real_count_even_when_drawn_as_a_dot(
+    fake_taskbar, monkeypatch
+):
+    """The icon degrades to a dot above 99; the accessible name must not."""
+    monkeypatch.setattr(badge, "_windows_badge_hicon", lambda n: 0xBEEF)
+
+    badge.set_badge(1234)
+
+    assert "1234" in fake_taskbar.SetOverlayIcon.call_args[0][2]
+
+
+def test_windows_badge_degrades_when_the_icon_cannot_be_built(fake_taskbar, monkeypatch):
+    monkeypatch.setattr(badge, "_windows_badge_hicon", lambda n: None)
+
     assert badge.set_badge(3) is False
+    fake_taskbar.SetOverlayIcon.assert_not_called()
+
+
+def test_windows_badge_degrades_without_a_taskbar(monkeypatch):
+    monkeypatch.setattr(badge.sys, "platform", "win32")
+    monkeypatch.setattr(badge, "_windows_badge_hicon", lambda n: 0xBEEF)
+    monkeypatch.setattr(badge, "_windows_taskbar", lambda: None)
+
+    assert badge.set_badge(3) is False
+
+
+def test_windows_badge_releases_the_previous_icon(fake_taskbar, monkeypatch):
+    """Setting a new badge must not leak the handle the old one used."""
+    monkeypatch.setattr(badge, "_windows_badge_hicon", lambda n: 0xBEEF)
+    destroyed = []
+    fake_user32 = MagicMock()
+    fake_user32.DestroyIcon.side_effect = lambda h: destroyed.append(h)
+    monkeypatch.setattr(
+        badge, "_win_overlay_icon", 0xC0FFEE
+    )
+
+    with patch("ctypes.windll", MagicMock(user32=fake_user32), create=True):
+        badge.set_badge(3)
+
+    assert destroyed == [0xC0FFEE]
+    assert badge._win_overlay_icon == 0xBEEF
+
+
+def test_windows_badge_has_nothing_to_release_on_the_first_call(fake_taskbar, monkeypatch):
+    monkeypatch.setattr(badge, "_windows_badge_hicon", lambda n: 0xBEEF)
+    fake_user32 = MagicMock()
+
+    with patch("ctypes.windll", MagicMock(user32=fake_user32), create=True):
+        badge.set_badge(3)
+
+    fake_user32.DestroyIcon.assert_not_called()
+
+
+# ── Windows badge — rendering the number into an image ───────────────────────
+
+
+@pytest.mark.parametrize("count", [1, 9, 42, 99])
+def test_badge_image_is_a_square_rgba_icon(count):
+    image = badge._windows_badge_image(count)
+    assert image is not None
+    assert image.mode == "RGBA"
+    assert image.size == (badge._BADGE_PX, badge._BADGE_PX)
+
+
+def test_badge_image_corners_are_transparent():
+    """It is a circle on a taskbar button, so the corners must not be painted."""
+    image = badge._windows_badge_image(5)
+    assert image.getpixel((0, 0))[3] == 0
+    assert image.getpixel((badge._BADGE_PX - 1, badge._BADGE_PX - 1))[3] == 0
+
+
+def test_badge_image_centre_is_filled():
+    image = badge._windows_badge_image(5)
+    assert image.getpixel((badge._BADGE_PX // 2, 2))[3] > 0
+
+
+def _glyph_pixels(image):
+    """
+    Count pixels in the text colour.
+
+    Uses load() rather than getdata(): getdata() is deprecated in Pillow 12 and
+    its replacement does not exist in the Pillow 9 that pyproject still allows,
+    so this is the one accessor that works across the supported range.
+    """
+    pixels = image.load()
+    return sum(
+        1
+        for x in range(image.width)
+        for y in range(image.height)
+        if pixels[x, y][:3] == badge._BADGE_FG[:3]
+    )
+
+
+@pytest.mark.parametrize("count", [1, 42])
+def test_badge_image_draws_the_number(count):
+    """A digit means foreground-coloured pixels the empty dot does not have."""
+    assert _glyph_pixels(badge._windows_badge_image(count)) > 0
+
+
+def test_badge_image_above_the_maximum_is_a_plain_dot():
+    image = badge._windows_badge_image(badge._BADGE_MAX + 1)
+    assert image is not None
+    assert _glyph_pixels(image) == 0
+
+
+def test_badge_image_without_pillow_degrades(monkeypatch):
+    with patch.dict("sys.modules", {"PIL": None}):
+        assert badge._windows_badge_image(3) is None
+    assert "win-badge-pillow" in badge._warned
+
+
+def test_badge_hicon_loads_the_rendered_icon(monkeypatch, tmp_path):
+    """The .ico must reach LoadImageW with the load-from-file flags."""
+    fake_user32 = MagicMock()
+    fake_user32.LoadImageW.return_value = 0xABCD
+
+    with patch("ctypes.windll", MagicMock(user32=fake_user32), create=True):
+        assert badge._windows_badge_hicon(7) == 0xABCD
+
+    _, path, image_type, _, _, flags = fake_user32.LoadImageW.call_args[0]
+    assert path.endswith(".ico")
+    assert image_type == badge._IMAGE_ICON
+    assert flags & badge._LR_LOADFROMFILE
+
+
+def test_badge_hicon_is_none_when_windows_refuses(monkeypatch):
+    """LoadImageW returns 0 on failure, which must not become a bogus handle."""
+    fake_user32 = MagicMock()
+    fake_user32.LoadImageW.return_value = 0
+
+    with patch("ctypes.windll", MagicMock(user32=fake_user32), create=True):
+        assert badge._windows_badge_hicon(7) is None
+
+
+def test_badge_hicon_is_none_without_pillow():
+    with patch.dict("sys.modules", {"PIL": None}):
+        assert badge._windows_badge_hicon(7) is None
+
+
+def test_badge_ico_carries_both_taskbar_sizes(tmp_path):
+    """Windows picks a size by DPI, so the file has to offer more than one."""
+    from PIL import Image
+
+    image = badge._windows_badge_image(4)
+    path = tmp_path / "badge.ico"
+    image.save(path, format="ICO", sizes=badge._BADGE_ICO_SIZES)
+
+    with Image.open(path) as ico:
+        assert set(badge._BADGE_ICO_SIZES).issubset(set(ico.info["sizes"]))
 
 
 # ── shared behaviour ─────────────────────────────────────────────────────────

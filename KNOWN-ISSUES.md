@@ -22,6 +22,8 @@ progress bar appears.
 | `clipboard.read_image` / `write_image` | Encoding, data-URL handling, argv shape | A real clipboard round trip |
 | `fs.trash` (macOS) | Which command is built | Finder scripting needs automation permission, unavailable in CI |
 | `autostart` (Windows / macOS) | Currently mocked | See below — this one **could** be real |
+| `power` events (Linux) | Signal mapping, and a real D-Bus round trip for lock/unlock | A real suspend, which would suspend the runner |
+| `power` events (Windows / macOS) | Signal mapping only, against mocks | Whether the OS delivers the message at all |
 
 **Deferred:** `autostart` on Windows and macOS is tested against mocks, but both
 backends are just a registry value and a plist file. A GitHub runner can perform a
@@ -100,16 +102,22 @@ portable defence. Verified against xdg-open 1.2.1.
 
 ---
 
-## Taskbar badges are unimplemented on Windows
+## Taskbar badges on Windows are drawn, but unverified on real hardware
 
-`badge.set_badge()` returns `False` on Windows rather than doing anything.
+`badge.set_badge()` now renders the count into an icon with Pillow and applies it
+with `ITaskbarList3::SetOverlayIcon`. The rendering was inspected visually and the
+COM call is covered by mocked tests, but **no one has yet seen the overlay appear on
+a real Windows taskbar** — see the coverage table above for why CI cannot tell us.
 
-A taskbar overlay icon must be a real `HICON`, so displaying a number means
-generating a bitmap at runtime and converting it to an icon handle. That is
-considerably more machinery than the feature earns. Progress bars, which need no
-image, do work on Windows.
+Two specific things worth checking on a real machine:
 
-Documented in [Taskbar & Badges](docs/badge.md) so callers check the return value.
+- `_windows_hwnd()` uses `GetForegroundWindow()`, which is this app's window only
+  while it has focus. Setting a badge from a background thread while the user is in
+  another app would target the wrong window. The progress bar has always had this
+  same weakness; the badge inherits it.
+- The `.ico` is written to a temp file and loaded with `LoadImageW`, rather than
+  built through `CreateIconIndirect`. Simpler and harder to get subtly wrong, but it
+  does assume the temp directory is writable.
 
 ---
 
