@@ -88,6 +88,14 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 **Core (zero new dependencies)**
 
+- **`FsScope.set_roots()`** — narrow (or replace) the filesystem scope while the app
+  runs, for apps whose working folder the user picks: a folder picker, a recent-project
+  list. The commands registered on the `App` hold a reference to the scope *object*, so
+  updating it in place is what reaches them — assigning a new `FsScope` to
+  `app.fs_scope` never did. Also adds the `roots` and `allows_everything` properties.
+  `App(fs_scope=[])` is now a useful starting point: a scope with no roots refuses every
+  path, where `fs_scope=None` means "no scope, check nothing".
+
 - **DevTools in `vesper dev`.** The WebView inspector is now available by default in
   development on all three platforms (wired as `VESPER_DEVTOOLS` →
   `webview.start(debug=True)`), with `--no-devtools` to opt out. `vesper run` and

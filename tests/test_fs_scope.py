@@ -1,6 +1,8 @@
 """Tests for FsScope path allowlist."""
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from vesper.core.fs_scope import FsScope, FsScopeError
@@ -104,3 +106,94 @@ def test_app_without_fs_scope_allows_all(tmp_path):
     f.write_text("open")
     resp = app.ipc.handle({"id": 1, "command": "vesper:fs:read", "args": {"path": str(f)}})
     assert resp["ok"] is True
+
+
+# ── narrowing the scope at runtime ───────────────────────────────────────────
+#
+# An app whose working folder is chosen by the user cannot know its scope when
+# the App is constructed. The fs commands hold a reference to the FsScope
+# object, so updating that object is what reaches them — assigning a new one to
+# app.fs_scope would not. Found while building examples/media-vault, which has a
+# folder picker and had to enforce its own boundary on top.
+
+
+def test_set_roots_narrows_an_existing_scope(tmp_path):
+    wide = tmp_path
+    narrow = tmp_path / "library"
+    narrow.mkdir()
+    (narrow / "a.txt").write_text("x")
+    (wide / "b.txt").write_text("x")
+
+    scope = FsScope([str(wide)])
+    assert scope.check(str(wide / "b.txt"))          # allowed before
+
+    scope.set_roots([str(narrow)])
+
+    assert scope.check(str(narrow / "a.txt"))
+    with pytest.raises(FsScopeError):
+        scope.check(str(wide / "b.txt"))             # outside the new root
+
+
+def test_set_roots_reaches_a_scope_already_handed_out(tmp_path):
+    """The whole point: the object is shared, so holders see the change."""
+    first = tmp_path / "one"
+    second = tmp_path / "two"
+    first.mkdir()
+    second.mkdir()
+
+    scope = FsScope([str(first)])
+    holder = scope                                   # what a command captured
+
+    scope.set_roots([str(second)])
+
+    assert holder.check(str(second / "f.txt"))
+    with pytest.raises(FsScopeError):
+        holder.check(str(first / "f.txt"))
+
+
+def test_set_roots_accepts_a_bare_string(tmp_path):
+    scope = FsScope(None)
+    scope.set_roots(str(tmp_path))
+    assert scope.check(str(tmp_path / "x"))
+
+
+def test_set_roots_to_none_denies_everything(tmp_path):
+    scope = FsScope([str(tmp_path)])
+    scope.set_roots(None)
+
+    with pytest.raises(FsScopeError):
+        scope.check(str(tmp_path / "x"))
+
+
+def test_set_roots_can_restore_allow_all(tmp_path):
+    scope = FsScope([str(tmp_path)])
+    scope.set_roots("*")
+
+    assert scope.allows_everything is True
+    assert scope.check("/etc/hosts")
+
+
+def test_set_roots_clears_a_previous_allow_all(tmp_path):
+    """Going from "*" to a real list must actually start checking again."""
+    scope = FsScope("*")
+    assert scope.allows_everything is True
+
+    scope.set_roots([str(tmp_path)])
+
+    assert scope.allows_everything is False
+    with pytest.raises(FsScopeError):
+        scope.check("/etc/hosts")
+
+
+def test_roots_property_reports_resolved_paths(tmp_path):
+    scope = FsScope([str(tmp_path)])
+    assert scope.roots == [tmp_path.resolve()]
+
+
+def test_roots_property_is_a_copy(tmp_path):
+    """Handing out the live list would let a caller widen the scope by accident."""
+    scope = FsScope([str(tmp_path)])
+    scope.roots.append(Path("/etc"))
+
+    with pytest.raises(FsScopeError):
+        scope.check("/etc/hosts")

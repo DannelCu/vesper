@@ -309,6 +309,27 @@ Reproduced at a 62% hang rate before the fix and 0% after, across 8 runs each.
 
 ---
 
+## KI7 — No native text-input dialog
+
+**Current behaviour.** `vesper.dialog` offers file pickers (`open`, `save`,
+`pickFolder`), a message box (`message`) and yes/no boxes (`confirm`, `ask`). There is
+no way to ask the user for a *string* through a native dialog.
+
+**Why.** PyWebView exposes `create_file_dialog` and `create_confirmation_dialog` and
+nothing else; there is no text-input dialog to wrap. `window.prompt()` is not
+available inside a WebView either, so the browser fallback is gone too.
+
+**What to do instead.** Ask in the page. An inline field is a few lines of HTML, it
+matches the app's own styling rather than the OS's, and it can validate as the user
+types — see the rename flow in
+[examples/media-vault](examples/media-vault/frontend/app.js).
+
+**What would unblock it.** PyWebView growing an input dialog, or Vesper shipping a
+styled in-page prompt helper in the SDK. The second is possible today and is a
+feature decision, not a limitation.
+
+---
+
 <a id="resolved"></a>
 
 # Resolved

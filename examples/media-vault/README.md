@@ -50,6 +50,10 @@ library and re-indexes, so you have something to play in about ten seconds.
 The app writes thumbnails to a `.vault-thumbs/` subfolder inside the library, and
 nothing else. Deleting a file goes to the system trash, never a permanent unlink.
 
+The filesystem scope starts empty — before you open a folder, every path is refused —
+and narrows to exactly the folder you pick. Try it: with a library open, nothing
+outside it is reachable, including its own parent directory.
+
 ---
 
 ## Guided tour
@@ -87,11 +91,14 @@ nothing else. Deleting a file goes to the system trash, never a permanent unlink
      Explorer and paste, and the file lands there.
    - **Trash** asks for confirmation and then moves the file to the system trash.
 
-8. **Press Download sample clip** and watch two progress bars at once: one in the app,
+8. **Use the Library menu** in the native menu bar — Open Folder and Refresh are
+   there too, and Quit closes the app including the detached player window.
+
+9. **Press Download sample clip** and watch two progress bars at once: one in the app,
    and one on the taskbar button or dock icon. Switch to another window and you can
    still see how far along it is, which is the point of taskbar progress.
 
-9. **With `vesper-watch` installed**, drop a file into the library folder from your
+10. **With `vesper-watch` installed**, drop a file into the library folder from your
    file manager. The grid refreshes by itself. Without it, press **Refresh**.
 
 There are no keyboard shortcuts beyond the rename field's <kbd>Enter</kbd> and
@@ -105,7 +112,7 @@ arrows to skip) once the player has focus.
 | In the app | Feature | Docs |
 |---|---|---|
 | The seek bar works at all | Production localhost server, `App(serve_frontend=True)` | [project-config.md](../../docs/project-config.md) |
-| Indexing, duplicate, rename, trash | Scoped filesystem API | [filesystem.md](../../docs/filesystem.md) |
+| Indexing, duplicate, rename, trash | Scoped filesystem API, narrowed to the chosen folder at runtime | [filesystem.md](../../docs/filesystem.md) |
 | Durations, resolutions, thumbnails | Scoped process execution (`ShellScope` over ffprobe/ffmpeg) | [process.md](../../docs/process.md) |
 | Download sample clip | `net.download` with progress | [network.md](../../docs/network.md) |
 | Progress on the taskbar/dock | Taskbar progress | [badge.md](../../docs/badge.md) |
@@ -118,6 +125,7 @@ arrows to skip) once the player has focus.
 | "Downloaded X" toast | Notifications | [notifications.md](../../docs/notifications.md) |
 | Copy button | File clipboard | [clipboard.md](../../docs/clipboard.md) |
 | Auto-refresh on new files | `vesper-watch` plugin | [plugins.md](../../docs/plugins.md) |
+| Library and Help menus | Native menu bar | [menu.md](../../docs/menu.md) |
 | Every banner at the top of the window | Capability probing | [optional-features.md](../../docs/optional-features.md) |
 
 ### Why the localhost server, concretely
@@ -161,18 +169,10 @@ Both bind to `127.0.0.1` on an ephemeral port behind a random per-session token.
   substitute: it puts the real file on the clipboard, so pasting in a file manager
   works. The [drag-out recipe](../../docs/recipes/drag-out.md) covers the alternatives.
 
-- **There is no native menu bar**, though this app wants one. `app.menu()` raises
-  `AttributeError` on PyWebView 6.2.1 before the window opens, because Vesper reaches
-  for `webview.MenuAction`, which lives in `webview.menu` rather than at the top
-  level. Open folder and Refresh are in the toolbar instead. Reported as a finding;
-  not worked around here, because an example that patched the framework to boot would
-  teach the wrong lesson.
-
-- **The filesystem scope is the home directory, not the library folder.** `fs_scope`
-  is fixed when the `App` is constructed and the library is chosen at runtime, and
-  Vesper offers no way to narrow a scope afterwards. The app enforces the tighter
-  library boundary itself in [`_in_library`](app.py) — every command that touches a
-  file goes through it — but the framework-level scope is wider than it should be.
+- **Renaming uses an in-page field, not a native dialog.** Vesper's dialogs are file
+  pickers and yes/no boxes; there is no native text prompt, because PyWebView does not
+  expose one — and `window.prompt()` does not exist inside a WebView either. See
+  [KNOWN-ISSUES KI7](../../KNOWN-ISSUES.md).
 
 - **No transcoding, no playlists, no subtitles.** The point is the plumbing, not
   competing with VLC.

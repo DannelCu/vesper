@@ -71,12 +71,12 @@ app = App(
     remember_window=True,
     single_instance=True,
     power_events=True,
-    # The library folder is chosen at runtime, but fs_scope is fixed when the App
-    # is built, so the scope is the widest place a library could live and the app
-    # narrows it to the chosen folder itself (see _in_library). Noted in the
-    # README: a runtime-narrowable scope is something the framework does not
-    # currently offer.
-    fs_scope=[str(Path.home())],
+    # An empty list, not None: None means "no scope, check nothing", while a
+    # scope with no roots refuses every path. Nothing should be readable before
+    # a library is open. open_library() then narrows it to the chosen folder
+    # with app.fs_scope.set_roots(), so the frontend can never reach outside the
+    # library the user actually picked.
+    fs_scope=[],
     # The canonical allowlist case: two binaries and nothing else, and each only
     # with the arguments this app actually uses.
     #
@@ -112,20 +112,13 @@ def _in_library(path: str) -> Path:
     """
     Resolve *path* and require it to be inside the chosen library folder.
 
-    fs_scope already stops the frontend escaping the home directory; this is the
-    narrower check the app enforces on top, and every command that touches a file
-    goes through it.
+    This is the same boundary app.fs_scope enforces for the frontend's own
+    vesper.fs calls; going through it here means the app's Python commands
+    cannot be tricked into stepping outside it either.
     """
-    root = state["root"]
-    if root is None:
+    if state["root"] is None:
         raise RuntimeError("No library folder is open yet.")
-
-    resolved = Path(path).expanduser().resolve()
-    try:
-        resolved.relative_to(root)
-    except ValueError as error:
-        raise RuntimeError(f"Path is outside the library: {path}") from error
-    return resolved
+    return app.fs_scope.check(path)
 
 
 def _serve_library(root: Path) -> str:
@@ -265,6 +258,10 @@ def open_library(path: str) -> dict:
         raise RuntimeError(f"Not a folder: {path}")
 
     state["root"] = root
+    # Narrow the filesystem scope to what the user just opened. Every
+    # vesper.fs.* call from the frontend is now confined to this folder — before
+    # a library is open the scope is empty and every path is refused.
+    app.fs_scope.set_roots([str(root)])
     base = _serve_library(root)
 
     if HAS_WATCH:
