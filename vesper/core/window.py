@@ -7,6 +7,9 @@ import webview
 
 from vesper.core.config import WindowConfig
 from vesper.core.ipc import IPC
+from vesper.core.logging import get_logger
+
+logger = get_logger("window")
 
 
 def _file_dialog_const(name: str, legacy: str):
@@ -120,18 +123,47 @@ def _chrome_kwargs(config: "WindowConfig") -> dict:
     return kwargs
 
 
+def _menu_class(name: str):
+    """
+    Resolve one of PyWebView's menu classes.
+
+    Only ``Menu`` is re-exported at the package top level; ``MenuAction`` and
+    ``MenuSeparator`` live in ``webview.menu``. Reading them off ``webview``
+    raised AttributeError before the window opened, so every menu was broken —
+    and the tests missed it because they replaced the whole ``webview`` module
+    with a MagicMock, which invents any attribute asked of it.
+
+    Resolved at import, like the file-dialog constants above, with the top level
+    tried as a fallback in case an older PyWebView only exported it there.
+    """
+    try:
+        from webview import menu as menu_module
+    except ImportError:
+        menu_module = None
+
+    resolved = getattr(menu_module, name, None)
+    if resolved is None:
+        resolved = getattr(webview, name, None)
+    return resolved
+
+
+_MENU = _menu_class("Menu")
+_MENU_ACTION = _menu_class("MenuAction")
+_MENU_SEPARATOR = _menu_class("MenuSeparator")
+
+
 def _to_webview_menu(items: list) -> list:
     """Convert a Vesper menu list to the format PyWebView expects."""
     from vesper.core.menu import MenuItem
     result = []
     for item in items:
         if item is None:
-            result.append(webview.MenuSeparator())
+            result.append(_MENU_SEPARATOR())
         elif isinstance(item, MenuItem) and item.submenu is not None:
-            result.append(webview.Menu(item.label, _to_webview_menu(item.submenu)))
+            result.append(_MENU(item.label, _to_webview_menu(item.submenu)))
         else:
             action = item.action if item.action is not None else (lambda: None)
-            result.append(webview.MenuAction(item.label, action))
+            result.append(_MENU_ACTION(item.label, action))
     return result
 
 
@@ -152,6 +184,11 @@ class Window:
         self.ipc: IPC | None = None
         self._menu: list | None = None
         self._splash_win = None
+        # Every backend window this Window opened, so quit() can close all of
+        # them. PyWebView's start() returns when the *last* window goes away, so
+        # destroying only the main one leaves the app running with nothing on
+        # screen — the process never exits and quit() looks like it did nothing.
+        self._secondary_wins: list = []
 
     def create(
         self,
@@ -298,6 +335,7 @@ class Window:
                 **_chrome_kwargs(cfg),
             )
             handle._attach(sec_win)
+            self._secondary_wins.append(sec_win)
 
         if splash is not None:
             _DEFAULT_HTML = (
@@ -472,7 +510,22 @@ class Window:
             self.window.move(x, y)
 
     def quit(self) -> None:
-        """Destroy the main window and stop the event loop."""
+        """
+        Destroy every window this app opened, which stops the event loop.
+
+        Secondary windows go first: PyWebView keeps running until the last
+        window is gone, so closing only the main one leaves the process alive
+        with no UI. Each is destroyed independently — one that is already gone
+        must not strand the rest, and the main window is what actually ends the
+        loop.
+        """
+        for win in self._secondary_wins:
+            try:
+                win.destroy()
+            except Exception:
+                logger.debug("Secondary window was already gone at quit")
+        self._secondary_wins.clear()
+
         if self.window is not None:
             self.window.destroy()
 

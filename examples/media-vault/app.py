@@ -455,17 +455,28 @@ def open_player(url: str, name: str) -> bool:
     return True
 
 
-# ── Native menu: deliberately absent ─────────────────────────────────────────
-#
-# This app wants a File menu, and `app.menu([...])` is the API for it — but on
-# PyWebView 6.2.1 it raises AttributeError before the window opens, because
-# vesper/core/window.py reaches for `webview.MenuAction`, which lives in
-# `webview.menu`, not at the top level. Vesper's menu tests mock the whole
-# webview module, so a MagicMock invents the missing attribute and they pass.
-#
-# Reported as a finding rather than worked around here: an example that monkey-
-# patched the framework to boot would teach the wrong thing. Open folder and
-# Refresh live in the toolbar instead, which is where a user looks first anyway.
+# ── Native menu ──────────────────────────────────────────────────────────────
+
+from vesper.core.menu import MenuItem  # noqa: E402  (after app, by design)
+
+
+def _open_docs() -> None:
+    from vesper.core import shell
+
+    shell.open_url("https://github.com/DannelCu/vesper")
+
+
+app.menu([
+    MenuItem("Library", submenu=[
+        MenuItem("Open Folder…", lambda: app.emit("menu:open_folder", {})),
+        MenuItem("Refresh", lambda: app.emit("menu:refresh", {})),
+        None,                                   # separator
+        MenuItem("Quit", lambda: app.quit()),
+    ]),
+    MenuItem("Help", submenu=[
+        MenuItem("Vesper docs", _open_docs),
+    ]),
+])
 
 
 app.splash(html="""

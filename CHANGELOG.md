@@ -198,6 +198,19 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   for the per-platform table.
 
 ### Fixed
+- **Native menus were completely broken.** `app.menu()` raised
+  `AttributeError: module 'webview' has no attribute 'MenuAction'` before the window
+  opened — only `Menu` is re-exported at PyWebView's top level, while `MenuAction` and
+  `MenuSeparator` live in `webview.menu`. Every menu and every separator was affected.
+  The menu tests missed it because they replaced the whole `webview` module with a
+  bare `MagicMock`, which invents any attribute asked of it; they now patch the
+  resolved classes, use `spec=webview` where a module mock is still needed, and a new
+  test resolves the three classes against the real PyWebView.
+- **`app.quit()` left the process running when the app had a secondary window.**
+  PyWebView's `start()` returns only when the last window closes, and `quit()`
+  destroyed just the main one — so an app with `register_window()` kept running with
+  nothing on screen and never exited. It now closes secondary windows first, each
+  independently, then the main one.
 - **The production server ignored `Range` requests, so media could not be seeked.**
   `App(serve_frontend=True)` answered every request with `200` and the whole file, no
   `Accept-Ranges` — a `<video>` element will not offer a seek bar without it, which

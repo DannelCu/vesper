@@ -306,3 +306,94 @@ def test_multiple_secondary_windows(tmp_path):
     assert len(created) == 3
     assert handles[0]._win is created[1]
     assert handles[1]._win is created[2]
+
+
+# ── quit() closes every window ───────────────────────────────────────────────
+#
+# PyWebView's start() returns when the *last* window is gone. quit() used to
+# destroy only the main one, so an app with a secondary window kept running with
+# nothing on screen: the process never exited and quit() looked like a no-op.
+# Found by building examples/media-vault, whose detached player is a second
+# window — it hung on quit 4 times out of 4.
+
+
+def _created_window(secondary_count: int):
+    """A Window whose backend windows are all recording mocks."""
+    from unittest.mock import MagicMock, patch
+
+    from vesper.core.config import WindowConfig
+    from vesper.core.ipc import IPC
+    from vesper.core.registry import CommandRegistry
+    from vesper.core.window import Window, WindowHandle
+    import vesper.core.window as window_mod
+
+    handles = [
+        WindowHandle(WindowConfig(title=f"sec{i}", frontend="index.html"))
+        for i in range(secondary_count)
+    ]
+
+    made = []
+
+    def fake_create_window(**kwargs):
+        win = MagicMock()
+        made.append(win)
+        return win
+
+    window = Window()
+    with patch.object(window_mod.webview, "create_window", side_effect=fake_create_window), \
+         patch.dict("os.environ", {"VESPER_DEV_URL": "http://localhost:3000"}):
+        window.create(
+            IPC(CommandRegistry()),
+            WindowConfig(frontend="index.html"),
+            secondary_windows=handles or None,
+        )
+
+    return window, made
+
+
+def test_quit_destroys_the_main_window():
+    window, made = _created_window(0)
+    window.quit()
+    made[0].destroy.assert_called_once()
+
+
+def test_quit_destroys_secondary_windows_too():
+    window, made = _created_window(2)
+    main, secondaries = made[0], made[1:]
+
+    window.quit()
+
+    for win in secondaries:
+        win.destroy.assert_called_once()
+    main.destroy.assert_called_once()
+
+
+def test_quit_closes_secondaries_before_the_main_window():
+    """The main window is what ends the loop, so it goes last."""
+    window, made = _created_window(1)
+    order = []
+    made[0].destroy.side_effect = lambda: order.append("main")
+    made[1].destroy.side_effect = lambda: order.append("secondary")
+
+    window.quit()
+
+    assert order == ["secondary", "main"]
+
+
+def test_quit_survives_a_secondary_that_is_already_gone():
+    """A window the user closed by hand must not strand the rest."""
+    window, made = _created_window(2)
+    made[1].destroy.side_effect = RuntimeError("already destroyed")
+
+    window.quit()
+
+    made[2].destroy.assert_called_once()
+    made[0].destroy.assert_called_once()
+
+
+def test_quit_is_idempotent():
+    window, made = _created_window(1)
+    window.quit()
+    window.quit()   # must not raise, and must not re-destroy the secondary
+
+    assert made[1].destroy.call_count == 1
