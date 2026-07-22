@@ -52,18 +52,20 @@
   </main>
 
   <!-- Vesper's dialogs are file pickers and yes/no boxes; there is no native
-       text prompt, and window.prompt() does not exist in a WebView. Asking for
-       a string is therefore the page's job. -->
-  <div id="rename" class="modal" hidden>
-    <div class="modal-box">
-      <label for="rename-input">New name</label>
-      <input id="rename-input" type="text" />
-      <div class="modal-actions">
-        <button id="rename-cancel">Cancel</button>
-        <button id="rename-ok" class="primary">Rename</button>
-      </div>
-    </div>
-  </div>
+       text prompt, and window.prompt() does not exist in a WebView either.
+       Asking for a string is the page's job — see docs/recipes/text-input.md.
+       <dialog> traps focus, closes on Escape and renders on the top layer, all
+       of which a hand-rolled overlay has to reimplement badly. -->
+  <dialog id="prompt">
+    <form method="dialog">
+      <label id="prompt-label" for="prompt-input">New name</label>
+      <input id="prompt-input" type="text" autocomplete="off" />
+      <menu>
+        <button value="cancel">Cancel</button>
+        <button value="ok" class="primary">Rename</button>
+      </menu>
+    </form>
+  </dialog>
 
   <footer id="status" class="status">Ready.</footer>
 

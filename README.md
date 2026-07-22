@@ -308,6 +308,7 @@ my-app/
 | [Custom Titlebar](docs/recipes/custom-titlebar.md) | Complete frameless titlebar: drag, controls, platform quirks |
 | [Menubar App](docs/recipes/menubar-app.md) | Tray-summoned window positioned on the active monitor |
 | [Printing](docs/recipes/printing.md) | window.print(), print stylesheets, PDF per platform |
+| [Asking the User for Text](docs/recipes/text-input.md) | An in-page `<dialog>` prompt — there is no native text dialog |
 | [Camera & Microphone](docs/recipes/media-capture.md) | Making getUserMedia work, per platform, with honest limits |
 | [Windows Installer & AppImage](docs/recipes/windows-installer.md) | NSIS script and AppImage walkthrough for packaged apps |
 | [Context Menus](docs/recipes/context-menus.md) | Native-looking right-click menus in HTML/CSS |

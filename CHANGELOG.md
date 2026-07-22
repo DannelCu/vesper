@@ -26,6 +26,19 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 **Recipes and known issues (documentation of what Vesper cannot do — yet)**
 
+- **[Asking the User for Text](docs/recipes/text-input.md)** — there is no native
+  text-input dialog (KI7), so this is the `<dialog>`-based pattern that replaces it:
+  focus trapping, Escape-to-cancel and top-layer rendering for free, identical on all
+  three platforms, plus the server-side validation the frontend's answer still needs.
+- **CONTRIBUTING.md — the two rules that decide the hard cases.** The four-level tree
+  listed the levels but not how to choose between them. Code-only work now goes in the
+  **core** unless owning it would be overkill (a `<dialog>` prompt is markup inside the
+  app's page; `fs.copy()` has one correct implementation). And the tree must be worked
+  *down*: needing a dependency is a reason to write a plugin, never a reason to call
+  something impossible — a `KNOWN-ISSUES.md` entry has to say why recipe and plugin
+  were both ruled out. **KI6** (jump lists, dock menus) is reclassified under that
+  rule: it needs `comtypes`/`pyobjc`, which makes it a plugin, not an impossibility.
+
 - **[Printing recipe](docs/recipes/printing.md)** — `window.print()` on all three
   platforms with engine differences and `@media print` guidance; print-to-PDF via
   the system dialog (Microsoft Print to PDF / Save as PDF / cups-pdf per distro);

@@ -134,19 +134,19 @@ main { flex: 1; overflow: auto; padding: 18px; }
 .player-head > div { display: flex; gap: 8px; }
 video { width: 100%; max-height: 46vh; display: block; background: #000; }
 
-/* ── Inline rename dialog ────────────────────────────────────────────────── */
+/* ── Text prompt dialog ──────────────────────────────────────────────────── */
 
-.modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: grid; place-items: center; }
-.modal-box {
+dialog {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 10px;
+  color: var(--text);
   padding: 18px;
-  width: min(420px, 90vw);
-  display: grid;
-  gap: 10px;
+  min-width: min(420px, 90vw);
 }
-.modal-box input {
+dialog::backdrop { background: rgb(0 0 0 / 55%); }
+dialog form { display: grid; gap: 10px; }
+dialog input {
   background: #0b0d14;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -154,7 +154,7 @@ video { width: 100%; max-height: 46vh; display: block; background: #000; }
   padding: 8px 10px;
   font: inherit;
 }
-.modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+dialog menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0; }
 
 /* ── Status bar ──────────────────────────────────────────────────────────── */
 

@@ -45,11 +45,16 @@ progress bar appears.
 
 Open, with a reason. Each of these was looked at and consciously left.
 
-The first six (KI1–KI6) share one root cause and one unblocker: the native WebView
+**KI1–KI5 and KI7** share one root cause and one unblocker: the native WebView
 engines *have* these APIs, but PyWebView owns the engine objects and does not
 surface them. They are written separately so each is linkable from the recipe
 that substitutes for it — but upstream exposure is the fix for all of them, and
 patching or forking PyWebView is outside what this project maintains.
+
+**KI6 is different** and is being reclassified: it needs a dependency, not an
+upstream change, which under
+[CONTRIBUTING.md](CONTRIBUTING.md#where-a-feature-lives) makes it a plugin rather
+than an impossibility.
 
 ---
 
@@ -165,22 +170,29 @@ detection/fallback pattern the UI needs either way.
 
 ## KI6 — Jump lists, dock menus, recent documents
 
+**Status: routed to a plugin, not impossible.** This entry used to conclude "no
+three-platform workaround, therefore impossible". That was the wrong call under the
+rule in [CONTRIBUTING.md](CONTRIBUTING.md#where-a-feature-lives): needing a
+dependency is a reason to write a plugin, never a reason to call a feature
+impossible. Its own text already admitted as much — it called a comtypes plugin "the
+nearest partial step", which is the answer, not a consolation.
+
 **Current behaviour.** No API for the Windows taskbar jump list, the macOS dock
 menu, or the OS recent-documents list.
 
-**Why.** On Windows this requires COM (`ICustomDestinationList`); on macOS the
-dock menu hangs off the NSApplication delegate, which PyWebView owns and does
-not cede; on Linux there is a fragmentary `.desktop` actions mechanism that only
-covers static entries. Unlike KI1–KI5 there is not even a three-platform
-workaround to write a recipe from — a jump list has no HTML substitute — so this
-is documented as impossible rather than routed to a recipe. (It also fails the
-recipe admission rule: no coverage of all three platforms.)
+**Why it is not core.** Windows needs COM (`ICustomDestinationList`) and macOS needs
+AppKit, so both need a dependency — `comtypes` and `pyobjc`. That is the plugin
+boundary doing its job.
 
-**What would unblock it.** PyWebView ceding access to the NSApplication delegate
-on macOS, plus per-platform native code (COM on Windows) that is currently
-outside the core's zero-dependency line. If PyWebView ever exposes both, this
-becomes a core candidate; a Windows-only plugin via comtypes is the nearest
-partial step.
+**What still needs checking.** The earlier claim that macOS is blocked because
+PyWebView owns the `NSApplication` delegate looks wrong: `setDockMenu_` and
+`noteNewRecentDocumentURL_` are calls on the shared instance, and owning the delegate
+should not be required. That has not been verified on a real Mac, and it decides how
+much of this a plugin can actually deliver.
+
+**Linux stays partial** either way: `.desktop` actions only cover static entries
+declared at install time, so a dynamic recent-files list has no equivalent. A plugin
+would report that through `capabilities()` like every other uneven feature.
 
 ---
 
@@ -319,14 +331,15 @@ no way to ask the user for a *string* through a native dialog.
 nothing else; there is no text-input dialog to wrap. `window.prompt()` is not
 available inside a WebView either, so the browser fallback is gone too.
 
-**What to do instead.** Ask in the page. An inline field is a few lines of HTML, it
-matches the app's own styling rather than the OS's, and it can validate as the user
-types — see the rename flow in
-[examples/media-vault](examples/media-vault/frontend/app.js).
+**Substitute recipe:** [Asking the User for Text](docs/recipes/text-input.md) — a
+`<dialog>` in the page, which gets focus trapping, Escape-to-cancel and top-layer
+rendering for free, and works identically on all three platforms.
 
-**What would unblock it.** PyWebView growing an input dialog, or Vesper shipping a
-styled in-page prompt helper in the SDK. The second is possible today and is a
-feature decision, not a limitation.
+**What would unblock it.** PyWebView growing an input dialog. Vesper shipping a
+styled prompt from the SDK is *not* the answer: a prompt is markup and styling inside
+the app's own page, so a built-in one would push Vesper's design into every project —
+the "would core inclusion be overkill?" test in
+[CONTRIBUTING.md](CONTRIBUTING.md#where-a-feature-lives), answered yes.
 
 ---
 

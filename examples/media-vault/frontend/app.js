@@ -204,11 +204,8 @@ async function handleAction(action, item) {
     }
 
     if (action === "rename") {
-      // In-page rather than a native dialog: Vesper's dialogs are file pickers
-      // and yes/no boxes — there is no native text prompt — so asking for a
-      // string is the frontend's job. window.prompt() is not available in a
-      // WebView either, hence the inline field.
-      const name = await promptInline(item.name);
+      // See docs/recipes/text-input.md for why this lives in the page.
+      const name = await promptText(`New name for ${item.name}`, item.name);
       if (!name || name === item.name) return;
       await vesper.invoke("vault:rename", { path: item.path, new_name: name });
       setStatus(`Renamed to ${name}`);
@@ -240,33 +237,23 @@ async function handleAction(action, item) {
   }
 }
 
-// A one-field inline prompt, resolved by the dialog's own buttons.
-function promptInline(current) {
+// Ask the user for a string. Resolves to the text, or null if cancelled.
+// The pattern from docs/recipes/text-input.md — Enter and Escape come free from
+// <form method="dialog">, so there are no key handlers here.
+function promptText(message, initial = "") {
+  const dialog = $("prompt");
+  const input = $("prompt-input");
+
+  $("prompt-label").textContent = message;
+  input.value = initial;
+
   return new Promise((resolve) => {
-    const box = $("rename");
-    const field = $("rename-input");
-    field.value = current;
-    box.hidden = false;
-    field.focus();
-    field.select();
+    dialog.addEventListener("close", () => {
+      resolve(dialog.returnValue === "ok" ? input.value.trim() : null);
+    }, { once: true });
 
-    const done = (value) => {
-      box.hidden = true;
-      $("rename-ok").removeEventListener("click", onOk);
-      $("rename-cancel").removeEventListener("click", onCancel);
-      field.removeEventListener("keydown", onKey);
-      resolve(value);
-    };
-    const onOk = () => done(field.value.trim());
-    const onCancel = () => done(null);
-    const onKey = (e) => {
-      if (e.key === "Enter") onOk();
-      if (e.key === "Escape") onCancel();
-    };
-
-    $("rename-ok").addEventListener("click", onOk);
-    $("rename-cancel").addEventListener("click", onCancel);
-    field.addEventListener("keydown", onKey);
+    dialog.showModal();
+    input.select();
   });
 }
 

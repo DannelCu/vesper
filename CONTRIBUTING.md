@@ -352,9 +352,10 @@ doctor` can be honest about what a machine can and cannot do.
    ReadDirectoryChangesW, which is exactly what `watchdog` wraps — so it is
    `vesper-watch`, not core code.*
 
-3. **Recipe** — it cannot be implemented in Vesper, but a documented workaround
-   solves it: a library the user installs themselves, a manual action (permissions,
-   signing, OS configuration), or a code pattern in their app → it goes in
+3. **Recipe** — solvable with code the app author writes, but putting it in the core
+   would be overkill: it is one app's design decision, it would impose Vesper's
+   markup or styling on someone's page, or it is a manual action (permissions,
+   signing, OS configuration) rather than an API at all → it goes in
    `docs/recipes/<name>.md` with **explicit coverage of Windows, macOS, and Linux**.
    If the workaround cannot cover all three, it is not a recipe — it is a known
    issue. (One legitimate exception: a recipe for an inherently single-platform
@@ -368,10 +369,33 @@ doctor` can be honest about what a machine can and cannot do.
    `KNOWN-ISSUES.md` in the existing format: current behaviour, why it was left this
    way, and what would unblock it. Only the impossible belongs here — pending effort
    is backlog, not a known issue.
-   *Example: jump lists and dock menus. Windows requires COM
-   (`ICustomDestinationList`) and macOS requires the NSApplication delegate, which
-   PyWebView owns and does not surface. There is no three-platform workaround, so it
-   is documented as impossible for now.*
+   *Example: native drag-out of files. Starting a drag with a file payload is an
+   engine-level operation with no web-platform equivalent, so no amount of app code
+   or library reaches it — hence KI1, with `docs/recipes/drag-out.md` as the
+   substitute.*
+
+### Two rules that decide the hard cases
+
+**Code-only goes in the core unless the core has no business owning it.** Levels 1
+and 3 both cover "no new dependency needed", and the split between them is not
+difficulty — it is whether every app wants the same answer. A filesystem `copy()`
+has one correct implementation, so it is core. A modal asking the user for a string
+does not: it is markup and styling inside the app's own page, and shipping one from
+the SDK would push Vesper's design into every project. That is a recipe. Ask *"would
+putting this in the core be overkill?"* — if the answer is no, it is core.
+
+**Work down the tree and do not settle at the bottom.** A limitation is not finished
+when it is described; it is finished when the user has a way through. Before opening
+a `KNOWN-ISSUES.md` entry, the two levels above have to be genuinely ruled out:
+
+- Can the page, the SDK, or the app's own Python do it? → **recipe**
+- Is there a maintained, pip-installable, cross-platform library that does it? →
+  **plugin**
+
+A known-issue entry must say why both were rejected. "Requires a dependency" is a
+reason to write a plugin, never a reason to call something impossible — the core's
+two runtime dependencies are protected by the plugin boundary, not by refusing the
+feature.
 
 When a change is rejected from one level, it moves *down* the tree, never up: a core
 proposal that turns out to need a library becomes a plugin proposal, not a core
