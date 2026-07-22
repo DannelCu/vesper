@@ -1,0 +1,168 @@
+/* Plain CSS, no framework and no CDN — an example should run offline. */
+
+:root {
+  --bg: #0f1017;
+  --panel: #171923;
+  --line: #262a38;
+  --text: #e8e8ef;
+  --muted: #9aa0b4;
+  --accent: #6c8cff;
+  --danger: #e05260;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ── Top bar ─────────────────────────────────────────────────────────────── */
+
+.bar {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 16px;
+  align-items: center;
+  padding: 12px 18px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.bar h1 { margin: 0; font-size: 16px; font-weight: 600; }
+.bar-actions { display: flex; gap: 8px; justify-self: end; }
+
+.path {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button {
+  background: #232736;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font: inherit;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #0b0d14; }
+button.danger:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+
+/* ── Degradation notices ─────────────────────────────────────────────────── */
+
+.notices { padding: 10px 18px; background: #1d1a12; border-bottom: 1px solid #3a3218; }
+.notice { display: flex; gap: 12px; align-items: baseline; font-size: 13px; }
+.notice code { color: var(--muted); font-size: 12px; }
+
+/* ── Download progress ───────────────────────────────────────────────────── */
+
+.progress { padding: 10px 18px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.progress-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.progress-track { height: 6px; background: #232736; border-radius: 3px; overflow: hidden; }
+.progress-bar { height: 100%; width: 0; background: var(--accent); transition: width .15s linear; }
+
+/* ── Library grid ────────────────────────────────────────────────────────── */
+
+main { flex: 1; overflow: auto; padding: 18px; }
+
+.empty { color: var(--muted); text-align: center; margin-top: 15vh; }
+.empty .hint { font-size: 13px; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 14px;
+}
+
+.tile {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.thumb {
+  aspect-ratio: 16 / 9;
+  background: #0b0d14;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.thumb img { width: 100%; height: 100%; object-fit: cover; }
+.placeholder { font-size: 26px; color: #3b4258; }
+
+.tile-body { padding: 10px 12px 4px; }
+.tile-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile-meta { color: var(--muted); font-size: 12px; }
+
+.tile-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; }
+.tile-actions button { padding: 4px 9px; font-size: 12px; }
+
+/* ── Player ──────────────────────────────────────────────────────────────── */
+
+.player-panel {
+  position: sticky;
+  bottom: 0;
+  margin-top: 18px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.player-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.player-head > div { display: flex; gap: 8px; }
+video { width: 100%; max-height: 46vh; display: block; background: #000; }
+
+/* ── Inline rename dialog ────────────────────────────────────────────────── */
+
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: grid; place-items: center; }
+.modal-box {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px;
+  width: min(420px, 90vw);
+  display: grid;
+  gap: 10px;
+}
+.modal-box input {
+  background: #0b0d14;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 8px 10px;
+  font: inherit;
+}
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ── Status bar ──────────────────────────────────────────────────────────── */
+
+.status {
+  padding: 8px 18px;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+.status.error { color: var(--danger); }

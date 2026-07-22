@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Media Vault</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="bar">
+    <h1>Media Vault</h1>
+    <div class="bar-actions">
+      <button id="open-folder">Open folder…</button>
+      <button id="refresh" disabled>Refresh</button>
+      <button id="download-sample" disabled>Download sample clip</button>
+    </div>
+    <div id="library-path" class="path">No library open</div>
+  </header>
+
+  <!-- Filled at startup from vesper.capabilities() + the app's own
+       vault:features command. Anything missing is explained here rather than
+       failing silently when the user presses a button. -->
+  <div id="notices" class="notices" hidden></div>
+
+  <div id="progress" class="progress" hidden>
+    <div class="progress-label">Downloading sample clip…</div>
+    <div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div>
+  </div>
+
+  <main>
+    <section id="empty" class="empty">
+      <p>Open a folder to index the media inside it.</p>
+      <p class="hint">
+        No videos handy? Open any folder, then use <b>Download sample clip</b>.
+      </p>
+    </section>
+
+    <section id="grid" class="grid" hidden></section>
+
+    <section id="player-panel" class="player-panel" hidden>
+      <div class="player-head">
+        <span id="player-name"></span>
+        <div>
+          <button id="detach">Open in own window</button>
+          <button id="close-player">Close</button>
+        </div>
+      </div>
+      <!-- Seeking here is the whole point of the example: this <video> is
+           loading over http://127.0.0.1, so the browser can issue byte-range
+           requests. The same file over file:// gives a dead scrub bar. -->
+      <video id="player" controls preload="metadata"></video>
+    </section>
+  </main>
+
+  <!-- Vesper's dialogs are file pickers and yes/no boxes; there is no native
+       text prompt, and window.prompt() does not exist in a WebView. Asking for
+       a string is therefore the page's job. -->
+  <div id="rename" class="modal" hidden>
+    <div class="modal-box">
+      <label for="rename-input">New name</label>
+      <input id="rename-input" type="text" />
+      <div class="modal-actions">
+        <button id="rename-cancel">Cancel</button>
+        <button id="rename-ok" class="primary">Rename</button>
+      </div>
+    </div>
+  </div>
+
+  <footer id="status" class="status">Ready.</footer>
+
+  <script src="./vesper.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

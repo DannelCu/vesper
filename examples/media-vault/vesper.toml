@@ -1,0 +1,6 @@
+[project]
+name = "media-vault"
+template = "vanilla"
+styles = "none"
+bundler = "pyinstaller"
+package_manager = "npm"

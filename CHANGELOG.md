@@ -11,6 +11,19 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+**Examples**
+
+- **[examples/media-vault](examples/media-vault/)** — a media library with an in-app
+  video player, built to make one point concrete: seeking needs HTTP byte ranges, so
+  a `<video>` on `file://` has a dead scrub bar and one on the production localhost
+  server does not. Also covers the scoped filesystem API, a real `ShellScope`
+  allowlist over ffprobe/ffmpeg, downloads with taskbar progress, keep-awake and
+  suspend handling, multi-window, splash, single-instance and the file clipboard. Runs
+  with no optional dependency installed: without ffmpeg there are no thumbnails and a
+  banner says why.
+- **[examples/README.md](examples/README.md)** — an index of the examples, with what
+  each one demonstrates and who should read it first.
+
 **Recipes and known issues (documentation of what Vesper cannot do — yet)**
 
 - **[Printing recipe](docs/recipes/printing.md)** — `window.print()` on all three

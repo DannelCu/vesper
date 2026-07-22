@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Media Vault — Player</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <style>
+    body { padding: 0; }
+    video { max-height: 100vh; height: 100vh; }
+    .empty { margin-top: 40vh; }
+  </style>
+</head>
+<body>
+  <p id="idle" class="empty">Nothing playing.</p>
+  <video id="player" controls autoplay hidden></video>
+
+  <script src="./vesper.js"></script>
+  <script>
+    // A second window is a separate document with its own JS context: it shares
+    // no state with the main one. What it does share is the event bus, so the
+    // main window hands over what to play by emitting an event.
+    vesper.on("player:load", ({ url, name }) => {
+      document.title = `${name} — Media Vault`;
+      document.getElementById("idle").hidden = true;
+      const player = document.getElementById("player");
+      player.hidden = false;
+      player.src = url;      // …and this URL is a loopback HTTP one, so it seeks.
+    });
+
+    // Keep-awake is a process-wide request, so whichever window is playing owns
+    // it. Releasing on unload stops a closed player window holding it forever.
+    window.addEventListener("beforeunload", () => {
+      vesper.invoke("vault:playback_stopped");
+    });
+  </script>
+</body>
+</html>
