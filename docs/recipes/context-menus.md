@@ -1,6 +1,6 @@
 # Recipe: Context Menus
 
-PyWebView does not expose a native right-click context menu API. This recipe shows how to build a context menu that looks and feels native using HTML, CSS, and a small amount of JavaScript.
+PyWebView does not expose a native right-click context menu API. This is a recipe because the native menu is impossible today, not because it was skipped — see [KNOWN-ISSUES KI2](../../KNOWN-ISSUES.md#ki2) for what would unblock it. Until then, this shows how to build a context menu that looks and feels native using HTML, CSS, and a small amount of JavaScript.
 
 ---
 

@@ -11,6 +11,32 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+**Recipes and known issues (documentation of what Vesper cannot do — yet)**
+
+- **[Printing recipe](docs/recipes/printing.md)** — `window.print()` on all three
+  platforms with engine differences and `@media print` guidance; print-to-PDF via
+  the system dialog (Microsoft Print to PDF / Save as PDF / cups-pdf per distro);
+  programmatic PDFs as an app-level Python decision. Silent printing is
+  impossible today → KI4.
+- **[Camera & Microphone recipe](docs/recipes/media-capture.md)** — the manual
+  per-platform configuration that maximises `getUserMedia`'s odds (macOS
+  Info.plist keys + entitlements + signed bundle, Windows privacy toggles and
+  origin persistence, Linux GStreamer packages and distro-build caveats), plus
+  the JS detection/fallback pattern. Explicitly honest: it improves odds, it
+  cannot guarantee them → KI5.
+- **KNOWN-ISSUES KI1–KI6** — six linkable entries for what is genuinely
+  impossible today, all sharing one root cause (PyWebView owns the engine
+  objects and does not surface these APIs) and one unblocker (upstream
+  exposure): drag-out (KI1), native context menus (KI2), custom protocols /
+  request interception (KI3, with the localhost server as the pragmatic
+  substitute), programmatic printing (KI4), the media permission handler (KI5),
+  and jump lists / dock menus / recent documents (KI6 — the one with no
+  three-platform workaround, hence no recipe).
+- The existing drag-out and context-menus recipes now state their place in the
+  philosophy and link to KI1/KI2; the CI coverage table gained rows for every
+  new native-touching area (file clipboard, mica, installers, rich
+  notifications, screenshots, serial, frameless).
+
 **Plugins (external dependencies, isolated behind plugin boundaries)**
 
 - **vesper-watch** — file watching via watchdog. `vesper.watch.watch(path, {

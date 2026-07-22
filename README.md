@@ -69,14 +69,18 @@ Use any Python library — pandas, SQLAlchemy, PyMongo, OpenCV, scikit-learn —
 - System tray — icon with context menu
 - Splash screen — frameless loading overlay, auto-dismissed when the app is ready
 - Window controls — minimize, maximize, restore, fullscreen, resize, move from Python or JS
+- Frameless & transparent windows — custom titlebars with drag regions, min size, macOS vibrancy, Windows 11 Mica
+- Semantic positioning — `vesper.window.position("top-right", { screen: "cursor" })` across monitors
 - Screen info — list connected monitors with dimensions and position
 
 **System Integration**
 - Native file dialogs — open, save, folder picker, plus message/confirm/ask
 - Native notifications — no extra dependencies (PowerShell, osascript, notify-send)
-- Clipboard — read and write text and images
+- Clipboard — read and write text, images, and files (interoperates with the OS file manager)
 - Shell integration — open URLs in the default browser, reveal files in the file manager
-- Filesystem API — read, write, exists, list directory from JS
+- Filesystem API — read, write, copy, move, stat, binary I/O from JS, sandboxed by `fs_scope`
+- Process execution — run allowlisted external binaries with streamed output (`shell_scope`)
+- File downloads — stream to disk with progress events and SHA-256 verification
 - Deep linking — handle `myapp://` protocol URLs via `@app.on("deeplink")`, at startup or while running
 - Single instance — a second launch forwards its arguments to the running app
 - Window state — remember size and position, with disconnected-monitor handling
@@ -87,11 +91,13 @@ Use any Python library — pandas, SQLAlchemy, PyMongo, OpenCV, scikit-learn —
 
 **Developer Workflow**
 - Hot-reload dev server — Python restarts on backend changes, browser refreshes on frontend changes
+- DevTools — the WebView inspector, on by default in `vesper dev`, never in production
+- Production localhost serving — opt-in `serve_frontend=True` for ES modules and SPA routing in packaged apps
 - Framework templates — vanilla, React, Vue, Svelte (Vite-based)
 - TypeScript definitions — `vesper sync-types` generates `.d.ts` from registered Python commands
 - Module scaffolding — `vesper g module users` generates the full module structure
 - Doctor — `vesper doctor` diagnoses environment and project issues
-- Packaging — PyInstaller (default) or Nuitka native binary
+- Packaging — PyInstaller (default) or Nuitka native binary, plus `--installer` for .dmg / .deb
 - Code signing — macOS codesign + notarization, Windows signtool / osslsigncode
 - Auto-updates — manifest-based self-update with download progress events
 
@@ -269,6 +275,7 @@ my-app/
 | [Middleware](docs/middleware.md) | Cross-cutting IPC logic |
 | [Events](docs/events.md) | Pushing events from Python to the frontend |
 | [Multi-Window](docs/multiwindow.md) | Secondary windows, `WindowHandle` |
+| [Frameless Windows](docs/frameless.md) | Custom titlebars, drag regions, transparency, Mica |
 | [Native Dialogs](docs/dialogs.md) | File open, save, folder picker |
 | [Notifications](docs/notifications.md) | Native desktop notifications |
 | [System Tray](docs/tray.md) | Tray icon and context menu |
@@ -284,8 +291,10 @@ my-app/
 | [Power Management](docs/power.md) | Keep the machine awake during long work |
 | [Production Lockdown](docs/security-lockdown.md) | Disable browser behaviours in production |
 | [Taskbar & Badges](docs/badge.md) | Progress on the taskbar, counts on the dock |
-| [Filesystem API](docs/filesystem.md) | Read, write, list files from JS |
+| [Filesystem API](docs/filesystem.md) | Read, write, copy, move, stat, binary I/O from JS |
 | [File Transfers](docs/file-transfers.md) | Sending binary data across the IPC boundary |
+| [Process Execution](docs/process.md) | Run external binaries behind a declarative allowlist |
+| [Network Downloads](docs/network.md) | Stream files to disk with progress and checksums |
 | [Auto-Updates](docs/auto-updates.md) | Self-updating apps via a manifest |
 | [Code Signing](docs/code-signing.md) | macOS and Windows code signing |
 | [Plugins](docs/plugins.md) | Using plugins and building your own |
@@ -296,6 +305,11 @@ my-app/
 | Recipe | Description |
 |---|---|
 | [Authentication with Roles](docs/recipes/auth.md) | Session auth, role-based guards, localStorage persistence |
+| [Custom Titlebar](docs/recipes/custom-titlebar.md) | Complete frameless titlebar: drag, controls, platform quirks |
+| [Menubar App](docs/recipes/menubar-app.md) | Tray-summoned window positioned on the active monitor |
+| [Printing](docs/recipes/printing.md) | window.print(), print stylesheets, PDF per platform |
+| [Camera & Microphone](docs/recipes/media-capture.md) | Making getUserMedia work, per platform, with honest limits |
+| [Windows Installer & AppImage](docs/recipes/windows-installer.md) | NSIS script and AppImage walkthrough for packaged apps |
 | [Context Menus](docs/recipes/context-menus.md) | Native-looking right-click menus in HTML/CSS |
 | [Saving Files (drag-out alternative)](docs/recipes/drag-out.md) | Export generated content to disk |
 | [State Between Windows](docs/recipes/state-between-windows.md) | Share and sync state across multiple windows |

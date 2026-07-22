@@ -139,20 +139,25 @@ def _detect_webview_backend() -> tuple[bool, str, str | None]:
 _CAPABILITY_LABELS = {
     "clipboard_text": "Clipboard (text)",
     "clipboard_image": "Clipboard (images)",
+    "clipboard_files": "Clipboard (files)",
     "notifications": "Notifications",
     "trash": "Move to trash",
     "keep_awake": "Keep awake",
     "tray": "System tray",
     "badge": "Taskbar / dock badge",
+    "mica": "Backdrop materials (Mica)",
+    "nsis": "NSIS (Windows installers)",
+    "screenshot": "Screen capture",
     "power_events": "Power events",
     "global_shortcuts": "Global shortcuts",
 }
 
 
 # Capabilities that fail for the same reason and are fixed by the same command. On
-# Linux both clipboard entries are just "xclip", and printing that install line twice
-# makes it look like two separate problems.
+# Linux all three clipboard entries are just "xclip", and printing that install
+# line three times makes it look like three separate problems.
 _CAPABILITY_GROUPS = (
+    (("clipboard_text", "clipboard_image", "clipboard_files"), "Clipboard (text + images + files)"),
     (("clipboard_text", "clipboard_image"), "Clipboard (text + images)"),
 )
 
@@ -168,6 +173,10 @@ def _grouped_rows(report: dict) -> list[tuple[str, dict]]:
     rows: list[tuple[str, dict]] = []
 
     for names, label in _CAPABILITY_GROUPS:
+        # Groups are ordered widest-first; a capability already folded into a
+        # wider group must not be re-labelled by a narrower one.
+        if any(n in merged for n in names):
+            continue
         entries = [report[n] for n in names if n in report]
         if len(entries) == len(names) and all(e == entries[0] for e in entries):
             merged.update(dict.fromkeys(names, label))

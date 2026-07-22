@@ -1,6 +1,6 @@
 # Recipe: Saving Files (Drag-Out Alternative)
 
-PyWebView does not support dragging files from the WebView to the desktop. This recipe shows three practical patterns for letting users export files from a Vesper app.
+PyWebView does not support dragging files from the WebView to the desktop. This is a recipe because the native thing is impossible today — PyWebView does not expose the engines' drag cycle — not because it was skipped; see [KNOWN-ISSUES KI1](../../KNOWN-ISSUES.md#ki1) for what would unblock it. Until then, these are three practical patterns for letting users export files from a Vesper app. (For Copy in the app → Paste in the file manager, see also [`vesper.clipboard.writeFiles`](../clipboard.md#files).)
 
 ---
 
