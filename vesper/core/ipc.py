@@ -81,17 +81,48 @@ class IPC:
 
         self._teardown: list = []
         self._error_hooks: list = []
-        self._loop = asyncio.new_event_loop()
-        _started = threading.Event()
 
-        def _run() -> None:
-            asyncio.set_event_loop(self._loop)
-            self._loop.call_soon(lambda: _started.set())
-            self._loop.run_forever()
+        # The loop is created on first use, not here. It is only ever touched by
+        # async guards, middleware and commands, so an app with none never needs
+        # one — and building it eagerly cost a thread and three descriptors per
+        # App, which nothing but close() could reclaim. Tests construct Apps
+        # without ever calling run(), so they ran the process out of descriptors.
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._loop_thread: threading.Thread | None = None
+        self._loop_lock = threading.Lock()
 
-        self._loop_thread = threading.Thread(target=_run, daemon=True, name="vesper-async")
-        self._loop_thread.start()
-        _started.wait(timeout=5)
+    def _ensure_loop(self) -> asyncio.AbstractEventLoop:
+        """
+        The async event loop, started on first use.
+
+        handle() can be entered from more than one thread, so the check is
+        double-checked under a lock: two callers must not each build a loop and
+        leave one orphaned.
+        """
+        if self._loop is not None:
+            return self._loop
+
+        with self._loop_lock:
+            if self._loop is not None:
+                return self._loop
+
+            loop = asyncio.new_event_loop()
+            started = threading.Event()
+
+            def _run() -> None:
+                asyncio.set_event_loop(loop)
+                loop.call_soon(started.set)
+                loop.run_forever()
+
+            thread = threading.Thread(target=_run, daemon=True, name="vesper-async")
+            thread.start()
+            started.wait(timeout=5)
+
+            # Published only once running, so a concurrent reader outside the lock
+            # never sees a loop whose thread has not started yet.
+            self._loop_thread = thread
+            self._loop = loop
+            return loop
 
     def on_error(self, fn) -> None:
         """
@@ -122,9 +153,10 @@ class IPC:
         and releases the loop's resources deterministically, which also keeps test
         runs from accumulating a live loop thread per App they construct.
 
-        Safe to call more than once.
+        Safe to call more than once, and on an IPC whose loop was never started —
+        an app with no async commands never builds one.
         """
-        if self._loop.is_closed():
+        if self._loop is None or self._loop.is_closed():
             return
 
         self._loop.call_soon_threadsafe(self._loop.stop)
@@ -234,7 +266,7 @@ class IPC:
                 for guard_fn in self.registry._guards.get(command_name, []):
                     if inspect.iscoroutinefunction(guard_fn):
                         future = asyncio.run_coroutine_threadsafe(
-                            guard_fn(command_name, args), self._loop
+                            guard_fn(command_name, args), self._ensure_loop()
                         )
                         ok = future.result()
                     else:
@@ -254,7 +286,7 @@ class IPC:
                 for mw in self._middleware:
                     if inspect.iscoroutinefunction(mw):
                         future = asyncio.run_coroutine_threadsafe(
-                            mw(command_name, args), self._loop
+                            mw(command_name, args), self._ensure_loop()
                         )
                         future.result()
                     else:
@@ -270,7 +302,9 @@ class IPC:
 
             try:
                 if inspect.iscoroutinefunction(command):
-                    future = asyncio.run_coroutine_threadsafe(command(**args), self._loop)
+                    future = asyncio.run_coroutine_threadsafe(
+                        command(**args), self._ensure_loop()
+                    )
                     result = future.result()
                 else:
                     result = command(**args)

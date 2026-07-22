@@ -254,12 +254,14 @@ def test_register_module_async_command():
     class M:
         pass
 
-    app = App()
-    app.register_module(M)
+    # The only async command in this file, so the only App here that builds a
+    # loop thread — and the only one that has to give it back.
+    with App() as app:
+        app.register_module(M)
 
-    resp = app.ipc.handle({"id": "1", "command": "async.fetch", "args": {}})
-    assert resp["ok"] is True
-    assert resp["result"] == "async result"
+        resp = app.ipc.handle({"id": "1", "command": "async.fetch", "args": {}})
+        assert resp["ok"] is True
+        assert resp["result"] == "async result"
 
 
 def test_register_module_imports():

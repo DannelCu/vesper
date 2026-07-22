@@ -24,6 +24,7 @@ def _loop_threads() -> list[threading.Thread]:
 
 def test_close_stops_the_loop_thread():
     ipc = IPC(CommandRegistry())
+    ipc._ensure_loop()          # the loop is lazy; an async call would do the same
     assert ipc._loop_thread.is_alive()
 
     ipc.close()
@@ -34,6 +35,7 @@ def test_close_stops_the_loop_thread():
 
 def test_close_is_idempotent():
     ipc = IPC(CommandRegistry())
+    ipc._ensure_loop()
     ipc.close()
     ipc.close()  # must not raise
     assert ipc._loop.is_closed()
@@ -42,6 +44,7 @@ def test_close_is_idempotent():
 def test_close_leaves_no_named_thread_behind():
     before = len(_loop_threads())
     ipc = IPC(CommandRegistry())
+    ipc._ensure_loop()
     assert len(_loop_threads()) == before + 1
 
     ipc.close()
@@ -69,6 +72,7 @@ def test_async_commands_still_work_before_close():
 def test_close_warns_and_survives_a_stuck_loop(caplog):
     """A command still holding the loop must not make close() hang or raise."""
     ipc = IPC(CommandRegistry())
+    ipc._ensure_loop()
 
     release = threading.Event()
     ipc._loop.call_soon_threadsafe(lambda: release.wait(5))
@@ -95,6 +99,7 @@ def test_close_warns_and_survives_a_stuck_loop(caplog):
 
 def test_app_run_closes_the_ipc_loop():
     app = App()
+    app.ipc._ensure_loop()      # an app with no async command never builds one
 
     with patch.object(app.window, "create"), patch.object(app.window, "show"):
         app.run()
@@ -104,6 +109,7 @@ def test_app_run_closes_the_ipc_loop():
 
 def test_app_run_closes_the_loop_even_if_show_raises():
     app = App()
+    app.ipc._ensure_loop()
 
     with patch.object(app.window, "create"), \
          patch.object(app.window, "show", side_effect=RuntimeError("boom")):
@@ -202,3 +208,181 @@ def test_notify_failure_is_logged_not_crashed(caplog):
             time.sleep(0.005)
 
     assert any("Failed to send notification" in r.message for r in caplog.records)
+
+
+# ── the loop is lazy ─────────────────────────────────────────────────────────
+#
+# Every App used to cost a thread and three descriptors from the moment it was
+# constructed, reclaimable only by close(). Tests build Apps and never call
+# run(), so a full suite ran the process out of file descriptors and unrelated
+# tests started failing with EMFILE hundreds of tests later.
+
+
+def test_no_loop_thread_until_something_async_runs():
+    before = len(_loop_threads())
+    ipc = IPC(CommandRegistry())
+
+    assert ipc._loop is None
+    assert ipc._loop_thread is None
+    assert len(_loop_threads()) == before
+
+
+def test_a_sync_command_never_starts_the_loop():
+    registry = CommandRegistry()
+    registry.register(lambda: "pong", name="ping")
+    ipc = IPC(registry)
+
+    assert ipc.handle({"id": "1", "command": "ping", "args": {}})["result"] == "pong"
+    assert ipc._loop is None, "a sync-only app must not pay for an event loop"
+
+
+def test_an_app_starts_no_threads():
+    """The construct-and-never-run case that exhausted the descriptors."""
+    before = len(_loop_threads())
+    App()
+    assert len(_loop_threads()) == before
+
+
+def test_the_first_async_command_starts_the_loop_and_returns():
+    """Laziness must be invisible: the first async call works like any other."""
+    registry = CommandRegistry()
+
+    async def ping() -> str:
+        return "pong"
+
+    registry.register(ping, name="ping")
+    ipc = IPC(registry)
+    assert ipc._loop is None
+
+    try:
+        resp = ipc.handle({"id": "1", "command": "ping", "args": {}})
+        assert resp["ok"] is True
+        assert resp["result"] == "pong"
+        assert ipc._loop is not None
+        assert ipc._loop_thread.is_alive()
+    finally:
+        ipc.close()
+
+
+def test_repeated_async_calls_reuse_one_loop():
+    registry = CommandRegistry()
+
+    async def ping() -> str:
+        return "pong"
+
+    registry.register(ping, name="ping")
+    ipc = IPC(registry)
+    before = len(_loop_threads())
+
+    try:
+        for i in range(5):
+            assert ipc.handle({"id": str(i), "command": "ping", "args": {}})["ok"]
+        assert len(_loop_threads()) == before + 1
+    finally:
+        ipc.close()
+
+
+def test_close_without_a_loop_is_a_noop():
+    ipc = IPC(CommandRegistry())
+    ipc.close()
+    ipc.close()   # must not raise on an IPC that never built a loop
+    assert ipc._loop is None
+
+
+def test_concurrent_first_calls_create_one_loop():
+    """handle() is reachable from several threads; two loops would orphan one."""
+    registry = CommandRegistry()
+
+    async def ping() -> str:
+        return "pong"
+
+    registry.register(ping, name="ping")
+    ipc = IPC(registry)
+    before = len(_loop_threads())
+
+    loops = []
+    barrier = threading.Barrier(8)
+
+    def race() -> None:
+        barrier.wait()
+        loops.append(ipc._ensure_loop())
+
+    threads = [threading.Thread(target=race) for _ in range(8)]
+    try:
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5)
+
+        assert len({id(loop) for loop in loops}) == 1
+        assert len(_loop_threads()) == before + 1
+    finally:
+        ipc.close()
+
+
+# ── App.close() ──────────────────────────────────────────────────────────────
+
+
+def test_app_close_is_idempotent():
+    app = App()
+    app.close()
+    app.close()   # must not raise
+
+
+def test_app_close_on_a_fresh_app_does_not_raise():
+    """Nothing was started, so every piece close() touches is still None."""
+    App().close()
+
+
+def test_app_close_releases_the_loop():
+    app = App()
+    app.ipc._ensure_loop()
+    before = len(_loop_threads())
+
+    app.close()
+
+    assert len(_loop_threads()) == before - 1
+
+
+def test_app_close_stops_the_tray():
+    app = App()
+    app._tray = MagicMock()
+    tray = app._tray
+
+    app.close()
+
+    tray.stop.assert_called_once()
+
+
+def test_app_close_survives_a_failing_piece():
+    """One backend failing must not strand the rest — the loop still closes."""
+    app = App()
+    app.ipc._ensure_loop()
+    app._tray = MagicMock()
+    app._tray.stop.side_effect = RuntimeError("tray is wedged")
+
+    app.close()
+
+    assert app.ipc._loop.is_closed()
+
+
+def test_app_works_as_a_context_manager():
+    before = len(_loop_threads())
+
+    with App() as app:
+        assert isinstance(app, App)
+        app.ipc._ensure_loop()
+        assert len(_loop_threads()) == before + 1
+
+    assert len(_loop_threads()) == before
+
+
+def test_context_manager_closes_on_an_exception():
+    before = len(_loop_threads())
+
+    with pytest.raises(ValueError):
+        with App() as app:
+            app.ipc._ensure_loop()
+            raise ValueError("boom")
+
+    assert len(_loop_threads()) == before

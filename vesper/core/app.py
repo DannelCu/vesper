@@ -938,6 +938,66 @@ class App:
                 description, entry["detail"], fix,
             )
 
+    def close(self) -> None:
+        """
+        Release everything the app holds: tray, power monitor, spawned processes,
+        the static server, the IPC loop, and the single-instance lock.
+
+        ``run()`` calls this on the way out, so a normal app never needs to. It is
+        public for the case ``run()`` does not cover — building an ``App`` and not
+        starting it, which is what tests and scripts do. Without it those hold a
+        loop thread and its descriptors until the process exits.
+
+        Idempotent, and safe on an app that never started anything: every piece is
+        checked before it is touched, and each is released independently so one
+        failure cannot strand the rest.
+        """
+        if self._tray is not None:
+            try:
+                self._tray.stop()
+            except Exception:
+                logger.exception("Could not stop the tray icon")
+            self._tray = None
+
+        if self._power_events:
+            from vesper.core import power as _power_mod
+
+            try:
+                _power_mod.stop_power_monitor()
+            except Exception:
+                logger.exception("Could not stop the power monitor")
+
+        # A closed window must not leave spawned children running.
+        try:
+            self._process_manager.kill_all()
+        except Exception:
+            logger.exception("Could not terminate spawned processes")
+
+        if self._static_server is not None:
+            try:
+                self._static_server.shutdown()
+                self._static_server.server_close()
+            except Exception:
+                logger.exception("Could not stop the static server")
+            self._static_server = None
+
+        try:
+            self.ipc.close()
+        except Exception:
+            logger.exception("Could not close the IPC event loop")
+
+        if self._single_instance is not None:
+            try:
+                self._single_instance.release()
+            except Exception:
+                logger.exception("Could not release the single-instance lock")
+
+    def __enter__(self) -> "App":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
     def run(self) -> None:
         """
         Start the Vesper application.
@@ -1003,21 +1063,8 @@ class App:
             # Geometry has to be read before the window is torn down, and the window
             # is already gone by the time show() returns on some backends — so the
             # save is driven by the "closing" hook where available and this is the
-            # fallback for a clean exit.
+            # fallback for a clean exit. It stays here rather than in close():
+            # there is no geometry worth saving for an app that never opened.
             if self._remember_window:
                 self._save_window_state()
-            if self._tray is not None:
-                self._tray.stop()
-            if self._power_events:
-                from vesper.core import power as _power_mod
-
-                _power_mod.stop_power_monitor()
-            # A closed window must not leave spawned children running.
-            self._process_manager.kill_all()
-            if self._static_server is not None:
-                self._static_server.shutdown()
-                self._static_server.server_close()
-                self._static_server = None
-            self.ipc.close()
-            if self._single_instance is not None:
-                self._single_instance.release()
+            self.close()

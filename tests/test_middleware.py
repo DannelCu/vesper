@@ -7,9 +7,23 @@ from vesper.core.ipc import IPC
 from vesper.core.registry import CommandRegistry
 
 
+
+# Async tests build a real event loop and its thread. Tracking every IPC the
+# factory hands out means no test in this file can forget to release one — the
+# leak that used to surface hundreds of tests later as EMFILE.
+_created: list = []
+
+
+@pytest.fixture(autouse=True)
+def _close_created_ipcs():
+    yield
+    while _created:
+        _created.pop().close()
+
 def _make_ipc(middleware=None, *, debug=False):
     registry = CommandRegistry()
     ipc = IPC(registry, middleware=middleware, debug=debug)
+    _created.append(ipc)
     return ipc, registry
 
 

@@ -337,6 +337,38 @@ app = App(
 
 ---
 
+## Shutting Down
+
+`app.run()` blocks until the window closes and releases everything on the way out —
+the tray icon, the power monitor, spawned processes, the static server, the async
+event loop and the single-instance lock. A normal app never has to think about it.
+
+The exception is an `App` you build but never run: a test, or a script that only
+wants the command registry. Nothing has released it, so it holds an event loop
+thread until the process exits. Close it explicitly:
+
+```python
+app = App(title="my-app")
+try:
+    ...
+finally:
+    app.close()
+```
+
+or let a `with` block do it:
+
+```python
+with App(title="my-app") as app:
+    ...
+```
+
+`close()` is idempotent and safe on an app that never started anything, so calling
+it alongside `run()` is harmless. This matters most in test suites: each unclosed
+app holds descriptors, and a few hundred of them exhaust the process limit —
+failing whatever test happens to run next rather than the one at fault.
+
+---
+
 ## A Complete Example
 
 The repository ships a runnable app that exercises IPC, the scoped filesystem API,

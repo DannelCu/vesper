@@ -106,12 +106,26 @@ def test_app_command_without_guard_no_entry():
 # ── IPC executes guards before middleware ─────────────────────────────────────
 
 
+
+# Async tests build a real event loop and its thread. Tracking every IPC the
+# factory hands out means no test in this file can forget to release one — the
+# leak that used to surface hundreds of tests later as EMFILE.
+_created: list = []
+
+
+@pytest.fixture(autouse=True)
+def _close_created_ipcs():
+    yield
+    while _created:
+        _created.pop().close()
+
 def _make_ipc(guards_map=None, middleware=None):
     registry = CommandRegistry()
     if guards_map:
         for name, gs in guards_map.items():
             registry._guards[name] = gs
     ipc = IPC(registry, middleware=middleware or [])
+    _created.append(ipc)
     return ipc, registry
 
 
