@@ -215,21 +215,25 @@ def test_write_files_empty_list_is_false():
 
 
 def test_read_files_filters_paths_outside_scope(monkeypatch, tmp_path):
+    # The subject here is the scope filter, not the platform readers (covered
+    # above) — stub the reader so the paths are native to whatever OS runs the
+    # test, instead of baking POSIX URIs that break on Windows runners.
     inside = tmp_path / "inside"
+    outside = tmp_path / "outside"
     inside.mkdir()
+    outside.mkdir()
     in_file = inside / "ok.txt"
     in_file.write_text("")
+    out_file = outside / "secret.txt"
+    out_file.write_text("")
 
     monkeypatch.setattr(clipboard.sys, "platform", "linux")
-
-    def fake_run(cmd, **kwargs):
-        uris = f"{in_file.resolve().as_uri()}\nfile:///etc/passwd\n"
-        return subprocess.CompletedProcess(cmd, 0, stdout=uris, stderr="")
-
-    monkeypatch.setattr(clipboard.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        clipboard, "_linux_read_files", lambda: [str(in_file), str(out_file)]
+    )
 
     scope = FsScope([str(inside)])
-    assert clipboard.read_files(scope=scope) == [str(in_file.resolve())]
+    assert clipboard.read_files(scope=scope) == [str(in_file)]
 
 
 def test_clipboard_files_commands_registered():
