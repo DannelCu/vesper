@@ -136,6 +136,12 @@ class UserService:
 | `vesper-mongodb` | MongoDB via PyMongo | `MongoDatabase` |
 | `vesper-shortcuts` | Global keyboard shortcuts (active even when unfocused) | — |
 | `vesper-theme` | OS dark/light mode detection and change events | — |
+| `vesper-watch` | File watching with change events (watchdog) | — |
+| `vesper-notify` | Rich notifications — click callbacks, buttons, icon, sound | — |
+| `vesper-crash` | Crash reporting to Sentry, privacy-first | — |
+| `vesper-screenshot` | Screen capture — full, per monitor, or region (mss) | — |
+| `vesper-serial` | Serial ports — list, stream, write (pyserial) | — |
+| `vesper-sysinfo` | CPU, memory, disks, network, battery, uptime (psutil) | — |
 
 ---
 
@@ -179,6 +185,7 @@ Installing plugins:
 ```bash
 pip install vesper-store vesper-db vesper-http vesper-keychain vesper-mongodb
 pip install vesper-shortcuts vesper-theme
+pip install vesper-watch vesper-notify vesper-crash vesper-screenshot vesper-serial vesper-sysinfo
 ```
 
 ---

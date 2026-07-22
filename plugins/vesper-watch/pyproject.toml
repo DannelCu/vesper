@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vesper-watch"
+version = "0.1.0"
+description = "File watching plugin for Vesper — emit fs change events to the frontend via watchdog"
+requires-python = ">=3.10"
+authors = [{ name = "DannelCu" }]
+license = "MIT"
+
+dependencies = [
+  "vesper",
+  "watchdog>=3.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["vesper_watch*"]
+
+[tool.setuptools.package-data]
+vesper_watch = ["sdk/*.js"]

@@ -80,6 +80,7 @@ class IPC:
         self._middleware: list = middleware if middleware is not None else []
 
         self._teardown: list = []
+        self._error_hooks: list = []
         self._loop = asyncio.new_event_loop()
         _started = threading.Event()
 
@@ -91,6 +92,26 @@ class IPC:
         self._loop_thread = threading.Thread(target=_run, daemon=True, name="vesper-async")
         self._loop_thread.start()
         _started.wait(timeout=5)
+
+    def on_error(self, fn) -> None:
+        """
+        Observe exceptions raised while handling IPC calls.
+
+        *fn* is called with ``(command_name, exception)`` for every exception a
+        command, guard, or middleware raises — but not for policy denials
+        (``ForbiddenError``), which are outcomes rather than defects. Purely an
+        observation point for error-reporting plugins: the error response the
+        frontend receives is built exactly as before, and a hook that itself
+        raises is logged and ignored.
+        """
+        self._error_hooks.append(fn)
+
+    def _notify_error(self, command_name: str, exc: Exception) -> None:
+        for fn in self._error_hooks:
+            try:
+                fn(command_name, exc)
+            except Exception:
+                logger.exception("IPC error hook %r failed", fn)
 
     def close(self, timeout: float = 2.0) -> None:
         """
@@ -224,6 +245,7 @@ class IPC:
                 # Denial — either ours above or raised deliberately by the guard.
                 return self._error(request_id, "ForbiddenError", str(e))
             except Exception as e:
+                self._notify_error(command_name, e)
                 return self._error(
                     request_id, "GuardError", str(e), cause=e.__class__.__name__
                 )
@@ -241,6 +263,7 @@ class IPC:
                 # Middleware is also allowed to reject a call outright.
                 return self._error(request_id, "ForbiddenError", str(e))
             except Exception as e:
+                self._notify_error(command_name, e)
                 return self._error(
                     request_id, "MiddlewareError", str(e), cause=e.__class__.__name__
                 )
@@ -252,6 +275,7 @@ class IPC:
                 else:
                     result = command(**args)
             except Exception as e:
+                self._notify_error(command_name, e)
                 return self._error(request_id, e.__class__.__name__, str(e))
 
             return {

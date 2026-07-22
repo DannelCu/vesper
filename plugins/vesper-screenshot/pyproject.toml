@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vesper-screenshot"
+version = "0.1.0"
+description = "Screen capture plugin for Vesper — full screen, per-monitor or region grabs via mss"
+requires-python = ">=3.10"
+authors = [{ name = "DannelCu" }]
+license = "MIT"
+
+dependencies = [
+  "vesper",
+  "mss>=9.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["vesper_screenshot*"]
+
+[tool.setuptools.package-data]
+vesper_screenshot = ["sdk/*.js"]

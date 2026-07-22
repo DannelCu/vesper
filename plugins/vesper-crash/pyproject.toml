@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vesper-crash"
+version = "0.1.0"
+description = "Crash reporting plugin for Vesper — capture Python and frontend errors to Sentry, privacy-first"
+requires-python = ">=3.10"
+authors = [{ name = "DannelCu" }]
+license = "MIT"
+
+dependencies = [
+  "vesper",
+  "sentry-sdk>=2.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["vesper_crash*"]
+
+[tool.setuptools.package-data]
+vesper_crash = ["sdk/*.js"]

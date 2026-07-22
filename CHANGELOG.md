@@ -11,6 +11,42 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+**Plugins (external dependencies, isolated behind plugin boundaries)**
+
+- **vesper-watch** — file watching via watchdog. `vesper.watch.watch(path, {
+  recursive, debounce, onChange })` streams `created|modified|deleted|moved`
+  events; watched paths honour the app's `fs_scope`, observers stop at app
+  close, and bursts are debounced. README covers the inotify watch limit.
+- **vesper-notify** — rich notifications via desktop-notifier: click callbacks,
+  action buttons, custom icon and sound (`vesper.notifyRich.send`). The core's
+  minimal `vesper.notify()` is untouched as the fallback, and
+  `capabilities().notifications` now reports which backend is active. README
+  documents the macOS constraint: callbacks require a signed bundle.
+- **vesper-crash** — error reporting via sentry-sdk. Captures IPC command
+  exceptions (through the new `IPC.on_error` observation hook — the frontend
+  receives the identical error response), unhandled Python exceptions (chained
+  `sys.excepthook`), and frontend JS errors (`window.onerror` /
+  `unhandledrejection` bridged over `vesper:crash:report`). Privacy-first: no
+  DSN → silent no-op; no PII, no breadcrumbs, no automatic integrations, and
+  the README states exactly what an event contains.
+- **vesper-screenshot** — screen capture via mss: full screen, monitor N, or a
+  region, as a PNG data URL or written to a scope-validated path. Wayland and
+  the macOS Screen Recording permission degrade with explanatory errors, and
+  the new `screenshot` capability reports them in `vesper doctor` (Wayland as
+  N/A — nothing to install).
+- **vesper-serial** — serial ports via pyserial: `listPorts`, multiple
+  simultaneous connections with ids, streamed `vesper:serial:data` events,
+  write, close (plus a `closed` event on unplug). CI exercises the full path
+  against `loop://`; README covers Linux `dialout` per distro and Windows
+  drivers.
+- **vesper-sysinfo** — system information via psutil: CPU, memory, disks,
+  network counters, battery, uptime; on-demand snapshot plus a tick
+  subscription that stops cleanly at app close (no orphan threads).
+- **`IPC.on_error(fn)`** — a core observation hook for exceptions raised in
+  commands, guards and middleware (not policy denials). Zero-dependency, added
+  so error-reporting plugins can observe failures without wrapping the pipeline;
+  the error response the frontend receives is unchanged.
+
 **Core (zero new dependencies)**
 
 - **DevTools in `vesper dev`.** The WebView inspector is now available by default in

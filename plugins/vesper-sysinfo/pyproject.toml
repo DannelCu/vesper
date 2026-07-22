@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vesper-sysinfo"
+version = "0.1.0"
+description = "System information plugin for Vesper — CPU, memory, disks, network, battery and uptime via psutil"
+requires-python = ">=3.10"
+authors = [{ name = "DannelCu" }]
+license = "MIT"
+
+dependencies = [
+  "vesper",
+  "psutil>=5.9",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["vesper_sysinfo*"]
+
+[tool.setuptools.package-data]
+vesper_sysinfo = ["sdk/*.js"]

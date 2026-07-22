@@ -131,6 +131,12 @@ pip install -e plugins/vesper-keychain
 pip install -e plugins/vesper-mongodb
 pip install -e plugins/vesper-shortcuts
 pip install -e plugins/vesper-theme
+pip install -e plugins/vesper-watch
+pip install -e plugins/vesper-notify
+pip install -e plugins/vesper-crash
+pip install -e plugins/vesper-screenshot
+pip install -e plugins/vesper-serial
+pip install -e plugins/vesper-sysinfo
 ```
 
 The plugins are separate distributions that depend on `vesper`. Installing them is not
@@ -233,7 +239,7 @@ vesper/
 │   ├── sdk/           vesper.js — the frontend IPC bridge
 │   ├── exceptions/    Typed error hierarchy
 │   └── cli.py         Argument parsing and dispatch
-├── plugins/           Seven first-party plugins, each its own distribution
+├── plugins/           Thirteen first-party plugins, each its own distribution
 ├── docs/              User-facing documentation
 │   └── recipes/       Complete examples for patterns not built into the framework
 └── tests/             Core framework test suite

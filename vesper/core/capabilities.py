@@ -19,6 +19,7 @@ to be meaningful, and it is a critical dependency rather than an optional one.
 from __future__ import annotations
 
 import importlib.util
+import os
 import shutil
 import sys
 
@@ -103,6 +104,12 @@ def _probe_clipboard_files() -> dict:
 
 
 def _probe_notifications() -> dict:
+    # The vesper-notify plugin upgrades notifications with click callbacks and
+    # buttons; when its backend is importable, report it as the active one so
+    # "which notify am I actually getting?" has one answer.
+    if _has_module("desktop_notifier"):
+        return _entry(True, "desktop-notifier (rich, via vesper-notify)")
+
     if sys.platform == "win32":
         return _entry(True, "PowerShell toast notification")
     if sys.platform == "darwin":
@@ -247,6 +254,30 @@ def _probe_mica() -> dict:
     )
 
 
+def _probe_screenshot() -> dict:
+    """
+    Screen capture via the vesper-screenshot plugin (mss).
+
+    Wayland is reported as N/A without a fix: mss reads X11, and there is
+    nothing the user can install to change what their session exposes.
+    """
+    if (
+        sys.platform.startswith("linux")
+        and os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland"
+    ):
+        return _entry(
+            False,
+            "mss cannot capture under Wayland (XDG portal not supported yet)",
+            None,
+        )
+
+    ok = _has_module("mss")
+    detail = "mss" if ok else "mss not importable"
+    if ok and sys.platform == "darwin":
+        detail += " (needs the Screen Recording permission, granted manually)"
+    return _entry(ok, detail, "pip install vesper-screenshot")
+
+
 def _probe_nsis() -> dict:
     """
     NSIS, for Windows installers.
@@ -288,6 +319,7 @@ _PROBES = {
     "badge": _probe_badge,
     "mica": _probe_mica,
     "nsis": _probe_nsis,
+    "screenshot": _probe_screenshot,
     "power_events": _probe_power_events,
     "global_shortcuts": _probe_global_shortcuts,
 }

@@ -22,6 +22,7 @@ ALL_CAPABILITIES = {
     "badge",
     "mica",
     "nsis",
+    "screenshot",
     "power_events",
     "global_shortcuts",
 }
@@ -47,6 +48,9 @@ def env(monkeypatch):
         def set(self, platform: str, *, binaries=(), modules=()) -> None:
             self.binaries = set(binaries)
             self.modules = set(modules)
+            # The screenshot probe reads the session type; clear it so the
+            # result never depends on the machine running the suite.
+            monkeypatch.delenv("XDG_SESSION_TYPE", raising=False)
             monkeypatch.setattr(capabilities.sys, "platform", platform)
             monkeypatch.setattr(
                 capabilities, "_has_binary", lambda name: name in self.binaries

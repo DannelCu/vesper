@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vesper-serial"
+version = "0.1.0"
+description = "Serial port plugin for Vesper — list, open, stream and write serial devices via pyserial"
+requires-python = ">=3.10"
+authors = [{ name = "DannelCu" }]
+license = "MIT"
+
+dependencies = [
+  "vesper",
+  "pyserial>=3.5",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["vesper_serial*"]
+
+[tool.setuptools.package-data]
+vesper_serial = ["sdk/*.js"]

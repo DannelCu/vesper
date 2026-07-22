@@ -154,6 +154,114 @@ JS API: `vesper.theme.get()`, `vesper.theme.onChange(callback)`.
 
 See [vesper-theme README](../plugins/vesper-theme/README.md).
 
+### vesper-watch
+
+File watching via watchdog (inotify / FSEvents / ReadDirectoryChangesW). Watched paths honour the app's `fs_scope`; change events stream to the frontend with debouncing.
+
+```bash
+pip install vesper-watch
+```
+
+```python
+from vesper_watch import WatchPlugin
+
+app = App(plugins=[WatchPlugin()])
+```
+
+JS API: `vesper.watch.watch(path, { recursive, debounce, onChange })`, `unwatch(id)`, `onChange(callback)`.
+
+See [vesper-watch README](../plugins/vesper-watch/README.md).
+
+### vesper-notify
+
+Rich notifications via desktop-notifier: click callbacks, action buttons, custom icon and sound. The core's minimal `vesper.notify()` stays as the dependency-free fallback; `vesper.capabilities().notifications` reflects which backend is active. On macOS, callbacks require a signed bundle — see the README.
+
+```bash
+pip install vesper-notify
+```
+
+```python
+from vesper_notify import NotifyPlugin
+
+app = App(plugins=[NotifyPlugin(app_name="My App")])
+```
+
+JS API: `vesper.notifyRich.send(title, { body, buttons, icon, sound, onClick, onAction })`.
+
+See [vesper-notify README](../plugins/vesper-notify/README.md).
+
+### vesper-crash
+
+Crash reporting via sentry-sdk: exceptions in IPC commands, unhandled Python exceptions, and frontend JS errors. Privacy-first (no PII, no breadcrumbs, no automatic integrations) and a silent no-op without a DSN. Reporting never alters the error the frontend receives.
+
+```bash
+pip install vesper-crash
+```
+
+```python
+from vesper_crash import CrashPlugin
+
+app = App(plugins=[CrashPlugin(dsn=os.environ.get("SENTRY_DSN"))])
+```
+
+JS API: the SDK installs `window.onerror`/`unhandledrejection` bridges; `vesper.crash.report(error)` for manual reports.
+
+See [vesper-crash README](../plugins/vesper-crash/README.md).
+
+### vesper-screenshot
+
+Screen capture via mss: full screen, per monitor, or a region — as a PNG data URL or written to a scope-validated path. Wayland is not supported (session fact, reported by `vesper doctor`); macOS needs the Screen Recording permission, granted manually.
+
+```bash
+pip install vesper-screenshot
+```
+
+```python
+from vesper_screenshot import ScreenshotPlugin
+
+app = App(plugins=[ScreenshotPlugin()])
+```
+
+JS API: `vesper.screenshot.capture({ monitor, region })`, `captureToFile(dest, options)`, `monitors()`.
+
+See [vesper-screenshot README](../plugins/vesper-screenshot/README.md).
+
+### vesper-serial
+
+Serial port access via pyserial: list devices, open several ports with ids, stream incoming data as events, write, close. Linux users need the `dialout` group — see the README.
+
+```bash
+pip install vesper-serial
+```
+
+```python
+from vesper_serial import SerialPlugin
+
+app = App(plugins=[SerialPlugin()])
+```
+
+JS API: `vesper.serial.listPorts()`, `open(port, { baudrate, onData, onClose })`, `write(id, data)`, `close(id)`.
+
+See [vesper-serial README](../plugins/vesper-serial/README.md).
+
+### vesper-sysinfo
+
+System information via psutil: CPU, memory, disks, network counters, battery, uptime — snapshots on demand or a tick stream for dashboards, stopped cleanly at app close.
+
+```bash
+pip install vesper-sysinfo
+```
+
+```python
+from vesper_sysinfo import SysinfoPlugin
+
+app = App(plugins=[SysinfoPlugin()])
+```
+
+JS API: `vesper.sysinfo.snapshot()`, `subscribe({ interval, onTick })`, `unsubscribe()`.
+
+See [vesper-sysinfo README](../plugins/vesper-sysinfo/README.md).
+
 ---
 
 ## Syncing JS SDKs
