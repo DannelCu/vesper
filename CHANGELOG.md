@@ -185,6 +185,17 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   for the per-platform table.
 
 ### Fixed
+- **The production server ignored `Range` requests, so media could not be seeked.**
+  `App(serve_frontend=True)` answered every request with `200` and the whole file, no
+  `Accept-Ranges` — a `<video>` element will not offer a seek bar without it, which
+  made the localhost server no better than `file://` for the media playback it exists
+  to enable. It now answers `206 Partial Content` with `Content-Range`, handles the
+  open-ended, suffix and single-byte forms, and returns `416` for an unsatisfiable
+  range. Unsupported forms (multi-range, non-`bytes` units) still return the whole
+  file, which is always a legal answer.
+- **The production server read whole files into memory.** Every response called
+  `read_bytes()`, so serving a 2 GB video cost 2 GB of RSS per request. Files are now
+  streamed in 64 KB blocks: a 64 KB range out of a 300 MB file moves peak RSS by 2 MB.
 - **IPC internals were reachable from JavaScript.** PyWebView builds the JS-callable
   API by walking the `js_api` object with `dir()` and recursing into public
   attributes. Vesper held the IPC instance under a public name, so

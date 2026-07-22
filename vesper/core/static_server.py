@@ -35,6 +35,52 @@ def new_token() -> str:
     return secrets.token_urlsafe(16)
 
 
+# Files are streamed in blocks rather than read whole. A media library served from
+# here can hold files far larger than the process should ever hold in memory.
+_CHUNK_BYTES = 64 * 1024
+
+
+def parse_range(header: str | None, size: int) -> tuple[int, int] | None | bool:
+    """
+    Resolve a Range header against a file of *size* bytes.
+
+    Returns the inclusive ``(start, end)`` to send, None when the whole file
+    should be sent, or False when the range cannot be satisfied (416).
+
+    Only the single-range forms browsers actually send for media are handled —
+    ``bytes=0-``, ``bytes=100-199`` and the suffix form ``bytes=-500``. A
+    multi-range request falls back to the whole file, which is a valid response.
+    """
+    if not header:
+        return None
+
+    units, _, spec = header.partition("=")
+    if units.strip().lower() != "bytes" or "," in spec:
+        return None
+
+    start_text, sep, end_text = spec.strip().partition("-")
+    if not sep:
+        return None
+
+    try:
+        if not start_text:
+            # Suffix form: the last N bytes.
+            length = int(end_text)
+            if length <= 0:
+                return False
+            return max(0, size - length), size - 1
+
+        start = int(start_text)
+        end = int(end_text) if end_text else size - 1
+    except ValueError:
+        return None
+
+    if start >= size or start < 0 or end < start:
+        return False
+
+    return start, min(end, size - 1)
+
+
 def make_static_handler(
     frontend_dir: Path,
     *,
@@ -117,13 +163,69 @@ def make_static_handler(
                     self._send(404)
                     return
 
-            content = file_path.read_bytes()
+            self._serve_file(file_path)
+
+        def _serve_file(self, file_path: Path) -> None:
             content_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
 
+            # HTML is rewritten in one piece (the dev server injects its reload
+            # script), and is small enough that holding it costs nothing. It is
+            # also never range-requested.
             if file_path.suffix == ".html" and html_postprocess is not None:
-                content = html_postprocess(content)
+                self._send(200, html_postprocess(file_path.read_bytes()), content_type)
+                return
 
-            self._send(200, content, content_type)
+            try:
+                size = file_path.stat().st_size
+            except OSError:
+                self._send(404)
+                return
+
+            span = parse_range(self.headers.get("Range"), size)
+
+            if span is False:
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+
+            if span is None:
+                start, end = 0, size - 1
+                status = 200
+            else:
+                start, end = span
+                status = 206
+
+            length = end - start + 1
+
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(length))
+            # Advertised on every file response, not just partial ones: a <video>
+            # element checks this before it will let the user seek at all.
+            self.send_header("Accept-Ranges", "bytes")
+            if status == 206:
+                self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+            self.end_headers()
+
+            self._stream(file_path, start, length)
+
+        def _stream(self, file_path: Path, start: int, length: int) -> None:
+            try:
+                with file_path.open("rb") as handle:
+                    handle.seek(start)
+                    remaining = length
+                    while remaining > 0:
+                        block = handle.read(min(_CHUNK_BYTES, remaining))
+                        if not block:
+                            break
+                        self.wfile.write(block)
+                        remaining -= len(block)
+            except (BrokenPipeError, ConnectionResetError):
+                # A media element that seeks away abandons the response mid-flight.
+                # Routine, and there is nobody left to tell.
+                pass
 
     return _Handler
 

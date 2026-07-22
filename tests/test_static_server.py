@@ -276,3 +276,147 @@ def test_window_dev_url_wins_over_serve_url(monkeypatch, tmp_path):
     )
 
     assert mock_wv.create_window.call_args[1]["url"] == "http://localhost:3000"
+
+
+# ── byte ranges ──────────────────────────────────────────────────────────────
+#
+# A <video> element will not let the user seek unless the server advertises
+# Accept-Ranges and answers 206 to a Range request. Without this the production
+# server was no better than file:// for media, and every request also read the
+# whole file into memory — fatal for the media library it is meant to serve.
+
+MEDIA = bytes(range(256)) * 400        # 102400 bytes, position-checkable
+
+
+@pytest.fixture
+def media(frontend):
+    (frontend / "clip.mp4").write_bytes(MEDIA)
+    return frontend
+
+
+def _range_get(url: str, header: str | None = None):
+    """Returns (status, headers, body)."""
+    request = urllib.request.Request(url, headers={"Range": header} if header else {})
+    try:
+        with urllib.request.urlopen(request, timeout=5) as resp:
+            return resp.status, resp.headers, resp.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.headers, e.read()
+
+
+def test_full_response_advertises_range_support(media, served):
+    _, base, _, _ = served
+    status, headers, body = _range_get(f"{base}/clip.mp4")
+
+    assert status == 200
+    assert headers.get("Accept-Ranges") == "bytes"
+    assert body == MEDIA
+
+
+def test_range_request_returns_partial_content(media, served):
+    _, base, _, _ = served
+    status, headers, body = _range_get(f"{base}/clip.mp4", "bytes=1000-1999")
+
+    assert status == 206
+    assert headers.get("Content-Range") == f"bytes 1000-1999/{len(MEDIA)}"
+    assert headers.get("Content-Length") == "1000"
+    assert body == MEDIA[1000:2000]
+
+
+def test_open_ended_range_runs_to_the_end(media, served):
+    _, base, _, _ = served
+    status, headers, body = _range_get(f"{base}/clip.mp4", "bytes=102000-")
+
+    assert status == 206
+    assert headers.get("Content-Range") == f"bytes 102000-102399/{len(MEDIA)}"
+    assert body == MEDIA[102000:]
+
+
+def test_suffix_range_returns_the_tail(media, served):
+    """bytes=-N is how a player grabs the moov atom at the end of an MP4."""
+    _, base, _, _ = served
+    status, headers, body = _range_get(f"{base}/clip.mp4", "bytes=-500")
+
+    assert status == 206
+    assert body == MEDIA[-500:]
+
+
+def test_single_byte_range(media, served):
+    _, base, _, _ = served
+    status, _, body = _range_get(f"{base}/clip.mp4", "bytes=0-0")
+
+    assert status == 206
+    assert body == MEDIA[:1]
+
+
+def test_unsatisfiable_range_is_416(media, served):
+    _, base, _, _ = served
+    status, headers, _ = _range_get(f"{base}/clip.mp4", "bytes=999999-")
+
+    assert status == 416
+    assert headers.get("Content-Range") == f"bytes */{len(MEDIA)}"
+
+
+def test_a_range_past_the_end_is_clamped(media, served):
+    _, base, _, _ = served
+    status, headers, body = _range_get(f"{base}/clip.mp4", "bytes=102300-999999")
+
+    assert status == 206
+    assert headers.get("Content-Range") == f"bytes 102300-102399/{len(MEDIA)}"
+    assert body == MEDIA[102300:]
+
+
+@pytest.mark.parametrize("header", [
+    "items=0-10",          # not bytes
+    "bytes=0-10, 20-30",   # multi-range: whole file is a valid answer
+    "garbage",
+    "bytes=abc-def",
+])
+def test_unsupported_range_forms_fall_back_to_the_whole_file(media, served, header):
+    """Answering 200 with everything is always legal; guessing wrong is not."""
+    _, base, _, _ = served
+    status, _, body = _range_get(f"{base}/clip.mp4", header)
+
+    assert status == 200
+    assert body == MEDIA
+
+
+def test_html_postprocess_still_applies_with_ranges_supported(tmp_path):
+    """HTML is rewritten whole; the range path must not have bypassed that."""
+    root = tmp_path / "frontend"
+    root.mkdir()
+    (root / "index.html").write_text("<body>original</body>")
+
+    handler = static_server.make_static_handler(
+        root, html_postprocess=lambda b: b.replace(b"original", b"injected")
+    )
+    import http.server
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        status, _, body = _range_get(f"http://127.0.0.1:{server.server_address[1]}/index.html")
+        assert status == 200
+        assert b"injected" in body
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+# ── parse_range in isolation ─────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("header, expected", [
+    (None, None),
+    ("", None),
+    ("bytes=0-", (0, 999)),
+    ("bytes=0-99", (0, 99)),
+    ("bytes=500-499", False),      # end before start
+    ("bytes=1000-", False),        # start at EOF
+    ("bytes=-0", False),           # zero-length suffix
+    ("bytes=-1", (999, 999)),
+    ("bytes=-5000", (0, 999)),     # suffix longer than the file
+    ("BYTES=0-9", (0, 9)),         # case-insensitive unit
+])
+def test_parse_range(header, expected):
+    assert static_server.parse_range(header, 1000) == expected
