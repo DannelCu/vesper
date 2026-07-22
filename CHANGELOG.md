@@ -10,6 +10,12 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **CONTRIBUTING.md — "Where a feature lives".** A four-level decision tree (core →
+  plugin → recipe → known issue) that governs where every proposed feature lands,
+  with the admission criteria for each level and one worked example per level. It
+  codifies the philosophy the codebase already followed implicitly: zero new core
+  dependencies, external libraries behind plugin boundaries, three-OS coverage for
+  recipes, and KNOWN-ISSUES reserved for the genuinely impossible.
 - **`vesper doctor` — system WebView backend check.** Resolves the backend pywebview
   will actually use (GTK/WebKit2, Cocoa/WKWebView, WinForms/WebView2) by mirroring
   `webview.guilib` import order, honoring `PYWEBVIEW_GUI` and `KDE_FULL_SESSION`.

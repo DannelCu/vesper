@@ -319,6 +319,60 @@ running the example writes it.
 
 ---
 
+## Where a feature lives
+
+Every proposed feature lands in exactly one of four places. Walk this tree from the
+top; the first level that fits is where the work goes. This is the framework's load-
+bearing decision — it is why the core has two runtime dependencies and why `vesper
+doctor` can be honest about what a machine can and cannot do.
+
+1. **Core** — it can be implemented with the Python standard library, PyWebView, or
+   the dependencies already declared, with **zero new dependencies** → it goes in
+   `vesper/core/`. Acceptable tools: `ctypes`, `subprocess` calls to binaries the OS
+   ships (`osascript`, `powershell`, `hdiutil`, `xclip`), `http.server`, `winreg`,
+   `plistlib`, and JavaScript in the SDK. When the OS-level backend is missing, the
+   feature degrades to a no-op with an honest return value and the gap is reported
+   through `capabilities.py` and `vesper doctor`.
+   *Example: the full `vesper.fs` namespace — copy, move, stat, byte I/O — is
+   `shutil`/`os`/`base64` all the way down, so it belongs in the core.*
+
+2. **Plugin** — it needs an external library, but is useful and isolates cleanly
+   behind a plugin boundary → it goes in `plugins/vesper-<name>/` with its own
+   `pyproject.toml`. The dependency must earn its place: actively maintained,
+   cross-platform, and pip-installable without a compiler toolchain on the user's
+   machine (prebuilt wheels count as acceptable; requiring a build toolchain does
+   not).
+   *Example: file watching. Doing it properly means inotify/FSEvents/
+   ReadDirectoryChangesW, which is exactly what `watchdog` wraps — so it is
+   `vesper-watch`, not core code.*
+
+3. **Recipe** — it cannot be implemented in Vesper, but a documented workaround
+   solves it: a library the user installs themselves, a manual action (permissions,
+   signing, OS configuration), or a code pattern in their app → it goes in
+   `docs/recipes/<name>.md` with **explicit coverage of Windows, macOS, and Linux**.
+   If the workaround cannot cover all three, it is not a recipe — it is a known
+   issue. (One legitimate exception: a recipe for an inherently single-platform
+   artifact, like a Windows installer, which must say so explicitly.)
+   *Example: printing. `window.print()` works everywhere and print-to-PDF exists on
+   all three platforms as a manual step, so `docs/recipes/printing.md` covers it.*
+
+4. **Known issue** — genuinely impossible today because of a barrier Vesper does not
+   control: an API PyWebView does not expose, the absence of a cross-desktop
+   standard, per-platform native code beyond the project's scope → it goes in
+   `KNOWN-ISSUES.md` in the existing format: current behaviour, why it was left this
+   way, and what would unblock it. Only the impossible belongs here — pending effort
+   is backlog, not a known issue.
+   *Example: jump lists and dock menus. Windows requires COM
+   (`ICustomDestinationList`) and macOS requires the NSApplication delegate, which
+   PyWebView owns and does not surface. There is no three-platform workaround, so it
+   is documented as impossible for now.*
+
+When a change is rejected from one level, it moves *down* the tree, never up: a core
+proposal that turns out to need a library becomes a plugin proposal, not a core
+exception.
+
+---
+
 ## Conventions
 
 - **Python 3.10+.** Use `from __future__ import annotations` and modern typing syntax
