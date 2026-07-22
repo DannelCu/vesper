@@ -88,7 +88,10 @@ def test_macos_write_single_file_script(monkeypatch, tmp_path):
     assert clipboard.write_files([str(f)]) is True
 
     assert calls["cmd"][0] == "osascript"
-    assert calls["cmd"][2] == f'set the clipboard to POSIX file "{f.resolve()}"'
+    # The path goes through the AppleScript quoting — on Windows runners the
+    # tmp path contains backslashes, which the quoting doubles.
+    expected = clipboard._osa_quote(str(f.resolve()))
+    assert calls["cmd"][2] == f'set the clipboard to POSIX file "{expected}"'
 
 
 def test_macos_write_multiple_files_builds_a_list(monkeypatch, tmp_path):
@@ -108,8 +111,8 @@ def test_macos_write_multiple_files_builds_a_list(monkeypatch, tmp_path):
 
     script = calls["cmd"][2]
     assert script.startswith("set the clipboard to {")
-    assert f'POSIX file "{a.resolve()}"' in script
-    assert f'POSIX file "{b.resolve()}"' in script
+    assert f'POSIX file "{clipboard._osa_quote(str(a.resolve()))}"' in script
+    assert f'POSIX file "{clipboard._osa_quote(str(b.resolve()))}"' in script
 
 
 def test_macos_write_escapes_quotes(monkeypatch, tmp_path):

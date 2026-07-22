@@ -108,8 +108,10 @@ def test_build_deb_constructs_the_call_and_tree(deb_project, monkeypatch):
         # Snapshot the staging tree before build_deb cleans it up.
         staging = Path(cmd[3])
         seen["control"] = (staging / "DEBIAN" / "control").read_text()
+        # as_posix(): the staged layout is what matters, not the separators of
+        # the OS running the test.
         seen["files"] = sorted(
-            str(p.relative_to(staging)) for p in staging.rglob("*") if p.is_file()
+            p.relative_to(staging).as_posix() for p in staging.rglob("*") if p.is_file()
         )
         return subprocess.CompletedProcess(cmd, 0, stdout=b"", stderr=b"")
 

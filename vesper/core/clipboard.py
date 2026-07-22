@@ -5,7 +5,6 @@ import struct
 import subprocess
 import sys
 import urllib.parse
-import urllib.request
 from pathlib import Path
 
 from vesper.core.fs_scope import FsScope
@@ -453,6 +452,9 @@ def _linux_read_files() -> list[str]:
         if not line or line.startswith("#"):
             continue
         if line.startswith("file://"):
+            # These URIs always carry POSIX paths (this branch only runs on
+            # Linux), so decode by hand rather than via url2pathname, whose
+            # behaviour follows the *host* OS.
             parsed = urllib.parse.urlparse(line)
-            paths.append(urllib.request.url2pathname(parsed.path))
+            paths.append(urllib.parse.unquote(parsed.path))
     return paths

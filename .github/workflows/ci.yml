@@ -38,6 +38,12 @@ jobs:
           pip install -e plugins/vesper-mongodb
           pip install -e plugins/vesper-shortcuts
           pip install -e plugins/vesper-theme
+          pip install -e plugins/vesper-watch
+          pip install -e plugins/vesper-notify
+          pip install -e plugins/vesper-crash
+          pip install -e plugins/vesper-screenshot
+          pip install -e plugins/vesper-serial
+          pip install -e plugins/vesper-sysinfo
 
       - name: Install test dependencies
         run: pip install pytest sqlalchemy httpx pymongo mongomock keyring pynput
