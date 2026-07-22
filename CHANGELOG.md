@@ -185,6 +185,12 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   for the per-platform table.
 
 ### Fixed
+- **IPC internals were reachable from JavaScript.** PyWebView builds the JS-callable
+  API by walking the `js_api` object with `dir()` and recursing into public
+  attributes. Vesper held the IPC instance under a public name, so
+  `window.pywebview.api.ipc.handle`, `.ipc.close` and `.ipc.registry.register` were
+  published to the page — a route around the `invoke` envelope that guards and
+  middleware hang off. The reference is now private, so only `invoke` is exposed.
 - **`autostart.enable()` failed on Windows when no startup entry had ever been
   registered.** It used `winreg.OpenKey`, which cannot create a missing key, and
   `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` does not exist on a profile

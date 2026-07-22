@@ -208,8 +208,15 @@ class Window:
         self.ipc = ipc_handler
 
         class API:
+            # PyWebView builds the JS-callable surface by walking this object with
+            # dir(), recursing into every public attribute and skipping names that
+            # start with an underscore. A public `self.ipc` therefore published
+            # window.pywebview.api.ipc.handle, .close and .registry.register to the
+            # page — letting the frontend reach the registry and bypass the invoke
+            # envelope that guards and middleware hang off. Private name, so only
+            # invoke() is exposed.
             def __init__(self, ipc: IPC):
-                self.ipc = ipc
+                self._ipc = ipc
 
             def invoke(self, message):
                 """
@@ -230,7 +237,7 @@ class Window:
                         }
                     }
 
-                return self.ipc.handle(data)
+                return self._ipc.handle(data)
 
         api = API(ipc_handler)
 

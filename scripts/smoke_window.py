@@ -35,17 +35,45 @@ INDEX_HTML = """<!doctype html>
   <body>
     <h1>Vesper smoke test</h1>
     <p id="status">starting</p>
-    <script src="./vesper.js"></script>
+
+    <!-- Breadcrumbs, recorded before anything else loads.
+
+         Both the success and the failure path of main() report through
+         vesper.invoke, so a bridge that never initialises takes the error
+         message down with it and the run dies as a bare timeout. This trail
+         lives in plain JS and is read back over evaluate_js, which is
+         Python->JS and keeps working when JS->Python does not. -->
     <script>
+      window.__smoke = { steps: [], errors: [] };
+      function step(name) { window.__smoke.steps.push(name); }
+      window.onerror = function (message, src, line, col) {
+        window.__smoke.errors.push(message + " @" + line + ":" + col);
+      };
+      window.addEventListener("unhandledrejection", function (event) {
+        window.__smoke.errors.push("unhandled rejection: " + event.reason);
+      });
+      window.addEventListener("pywebviewready", function () { step("pywebviewready"); });
+      step("inline script ran");
+    </script>
+
+    <script src="./vesper.js"></script>
+
+    <script>
+      step(typeof vesper === "undefined" ? "SDK MISSING" : "SDK loaded");
+
       async function main() {
+        step("load event");
+        step("pywebview." + (window.pywebview ? (window.pywebview.api ? "api present" : "api MISSING") : "MISSING"));
         try {
           const greeting = await vesper.invoke("smoke_ping", { value: 41 });
+          step("invoke returned");
           document.getElementById("status").textContent = greeting;
 
           // Report what the frontend actually received, so a silently wrong
           // result fails the run instead of passing as "no exception raised".
           await vesper.invoke("smoke_report", { received: greeting });
         } catch (error) {
+          window.__smoke.errors.push("main: " + error);
           await vesper.invoke("smoke_report", { received: "JS error: " + error });
         }
       }
@@ -54,6 +82,41 @@ INDEX_HTML = """<!doctype html>
   </body>
 </html>
 """
+
+
+def _dump_frontend_state(app: App) -> None:
+    """
+    Read the page's breadcrumb trail back on timeout.
+
+    evaluate_js is Python -> JS, which is a different path from the JS -> Python
+    bridge the test exercises, so it still answers when that bridge never came up.
+    A timeout that only says "nothing happened" costs a whole CI round trip to
+    diagnose; this turns it into a report.
+    """
+    try:
+        raw = app.window.window.evaluate_js("JSON.stringify(window.__smoke)")
+    except Exception:
+        print("Could not read frontend state:", file=sys.stderr)
+        traceback.print_exc()
+        return
+
+    if not raw:
+        print("Frontend state: unavailable (page never ran its first script)",
+              file=sys.stderr)
+        return
+
+    import json
+
+    try:
+        state = json.loads(raw)
+    except (TypeError, ValueError):
+        print(f"Frontend state (unparsed): {raw!r}", file=sys.stderr)
+        return
+
+    print("Frontend reached:", " -> ".join(state.get("steps") or ["nothing"]),
+          file=sys.stderr)
+    for error in state.get("errors") or []:
+        print(f"Frontend error: {error}", file=sys.stderr)
 
 
 def main() -> int:
@@ -97,6 +160,7 @@ def main() -> int:
     # window down instead, so the failure is reported with the steps that did complete.
     def watchdog() -> None:
         print(f"TIMEOUT: no IPC round trip within {TIMEOUT_SECONDS}s", file=sys.stderr)
+        _dump_frontend_state(app)
         try:
             app.quit()
         except Exception:

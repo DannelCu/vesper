@@ -242,3 +242,100 @@ def test_non_dict_args_returns_validation_error():
     assert resp["ok"] is False
     assert resp["error"]["type"] == "ValidationError"
     assert "dict" in resp["error"]["message"].lower()
+
+
+# ── the surface PyWebView publishes to JavaScript ─────────────────────────────
+
+
+def _js_exposed_names(js_api) -> set[str]:
+    """
+    Reproduce PyWebView's introspection of the js_api object.
+
+    It walks the object with dir(), recurses into public attributes and skips
+    names starting with an underscore (webview/util.py, inject_pywebview). Every
+    name it collects becomes callable from the page as window.pywebview.api.<name>.
+    """
+    import inspect
+
+    seen: list[int] = []
+
+    def walk(obj, base="", found=None):
+        if id(obj) in seen:
+            return found
+        seen.append(id(obj))
+        if found is None:
+            found = set()
+        for name in dir(obj):
+            if name.startswith("_"):
+                continue
+            try:
+                full = f"{base}.{name}" if base else name
+                attr = getattr(obj, name)
+                if inspect.ismethod(attr) or inspect.isfunction(attr):
+                    found.add(full)
+                elif inspect.isclass(attr) or (
+                    isinstance(attr, object)
+                    and not callable(attr)
+                    and hasattr(attr, "__module__")
+                ):
+                    walk(attr, full, found)
+            except Exception:
+                continue
+        return found
+
+    return walk(js_api)
+
+
+def _build_js_api(tmp_path):
+    """The API object Window.create hands to webview.create_window."""
+    from unittest.mock import MagicMock, patch
+
+    from vesper import App
+    from vesper.core import window as window_mod
+
+    # create() checks the frontend exists before building the window.
+    index = tmp_path / "index.html"
+    index.write_text("<html></html>", encoding="utf-8")
+
+    app = App(frontend=str(index))
+    captured = {}
+
+    def fake_create_window(**kwargs):
+        captured["js_api"] = kwargs["js_api"]
+        return MagicMock()
+
+    with patch.object(window_mod.webview, "create_window", side_effect=fake_create_window):
+        app.window.create(ipc_handler=app.ipc, config=app.config)
+
+    return captured["js_api"], app
+
+
+def test_only_invoke_is_exposed_to_javascript(tmp_path):
+    """
+    The page must reach Python through invoke() and nothing else.
+
+    A public attribute on the API object is not private: PyWebView recurses into
+    it and publishes what it finds. Holding the IPC under a public name exposed
+    ipc.handle, ipc.close and ipc.registry.register to the frontend, which is a
+    way around the invoke envelope that guards and middleware hang off.
+    """
+    js_api, _ = _build_js_api(tmp_path)
+    assert _js_exposed_names(js_api) == {"invoke"}
+
+
+def test_the_registry_is_not_reachable_from_javascript(tmp_path):
+    """Specifically: registering a command from the page must not be possible."""
+    js_api, _ = _build_js_api(tmp_path)
+    exposed = _js_exposed_names(js_api)
+    assert not any("registry" in name for name in exposed), exposed
+
+
+def test_invoke_still_routes_through_the_ipc(tmp_path):
+    """Making the reference private must not break the bridge it carries."""
+    js_api, app = _build_js_api(tmp_path)
+
+    app.registry.register(lambda: "ok", name="probe")
+    response = js_api.invoke('{"id": "1", "command": "probe", "args": {}}')
+
+    assert response["ok"] is True
+    assert response["result"] == "ok"
