@@ -25,6 +25,7 @@ from vesper.core.guard import guard
 from vesper.core.menu import MenuItem
 from vesper.core.module import Module, Controller, Injectable, command
 from vesper.core.plugin import VesperPlugin
+from vesper.core.process import ShellScope, ShellScopeError
 from vesper.core.tray import TrayMenuItem
 from vesper.core.window import WindowHandle
 from vesper.exceptions.errors import (
@@ -52,6 +53,8 @@ __all__ = [
     "guard",
     "MenuItem",
     "VesperPlugin",
+    "ShellScope",
+    "ShellScopeError",
     "TrayMenuItem",
     "WindowHandle",
     "VesperError",

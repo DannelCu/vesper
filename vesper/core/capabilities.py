@@ -86,6 +86,22 @@ def _probe_clipboard_image() -> dict:
     )
 
 
+def _probe_clipboard_files() -> dict:
+    if sys.platform == "win32":
+        return _entry(True, "CF_HDROP via ctypes")
+    if sys.platform == "darwin":
+        return _entry(True, "osascript POSIX file")
+
+    # The same xclip that backs text and images, speaking text/uri-list — one
+    # install story, reported per capability like the other two.
+    ok = _has_binary("xclip")
+    return _entry(
+        ok,
+        "xclip (text/uri-list)" if ok else "xclip not found",
+        _LINUX_XCLIP_FIX,
+    )
+
+
 def _probe_notifications() -> dict:
     if sys.platform == "win32":
         return _entry(True, "PowerShell toast notification")
@@ -210,6 +226,45 @@ def _probe_power_events() -> dict:
     )
 
 
+def _probe_mica() -> dict:
+    """
+    Windows 11 backdrop materials (Mica / Acrylic).
+
+    Purely a platform fact — there is nothing to install — so like the Linux badge
+    this reports N/A without a fix everywhere it cannot work.
+    """
+    if sys.platform != "win32":
+        return _entry(False, "backdrop materials are Windows 11 only", None)
+
+    from vesper.core import window_effects
+
+    ok = window_effects.supported()
+    return _entry(
+        ok,
+        "DwmSetWindowAttribute backdrop" if ok
+        else "requires Windows 11 22H2 (build 22621) or newer",
+        None,
+    )
+
+
+def _probe_nsis() -> dict:
+    """
+    NSIS, for Windows installers.
+
+    The core never drives makensis (external, non-pip tooling) — this exists so
+    `vesper doctor` can say whether the recipe in
+    docs/recipes/windows-installer.md is runnable on this machine.
+    """
+    ok = _has_binary("makensis")
+    if sys.platform == "win32":
+        fix = "winget install NSIS  (or download from https://nsis.sourceforge.io)"
+    elif sys.platform == "darwin":
+        fix = "brew install makensis"
+    else:
+        fix = "sudo apt install nsis  (Fedora: dnf install mingw32-nsis, Arch: pacman -S nsis)"
+    return _entry(ok, "makensis" if ok else "makensis not found", fix)
+
+
 def _probe_global_shortcuts() -> dict:
     # Belongs to the vesper-shortcuts plugin rather than the core, but it is
     # reported here because the frontend asking "can I offer this?" does not care
@@ -225,11 +280,14 @@ def _probe_global_shortcuts() -> dict:
 _PROBES = {
     "clipboard_text": _probe_clipboard_text,
     "clipboard_image": _probe_clipboard_image,
+    "clipboard_files": _probe_clipboard_files,
     "notifications": _probe_notifications,
     "trash": _probe_trash,
     "keep_awake": _probe_keep_awake,
     "tray": _probe_tray,
     "badge": _probe_badge,
+    "mica": _probe_mica,
+    "nsis": _probe_nsis,
     "power_events": _probe_power_events,
     "global_shortcuts": _probe_global_shortcuts,
 }

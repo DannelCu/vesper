@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import base64
+import struct
 import subprocess
 import sys
+import urllib.parse
+import urllib.request
+from pathlib import Path
 
+from vesper.core.fs_scope import FsScope
 from vesper.core.logging import get_logger
 
 logger = get_logger("clipboard")
@@ -251,3 +256,203 @@ def _windows_write_image(raw: bytes) -> bool:
 def _ps_quote(value: str) -> str:
     """Quote a string for a PowerShell single-quoted literal."""
     return "'" + value.replace("'", "''") + "'"
+
+
+# ── files ────────────────────────────────────────────────────────────────────
+#
+# The OS clipboard's *file object* — what Explorer/Finder/file managers put there
+# on Copy and read back on Paste. Distinct from copying a path as text: pasting
+# these into a file manager copies the files themselves.
+
+
+def write_files(paths: list[str]) -> bool:
+    """
+    Put files on the clipboard as the OS file object.
+
+    After this, Paste in Explorer/Finder/the file manager copies the files.
+    Returns True when the platform accepted them; False (with a debug log) when
+    the platform tool is missing, matching the text clipboard's contract.
+    """
+    resolved = [str(Path(p).expanduser().resolve()) for p in paths]
+    if not resolved:
+        return False
+
+    try:
+        if sys.platform == "win32":
+            return _windows_write_files(resolved)
+        if sys.platform == "darwin":
+            return _macos_write_files(resolved)
+        return _linux_write_files(resolved)
+    except FileNotFoundError:
+        logger.debug("Clipboard tool not available")
+        return False
+    except Exception:
+        logger.exception("Could not write files to clipboard")
+        return False
+
+
+def read_files(*, scope: FsScope | None = None) -> list[str]:
+    """
+    File paths currently on the clipboard, e.g. after Copy in the file manager.
+
+    With a scope configured, paths outside it are silently dropped (logged at
+    debug): the clipboard's content is the *user's* doing, not the frontend's,
+    so an out-of-scope entry is filtered rather than punished with an error.
+
+    Returns [] when the clipboard holds no files or the platform tool is
+    missing. On macOS at most one path is returned — the scripting interface
+    only exposes the first file object; see docs/clipboard.md.
+    """
+    try:
+        if sys.platform == "win32":
+            paths = _windows_read_files()
+        elif sys.platform == "darwin":
+            paths = _macos_read_files()
+        else:
+            paths = _linux_read_files()
+    except FileNotFoundError:
+        logger.debug("Clipboard tool not available")
+        return []
+    except Exception:
+        logger.exception("Could not read files from clipboard")
+        return []
+
+    if scope is None:
+        return paths
+
+    allowed = []
+    for p in paths:
+        try:
+            scope.check(p)
+            allowed.append(p)
+        except Exception:
+            logger.debug("Dropping clipboard path outside fs scope: %s", p)
+    return allowed
+
+
+_CF_HDROP = 15
+
+
+def _hdrop_payload(paths: list[str]) -> bytes:
+    """
+    The CF_HDROP clipboard payload: a DROPFILES header followed by a
+    double-NUL-terminated list of wide paths.
+
+    Pure so it can be tested for real off Windows. Header layout (20 bytes):
+    DWORD pFiles (offset of the list), POINT pt, BOOL fNC, BOOL fWide.
+    """
+    file_list = "\0".join(paths) + "\0\0"
+    header = struct.pack("<IiiII", 20, 0, 0, 0, 1)  # pFiles=20, pt=(0,0), fNC=0, fWide=1
+    return header + file_list.encode("utf-16-le")
+
+
+def _windows_write_files(paths: list[str]) -> bool:
+    import ctypes
+
+    payload = _hdrop_payload(paths)
+
+    GMEM_MOVEABLE = 0x0002
+    kernel32 = ctypes.windll.kernel32
+    user32 = ctypes.windll.user32
+
+    handle = kernel32.GlobalAlloc(GMEM_MOVEABLE, len(payload))
+    if not handle:
+        return False
+    locked = kernel32.GlobalLock(handle)
+    ctypes.memmove(locked, payload, len(payload))
+    kernel32.GlobalUnlock(handle)
+
+    if not user32.OpenClipboard(None):
+        kernel32.GlobalFree(handle)
+        return False
+    try:
+        user32.EmptyClipboard()
+        # On success the clipboard owns the memory; only free it on failure.
+        if not user32.SetClipboardData(_CF_HDROP, handle):
+            kernel32.GlobalFree(handle)
+            return False
+        return True
+    finally:
+        user32.CloseClipboard()
+
+
+def _windows_read_files() -> list[str]:
+    import ctypes
+
+    user32 = ctypes.windll.user32
+    shell32 = ctypes.windll.shell32
+
+    if not user32.OpenClipboard(None):
+        return []
+    try:
+        hdrop = user32.GetClipboardData(_CF_HDROP)
+        if not hdrop:
+            return []
+        count = shell32.DragQueryFileW(hdrop, 0xFFFFFFFF, None, 0)
+        paths = []
+        for i in range(count):
+            length = shell32.DragQueryFileW(hdrop, i, None, 0)
+            buffer = ctypes.create_unicode_buffer(length + 1)
+            shell32.DragQueryFileW(hdrop, i, buffer, length + 1)
+            paths.append(buffer.value)
+        return paths
+    finally:
+        user32.CloseClipboard()
+
+
+def _osa_quote(value: str) -> str:
+    """Escape a string for an AppleScript double-quoted literal."""
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _macos_write_files(paths: list[str]) -> bool:
+    items = ", ".join(f'POSIX file "{_osa_quote(p)}"' for p in paths)
+    script = f"set the clipboard to {{{items}}}" if len(paths) > 1 else (
+        f'set the clipboard to POSIX file "{_osa_quote(paths[0])}"'
+    )
+    result = subprocess.run(
+        ["osascript", "-e", script], capture_output=True, check=False
+    )
+    return result.returncode == 0
+
+
+def _macos_read_files() -> list[str]:
+    # The scripting interface coerces the clipboard to a single furl — there is
+    # no way to enumerate every file object through osascript, so multi-file
+    # reads return only the first. Documented in docs/clipboard.md.
+    result = subprocess.run(
+        ["osascript", "-e", "POSIX path of (the clipboard as «class furl»)"],
+        capture_output=True, text=True, check=False,
+    )
+    if result.returncode != 0:
+        return []
+    path = result.stdout.strip()
+    return [path.rstrip("/") or "/"] if path else []
+
+
+def _linux_write_files(paths: list[str]) -> bool:
+    uris = "\n".join(Path(p).as_uri() for p in paths) + "\n"
+    result = subprocess.run(
+        ["xclip", "-selection", "clipboard", "-t", "text/uri-list"],
+        input=uris.encode(), capture_output=True, check=False,
+    )
+    return result.returncode == 0
+
+
+def _linux_read_files() -> list[str]:
+    result = subprocess.run(
+        ["xclip", "-selection", "clipboard", "-t", "text/uri-list", "-o"],
+        capture_output=True, text=True, check=False,
+    )
+    if result.returncode != 0:
+        return []
+
+    paths = []
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("file://"):
+            parsed = urllib.parse.urlparse(line)
+            paths.append(urllib.request.url2pathname(parsed.path))
+    return paths

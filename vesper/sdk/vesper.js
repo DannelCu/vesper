@@ -171,6 +171,70 @@
         trash: function(path) {
             return invoke("vesper:fs:trash", { path: path });
         },
+        /**
+         * Create a directory. Fails if it already exists.
+         * @param {string} path
+         * @param {boolean} [parents=false] - Also create missing ancestors.
+         * @returns {Promise<void>}
+         */
+        mkdir: function(path, parents) {
+            return invoke("vesper:fs:mkdir", { path: path, parents: !!parents });
+        },
+        /**
+         * Copy a file or directory tree. Both ends honour the fs scope.
+         * @param {string} src
+         * @param {string} dst
+         * @returns {Promise<void>}
+         */
+        copy: function(src, dst) {
+            return invoke("vesper:fs:copy", { src: src, dst: dst });
+        },
+        /**
+         * Move (or rename) a file or directory. Both ends honour the fs scope.
+         * @param {string} src
+         * @param {string} dst
+         * @returns {Promise<void>}
+         */
+        move: function(src, dst) {
+            return invoke("vesper:fs:move", { src: src, dst: dst });
+        },
+        /**
+         * Delete a file, permanently. Directories require recursive=true —
+         * for anything the user might want back, use trash() instead.
+         * @param {string} path
+         * @param {boolean} [recursive=false]
+         * @returns {Promise<void>}
+         */
+        remove: function(path, recursive) {
+            return invoke("vesper:fs:remove", { path: path, recursive: !!recursive });
+        },
+        /**
+         * File metadata.
+         * @param {string} path
+         * @returns {Promise<{size:number, mtime:number, is_dir:boolean, type:string}>}
+         */
+        stat: function(path) {
+            return invoke("vesper:fs:stat", { path: path });
+        },
+        /**
+         * Read a file's raw bytes as base64 — the canonical way to move binary
+         * data across the JSON IPC bridge.
+         * @param {string} path
+         * @returns {Promise<string>} Base64-encoded contents.
+         */
+        readBytes: function(path) {
+            return invoke("vesper:fs:read_bytes", { path: path });
+        },
+        /**
+         * Write base64-encoded data to a file as raw bytes (creates parent
+         * directories if needed).
+         * @param {string} path
+         * @param {string} data - Base64-encoded bytes.
+         * @returns {Promise<void>}
+         */
+        writeBytes: function(path, data) {
+            return invoke("vesper:fs:write_bytes", { path: path, data: data });
+        },
     };
 
     var autostart = {
@@ -215,8 +279,9 @@
      *   const caps = await vesper.capabilities()
      *   pasteButton.hidden = !caps.clipboard_image
      *
-     * Keys: clipboard_text, clipboard_image, notifications, trash, keep_awake,
-     * tray, badge, global_shortcuts. Each is a boolean.
+     * Keys: clipboard_text, clipboard_image, clipboard_files, notifications,
+     * trash, keep_awake, tray, badge, mica, nsis, power_events,
+     * global_shortcuts. Each is a boolean.
      *
      * @returns {Promise<Object<string, boolean>>}
      */
@@ -391,7 +456,82 @@
         move: function(x, y) {
             return invoke("vesper:window:move", { x: x, y: y });
         },
+        /**
+         * Move the window to a semantic position on a monitor.
+         *
+         * Positions: top-left, top-center, top-right, center-left, center,
+         * center-right, bottom-left, bottom-center, bottom-right.
+         *
+         * @param {string} position
+         * @param {object} [options]
+         * @param {number|string} [options.screen] - Screen index, or "cursor"
+         *        for the monitor under the cursor (falls back to the primary
+         *        where the platform cannot say — Linux).
+         * @param {{x:number, y:number}} [options.offset] - Added as-is; use
+         *        negatives to pull a bottom/right-anchored window off the edge.
+         * @returns {Promise<void>}
+         */
+        position: function(position, options) {
+            var opts = options || {};
+            var offset = opts.offset || {};
+            return invoke("vesper:window:position", {
+                position: position,
+                screen: opts.screen === undefined ? null : opts.screen,
+                offset_x: offset.x || 0,
+                offset_y: offset.y || 0
+            });
+        },
+        /**
+         * Apply a Windows 11 backdrop material to the window.
+         *
+         * Cosmetic and best-effort: resolves false on any platform or build
+         * that cannot apply it. Check vesper.capabilities().mica first.
+         * @param {string} [kind="mica"] - "mica", "acrylic", "tabbed", or "none".
+         * @returns {Promise<boolean>}
+         */
+        setBackdrop: function(kind) {
+            return invoke("vesper:window:set_backdrop", { kind: kind || "mica" });
+        },
+        /**
+         * Make an element a drag region for a frameless window.
+         *
+         * The functional equivalent of -webkit-app-region: drag. Use with
+         * App(frameless=True, easy_drag=False) and mark your custom titlebar
+         * as draggable; interactive children (buttons) stay clickable.
+         * Elements carrying the data-vesper-drag attribute are wired
+         * automatically on load — this helper is for elements created later.
+         *
+         * @param {Element|string} target - Element or CSS selector.
+         * @returns {function():void} Undo function.
+         */
+        makeDraggable: function(target) {
+            var els = typeof target === "string"
+                ? Array.prototype.slice.call(document.querySelectorAll(target))
+                : [target];
+            for (var i = 0; i < els.length; i++) {
+                // PyWebView's built-in drag region marker class.
+                els[i].classList.add("pywebview-drag-region");
+            }
+            return function undo() {
+                for (var j = 0; j < els.length; j++) {
+                    els[j].classList.remove("pywebview-drag-region");
+                }
+            };
+        },
     };
+
+    function wireDeclaredDragRegions() {
+        var els = document.querySelectorAll("[data-vesper-drag]");
+        for (var i = 0; i < els.length; i++) {
+            els[i].classList.add("pywebview-drag-region");
+        }
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", wireDeclaredDragRegions);
+    } else {
+        wireDeclaredDragRegions();
+    }
 
     var screen = {
         /**
@@ -487,6 +627,142 @@
         writeImage: function(dataUrl) {
             return invoke("vesper:clipboard:write_image", { data_url: dataUrl });
         },
+        /**
+         * Put files on the clipboard as the OS file object — after this,
+         * Paste in Explorer/Finder/the file manager copies the files.
+         * Check vesper.capabilities().clipboard_files first.
+         * @param {string[]} paths - Absolute paths.
+         * @returns {Promise<boolean>}
+         */
+        writeFiles: function(paths) {
+            return invoke("vesper:clipboard:write_files", { paths: paths });
+        },
+        /**
+         * File paths currently on the clipboard (after Copy in the file
+         * manager). Paths outside the app's fs scope are filtered out.
+         * On macOS at most one path is returned — platform limitation.
+         * @returns {Promise<string[]>}
+         */
+        readFiles: function() {
+            return invoke("vesper:clipboard:read_files", {});
+        },
+    };
+
+    var netDownloadId = 1;
+
+    var net = {
+        /**
+         * Download a file to a destination path with progress.
+         *
+         * The destination honours the app's fs scope like every other write.
+         * Not an HTTP client — for headers, JSON, and sessions use the
+         * vesper-http plugin; this streams large files straight to disk.
+         *
+         * @param {string} url
+         * @param {string} dest - Destination file path.
+         * @param {function(number):void} [onProgress] - Called with 0–100.
+         * @param {string} [sha256] - Optional expected SHA-256; mismatch rejects
+         *                            and deletes the file.
+         * @returns {Promise<string>} The destination path.
+         */
+        download: function(url, dest, onProgress, sha256) {
+            var id = "net-" + (netDownloadId++);
+            var unsub;
+            if (typeof onProgress === "function") {
+                unsub = on("net:progress", function(data) {
+                    if (data.id === id) onProgress(data.percent);
+                });
+            }
+            return invoke("vesper:net:download", {
+                url: url, dest: dest, sha256: sha256 || "", id: id
+            }).then(
+                function(result) {
+                    if (unsub) unsub();
+                    return result;
+                },
+                function(err) {
+                    if (unsub) unsub();
+                    throw err;
+                }
+            );
+        },
+    };
+
+    var processNs = {
+        /**
+         * Run a command to completion and capture its output.
+         *
+         * Only executables the app declared in App(shell_scope=...) can run;
+         * everything else rejects before a process is created. A nonzero exit
+         * code resolves normally — inspect `code` to decide what failure means.
+         *
+         * @param {string[]} argv - Executable and arguments as a list.
+         * @param {object} [options]
+         * @param {string} [options.cwd]
+         * @param {number} [options.timeout] - Seconds; the process is killed on expiry.
+         * @returns {Promise<{code:number, stdout:string, stderr:string}>}
+         */
+        run: function(argv, options) {
+            var opts = options || {};
+            return invoke("vesper:process:run", {
+                argv: argv,
+                cwd: opts.cwd || "",
+                timeout: opts.timeout || 0
+            });
+        },
+        /**
+         * Start a long-running process and stream its output.
+         *
+         * stdout/stderr arrive line by line through the handlers; onExit fires
+         * once, after the last line, and cleans up the subscriptions.
+         *
+         * @param {string[]} argv
+         * @param {object} [handlers]
+         * @param {string} [handlers.cwd]
+         * @param {function(string):void} [handlers.onStdout]
+         * @param {function(string):void} [handlers.onStderr]
+         * @param {function(number):void} [handlers.onExit]
+         * @returns {Promise<{id:number, kill:function():Promise<boolean>}>}
+         */
+        spawn: function(argv, handlers) {
+            var h = handlers || {};
+            return invoke("vesper:process:spawn", { argv: argv, cwd: h.cwd || "" })
+                .then(function(id) {
+                    var unsubs = [];
+
+                    function line(event, cb) {
+                        if (typeof cb !== "function") return;
+                        unsubs.push(on("process:" + event, function(data) {
+                            if (data.id === id) cb(data.line);
+                        }));
+                    }
+
+                    line("stdout", h.onStdout);
+                    line("stderr", h.onStderr);
+
+                    var unsubExit = on("process:exit", function(data) {
+                        if (data.id !== id) return;
+                        for (var i = 0; i < unsubs.length; i++) unsubs[i]();
+                        unsubExit();
+                        if (typeof h.onExit === "function") h.onExit(data.code);
+                    });
+
+                    return {
+                        id: id,
+                        kill: function() {
+                            return invoke("vesper:process:kill", { id: id });
+                        }
+                    };
+                });
+        },
+        /**
+         * Terminate a spawned process by id (escalates to a hard kill).
+         * @param {number} id
+         * @returns {Promise<boolean>} False for an unknown or finished id.
+         */
+        kill: function(id) {
+            return invoke("vesper:process:kill", { id: id });
+        },
     };
 
     var update = {
@@ -550,6 +826,8 @@
         badge,
         shell,
         clipboard,
+        net,
+        process: processNs,
         update,
     };
 })(window);

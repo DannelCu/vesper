@@ -40,7 +40,24 @@ Start a development server with hot reload.
 
 ```bash
 vesper dev
+vesper dev --no-devtools    # keep the inspector closed for this session
 ```
+
+**Flags**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--no-devtools` | off | Disable the WebView inspector for this session. |
+
+**DevTools**
+
+`vesper dev` opens the app with the native WebView inspector available on all three
+platforms (right-click → Inspect, backed by `webview.start(debug=True)`). It is
+wired through the `VESPER_DEVTOOLS` environment variable, which only `vesper dev`
+sets — `vesper run` and packaged builds never expose the inspector.
+
+Not to be confused with `App(debug=True)`, which is unrelated: that flag controls
+how much detail IPC error responses carry, and works in any mode.
 
 **Vanilla behavior**
 - Starts an internal HTTP server on a random port serving `frontend/`
@@ -92,9 +109,20 @@ Package the app as a native executable.
 
 ```bash
 vesper package
+vesper package --installer    # also build a native installer where possible
 ```
 
 Reads `bundler` from `vesper.toml`. Outputs to `package/<app-name>[.exe]`.
+
+**`--installer`** builds a native installer from the packaged bundle:
+
+| Platform | Produces | Tool used |
+|---|---|---|
+| macOS | `package/<name>-<version>.dmg` (drag-to-install, with `/Applications` link) | `hdiutil` (ships with macOS) |
+| Debian/Ubuntu | `package/<name>_<version>_<arch>.deb` (menu entry, clean uninstall) | `dpkg-deb` (ships with dpkg) |
+| Windows | Nothing — prints what is needed and where the recipe lives | NSIS is external tooling; see [the recipe](recipes/windows-installer.md) |
+
+On macOS, if `[sign]` is configured in `vesper.toml` the `.app` bundle is signed (and notarized, if enabled) **before** the dmg is built. Metadata (version, description, maintainer, category, icon) comes from the `[installer]` section — see [Project Config](project-config.md).
 
 **PyInstaller** (default)
 - `--windowed --onefile`

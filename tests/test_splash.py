@@ -35,7 +35,7 @@ def test_run_passes_splash_to_window_create(monkeypatch):
     captured = {}
 
     def fake_create(self, ipc_handler, config, hooks=None, secondary_windows=None,
-                    menu=None, splash=None):
+                    menu=None, splash=None, serve_url=None):
         captured["splash"] = splash
 
     monkeypatch.setattr(Window, "create", fake_create)
@@ -52,7 +52,7 @@ def test_run_passes_none_splash_when_not_configured(monkeypatch):
     captured = {}
 
     def fake_create(self, ipc_handler, config, hooks=None, secondary_windows=None,
-                    menu=None, splash=None):
+                    menu=None, splash=None, serve_url=None):
         captured["splash"] = splash
 
     monkeypatch.setattr(Window, "create", fake_create)

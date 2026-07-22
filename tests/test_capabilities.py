@@ -14,14 +14,21 @@ from vesper.core import capabilities
 ALL_CAPABILITIES = {
     "clipboard_text",
     "clipboard_image",
+    "clipboard_files",
     "notifications",
     "trash",
     "keep_awake",
     "tray",
     "badge",
+    "mica",
+    "nsis",
     "power_events",
     "global_shortcuts",
 }
+
+# Capabilities that are platform facts rather than missing installs: when absent
+# there is honestly nothing to run, so they carry no fix line.
+UNFIXABLE = {"badge", "mica"}
 
 
 @pytest.fixture
@@ -80,8 +87,9 @@ def test_a_missing_capability_carries_a_fix_or_is_unfixable(env):
     for name, entry in capabilities.probe().items():
         if entry["available"]:
             continue
-        # Linux badges are the one honest "nothing you can install" case.
-        if name == "badge":
+        # Platform facts (badge on Linux, mica off Windows 11) are the honest
+        # "nothing you can install" cases.
+        if name in UNFIXABLE:
             assert entry["fix"] is None
         else:
             assert entry["fix"], name

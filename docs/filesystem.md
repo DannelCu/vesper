@@ -51,6 +51,68 @@ Entries are sorted directories-first. Each entry has:
 
 ---
 
+## Create a directory
+
+```js
+await vesper.fs.mkdir("/path/to/newdir")
+await vesper.fs.mkdir("/path/to/a/b/c", true)   // create missing ancestors too
+```
+
+Fails if the directory already exists. Note the difference with `fs.write`, which creates parent directories implicitly — `mkdir` is for when the directory itself is the point.
+
+---
+
+## Copy and move
+
+```js
+await vesper.fs.copy("/data/report.pdf", "/backup/report.pdf")
+await vesper.fs.copy("/data/project", "/backup/project")      // whole tree
+
+await vesper.fs.move("/data/draft.txt", "/data/final.txt")    // also a rename
+```
+
+`copy` copies files with metadata and directories recursively (the destination directory must not already exist). `move` moves or renames either. With a configured scope, **both ends** are validated — a copy is a read of the source and a write of the destination, so neither may fall outside the sandbox.
+
+---
+
+## Delete permanently
+
+```js
+await vesper.fs.remove("/path/to/file.txt")
+await vesper.fs.remove("/path/to/dir", true)    // directories require the flag
+```
+
+`remove` is permanent. Deleting a directory without passing `recursive: true` fails explicitly rather than silently taking the whole tree. For anything the user might want back, prefer [`fs.trash`](#moving-files-to-the-trash).
+
+---
+
+## File metadata
+
+```js
+const info = await vesper.fs.stat("/path/to/file.txt")
+// { size: 1024, mtime: 1712345678.9, is_dir: false, type: "file" }
+```
+
+`mtime` is seconds since the epoch. `type` is `"file"` or `"dir"`, mirroring `is_dir`.
+
+---
+
+## Binary files
+
+```js
+// Read raw bytes as base64
+const b64 = await vesper.fs.readBytes("/path/to/image.png")
+const img = document.createElement("img")
+img.src = "data:image/png;base64," + b64
+
+// Write base64 back to disk as raw bytes
+await vesper.fs.writeBytes("/path/to/copy.png", b64)
+```
+
+The IPC bridge is JSON, which cannot carry raw bytes — base64 is the canonical encoding for binary data crossing it. `writeBytes` creates parent directories like `write`, and rejects invalid base64 instead of writing a corrupted file. For the full upload/download patterns (blobs, `FileReader`, size limits), see [File Transfers](file-transfers.md).
+
+---
+
 ## Using from Python directly
 
 The same functions are available as a Python module:
@@ -62,6 +124,14 @@ content = fs.read("data.txt")
 fs.write("out.txt", "hello")
 exists = fs.exists("data.txt")   # → True or False
 entries = fs.list_dir(".")       # → [{"name": ..., "path": ..., "is_dir": ...}]
+
+fs.mkdir("newdir", parents=True)
+fs.copy("a.txt", "b.txt")
+fs.move("b.txt", "c.txt")
+fs.remove("c.txt")               # remove("dir", recursive=True) for directories
+info = fs.stat("data.txt")       # → {"size": ..., "mtime": ..., "is_dir": ..., "type": ...}
+b64 = fs.read_bytes("logo.png")  # → base64 string
+fs.write_bytes("copy.png", b64)
 ```
 
 ---
@@ -73,6 +143,13 @@ These built-ins are filtered from `vesper sync-types` output and accessed via `v
 - `vesper:fs:write`
 - `vesper:fs:exists`
 - `vesper:fs:list`
+- `vesper:fs:mkdir`
+- `vesper:fs:copy`
+- `vesper:fs:move`
+- `vesper:fs:remove`
+- `vesper:fs:stat`
+- `vesper:fs:read_bytes`
+- `vesper:fs:write_bytes`
 
 ---
 
@@ -106,7 +183,7 @@ const config = await vesper.fs.read(configPath)
 
 The filesystem API reads entire files into memory as strings. For files larger than a few megabytes, prefer a streaming approach: read the file in a Python command and return only the portion the frontend needs, or use `vesper.fs.read` only for configuration files and small text assets.
 
-For binary files (images, PDFs), use [File Transfers](file-transfers.md) with Base64 encoding.
+For binary files (images, PDFs), use `readBytes` / `writeBytes` above; [File Transfers](file-transfers.md) covers the browser-side patterns built on them.
 
 ---
 

@@ -1,3 +1,4 @@
+import os as _os
 import sys as _sys
 import threading
 from collections.abc import Callable
@@ -55,6 +56,12 @@ class App:
         fullscreen: bool = False,
         minimized: bool = False,
         on_top: bool = False,
+        frameless: bool = False,
+        easy_drag: bool = True,
+        transparent: bool = False,
+        vibrancy: bool = False,
+        min_width: int | None = None,
+        min_height: int | None = None,
         frontend: str = "frontend/index.html",
         debug: bool = False,
         root_module: type | None = None,
@@ -62,9 +69,11 @@ class App:
         update_url: str = "",
         plugins: list | None = None,
         fs_scope: list[str] | str | None = None,
+        shell_scope: dict | list | None = None,
         single_instance: bool = False,
         remember_window: bool = False,
         power_events: bool = False,
+        serve_frontend: bool = False,
     ) -> None:
         """
         Initialize the Vesper application core systems.
@@ -84,6 +93,22 @@ class App:
                 Whether the window starts minimized.
             on_top:
                 Whether the window stays on top of other windows.
+            frameless:
+                Draw the window without the native titlebar and borders. Pair with
+                the ``vesper:window:*`` commands to build a custom titlebar — see
+                docs/frameless.md.
+            easy_drag:
+                With ``frameless=True``, whether the whole window is draggable.
+                Turn off when using declared drag regions (a custom titlebar).
+            transparent:
+                Transparent window background. On Linux this needs a compositor;
+                without one the background renders black.
+            vibrancy:
+                macOS-only translucency effect. Ignored elsewhere.
+            min_width:
+                Minimum window width. Must be set together with ``min_height``.
+            min_height:
+                Minimum window height. Must be set together with ``min_width``.
             frontend:
                 Path to the frontend entry HTML file.
             debug:
@@ -91,6 +116,11 @@ class App:
             root_module:
                 Optional root @Module class. All modules imported by it are
                 registered automatically, so app.py stays minimal.
+            shell_scope:
+                Allowlist of executables the frontend may run through
+                ``vesper.process``: a list of binaries, or a dict mapping each
+                binary to fnmatch argument patterns. Without one, all process
+                execution is rejected — see docs/process.md.
             single_instance:
                 Allow only one running copy. A second launch forwards its argv to
                 the first — so a deep link reaches the running window — and exits.
@@ -103,6 +133,13 @@ class App:
                 ``power:unlock`` to the frontend. Opt-in because it costs a D-Bus
                 connection or a message window, and best-effort because not every
                 platform publishes every event — see docs/power.md.
+            serve_frontend:
+                Serve the frontend over ``http://127.0.0.1`` (ephemeral port,
+                per-session token) instead of loading it via ``file://``. Opt-in
+                for apps that need ES modules, SPA routing or relative fetch in
+                production. Ignored under ``vesper dev``, whose own server takes
+                precedence. See docs/project-config.md for the trade-offs and
+                the threat model.
         """
 
         self.debug = debug
@@ -117,6 +154,12 @@ class App:
             fullscreen=fullscreen,
             minimized=minimized,
             on_top=on_top,
+            frameless=frameless,
+            easy_drag=easy_drag,
+            transparent=transparent,
+            vibrancy=vibrancy,
+            min_width=min_width,
+            min_height=min_height,
             frontend=frontend,
         )
 
@@ -135,6 +178,8 @@ class App:
 
         self._remember_window = remember_window
         self._power_events = power_events
+        self._serve_frontend = serve_frontend
+        self._static_server = None
         self._single_instance = None
         if single_instance:
             from vesper.core.single_instance import SingleInstance
@@ -214,6 +259,9 @@ class App:
         from vesper.core.fs_scope import FsScope
 
         _scope = FsScope(fs_scope) if fs_scope is not None else None
+        # Public so plugins that touch paths on behalf of the frontend (file
+        # watching, screenshots to disk) enforce the same sandbox as the fs API.
+        self.fs_scope = _scope
 
         def _fs_read(path: str, encoding: str = "utf-8") -> str:
             return _fs.read(path, encoding, scope=_scope)
@@ -230,11 +278,39 @@ class App:
         def _fs_trash(path: str) -> bool:
             return _fs.trash(path, scope=_scope)
 
+        def _fs_mkdir(path: str, parents: bool = False) -> None:
+            return _fs.mkdir(path, parents, scope=_scope)
+
+        def _fs_copy(src: str, dst: str) -> None:
+            return _fs.copy(src, dst, scope=_scope)
+
+        def _fs_move(src: str, dst: str) -> None:
+            return _fs.move(src, dst, scope=_scope)
+
+        def _fs_remove(path: str, recursive: bool = False) -> None:
+            return _fs.remove(path, recursive, scope=_scope)
+
+        def _fs_stat(path: str) -> dict:
+            return _fs.stat(path, scope=_scope)
+
+        def _fs_read_bytes(path: str) -> str:
+            return _fs.read_bytes(path, scope=_scope)
+
+        def _fs_write_bytes(path: str, data: str) -> None:
+            return _fs.write_bytes(path, data, scope=_scope)
+
         self.registry.register(_fs_read, name="vesper:fs:read")
         self.registry.register(_fs_write, name="vesper:fs:write")
         self.registry.register(_fs_exists, name="vesper:fs:exists")
         self.registry.register(_fs_list, name="vesper:fs:list")
         self.registry.register(_fs_trash, name="vesper:fs:trash")
+        self.registry.register(_fs_mkdir, name="vesper:fs:mkdir")
+        self.registry.register(_fs_copy, name="vesper:fs:copy")
+        self.registry.register(_fs_move, name="vesper:fs:move")
+        self.registry.register(_fs_remove, name="vesper:fs:remove")
+        self.registry.register(_fs_stat, name="vesper:fs:stat")
+        self.registry.register(_fs_read_bytes, name="vesper:fs:read_bytes")
+        self.registry.register(_fs_write_bytes, name="vesper:fs:write_bytes")
 
         from vesper.core import shell as _shell
         from vesper.core import clipboard as _clipboard
@@ -252,6 +328,15 @@ class App:
         self.registry.register(_clipboard.write_image, name="vesper:clipboard:write_image")
         self.registry.register(_clipboard.read, name="vesper:clipboard:read")
         self.registry.register(_clipboard.write, name="vesper:clipboard:write")
+
+        def _clipboard_write_files(paths: list) -> bool:
+            return _clipboard.write_files(paths)
+
+        def _clipboard_read_files() -> list:
+            return _clipboard.read_files(scope=_scope)
+
+        self.registry.register(_clipboard_write_files, name="vesper:clipboard:write_files")
+        self.registry.register(_clipboard_read_files, name="vesper:clipboard:read_files")
         self.registry.register(_os_info.get_info, name="vesper:os:info")
 
         # Window controls — lambdas defer to the Window instance so they work
@@ -270,10 +355,68 @@ class App:
 
         self.registry.register(_window_resize, name="vesper:window:resize")
         self.registry.register(_window_move, name="vesper:window:move")
+
+        from vesper.core import positioner as _positioner
+
+        def _window_position(
+            position: str,
+            screen=None,
+            offset_x: int = 0,
+            offset_y: int = 0,
+        ) -> None:
+            geometry = _w.get_geometry()
+            if geometry is None:
+                raise RuntimeError("Cannot position: window is not created yet.")
+            screens = _w.list_screens()
+            index = _positioner.resolve_screen_index(screen, screens)
+            x, y = _positioner.compute(
+                position,
+                (geometry["width"], geometry["height"]),
+                screens,
+                screen_index=index,
+                offset=(offset_x, offset_y),
+            )
+            _w.move(x, y)
+
+        self.registry.register(_window_position, name="vesper:window:position")
+
+        from vesper.core import window_effects as _window_effects
+
+        def _window_set_backdrop(kind: str = "mica") -> bool:
+            return _window_effects.set_backdrop(kind)
+
+        self.registry.register(_window_set_backdrop, name="vesper:window:set_backdrop")
         # Routed through App.quit() rather than Window.quit() so the frontend's
         # vesper.quit() call gets its reply delivered before the WebView disappears.
         self.registry.register(lambda: self.quit(), name="vesper:app:quit")
         self.registry.register(lambda: _w.list_screens(), name="vesper:screen:list")
+
+        from vesper.core import process as _process
+
+        # Secure by default: with no scope declared, every invocation is rejected
+        # before a process exists, mirroring an FsScope with no roots.
+        _pscope = (
+            shell_scope if isinstance(shell_scope, _process.ShellScope)
+            else _process.ShellScope(shell_scope) if shell_scope is not None
+            else None
+        )
+        self.shell_scope = _pscope
+        self._process_manager = _process.ProcessManager(self.emit)
+
+        def _process_run(argv: list, cwd: str = "", timeout: float = 0) -> dict:
+            return _process.run(
+                argv, scope=_pscope, cwd=cwd or None, timeout=timeout or None
+            )
+
+        def _process_spawn(argv: list, cwd: str = "") -> int:
+            return self._process_manager.spawn(argv, scope=_pscope, cwd=cwd or None)
+
+        def _process_kill(id: int) -> bool:
+            return self._process_manager.kill(id)
+
+        self.registry.register(_process_run, name="vesper:process:run")
+        self.registry.register(_process_spawn, name="vesper:process:spawn")
+        self.registry.register(_process_kill, name="vesper:process:kill")
 
         from vesper.core import updater as _updater
 
@@ -293,6 +436,21 @@ class App:
         self.registry.register(_update_check, name="vesper:update:check")
         self.registry.register(_update_download, name="vesper:update:download")
         self.registry.register(_update_install, name="vesper:update:install")
+
+        from vesper.core import net as _net
+
+        def _net_download(url: str = "", dest: str = "", sha256: str = "", id: str = "") -> str:
+            def _on_progress(percent: int) -> None:
+                _app.window.emit("net:progress", {"id": id, "percent": percent})
+
+            return _net.download(
+                url, dest,
+                on_progress=_on_progress,
+                expected_sha256=sha256,
+                scope=_scope,
+            )
+
+        self.registry.register(_net_download, name="vesper:net:download")
 
         self.ipc = IPC(self.registry, middleware=self._middleware, debug=self.debug)
 
@@ -475,6 +633,12 @@ class App:
         fullscreen: bool = False,
         minimized: bool = False,
         on_top: bool = False,
+        frameless: bool = False,
+        easy_drag: bool = True,
+        transparent: bool = False,
+        vibrancy: bool = False,
+        min_width: int | None = None,
+        min_height: int | None = None,
         frontend: str,
     ) -> WindowHandle:
         """
@@ -492,6 +656,12 @@ class App:
             fullscreen: Whether the window starts fullscreen.
             minimized: Whether the window starts minimized.
             on_top:    Whether the window stays on top.
+            frameless: Draw without the native titlebar and borders.
+            easy_drag: With frameless, whether the whole window is draggable.
+            transparent: Transparent window background (needs a compositor on Linux).
+            vibrancy:  macOS-only translucency effect.
+            min_width: Minimum width; set together with min_height.
+            min_height: Minimum height; set together with min_width.
             frontend:  Path to the HTML entry file for this window.
 
         Returns:
@@ -506,6 +676,12 @@ class App:
             fullscreen=fullscreen,
             minimized=minimized,
             on_top=on_top,
+            frameless=frameless,
+            easy_drag=easy_drag,
+            transparent=transparent,
+            vibrancy=vibrancy,
+            min_width=min_width,
+            min_height=min_height,
             frontend=frontend,
         )
         handle = WindowHandle(cfg)
@@ -789,6 +965,18 @@ class App:
                 lambda: self._fire_deeplink(_url)
             )
 
+        # The dev server takes precedence: under `vesper dev` the frontend is
+        # already served over HTTP, so starting a second server would be waste.
+        serve_url = None
+        if self._serve_frontend and not _os.environ.get("VESPER_DEV_URL"):
+            from vesper.core import static_server
+            from pathlib import Path as _Path
+
+            frontend_dir = _Path(self.config.frontend).resolve().parent
+            self._static_server, serve_url = static_server.start(
+                frontend_dir, token=static_server.new_token()
+            )
+
         self.window.create(
             ipc_handler=self.ipc,
             config=self.config,
@@ -796,6 +984,7 @@ class App:
             secondary_windows=self._secondary_windows or None,
             menu=self._menu_items or None,
             splash=self._splash_config or None,
+            serve_url=serve_url,
         )
 
         if self._tray is not None:
@@ -823,6 +1012,12 @@ class App:
                 from vesper.core import power as _power_mod
 
                 _power_mod.stop_power_monitor()
+            # A closed window must not leave spawned children running.
+            self._process_manager.kill_all()
+            if self._static_server is not None:
+                self._static_server.shutdown()
+                self._static_server.server_close()
+                self._static_server = None
             self.ipc.close()
             if self._single_instance is not None:
                 self._single_instance.release()

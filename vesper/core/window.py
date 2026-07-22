@@ -101,6 +101,25 @@ def _to_file_types(filters: list[dict] | None) -> tuple:
     return tuple(result)
 
 
+def _chrome_kwargs(config: "WindowConfig") -> dict:
+    """
+    The create_window kwargs shared by main and secondary windows.
+
+    min_size is only passed when configured, so the backend default applies
+    otherwise. easy_drag is only meaningful alongside frameless, but PyWebView
+    ignores it for framed windows, so it is safe to pass unconditionally.
+    """
+    kwargs = {
+        "frameless": config.frameless,
+        "easy_drag": config.easy_drag,
+        "transparent": config.transparent,
+        "vibrancy": config.vibrancy,
+    }
+    if config.min_width is not None and config.min_height is not None:
+        kwargs["min_size"] = (config.min_width, config.min_height)
+    return kwargs
+
+
 def _to_webview_menu(items: list) -> list:
     """Convert a Vesper menu list to the format PyWebView expects."""
     from vesper.core.menu import MenuItem
@@ -142,6 +161,7 @@ class Window:
         secondary_windows: list[WindowHandle] | None = None,
         menu: list | None = None,
         splash: dict | None = None,
+        serve_url: str | None = None,
     ) -> None:
         """
         Create the application window and bind IPC.
@@ -162,6 +182,11 @@ class Window:
                 Native menu bar items (converted from Vesper MenuItem list).
             splash:
                 Splash screen config dict with keys: html, width, height.
+            serve_url:
+                Base URL of the production localhost server
+                (``App(serve_frontend=True)``). Frontend files load from it
+                instead of ``file://``. The dev server URL still wins, so
+                ``vesper dev`` behaves the same either way.
         """
 
         self._menu = menu
@@ -175,7 +200,10 @@ class Window:
             frontend_path = Path(config.frontend)
             if not frontend_path.is_file():
                 raise FileNotFoundError(f"Frontend file does not exist: {config.frontend}")
-            frontend = config.frontend
+            if serve_url:
+                frontend = f"{serve_url.rstrip('/')}/{frontend_path.name}"
+            else:
+                frontend = config.frontend
 
         self.ipc = ipc_handler
 
@@ -220,6 +248,7 @@ class Window:
             # Only pass a position when one was set; PyWebView centres the window
             # when x/y are None, which is what a fresh app should do.
             **({"x": config.x, "y": config.y} if config.x is not None and config.y is not None else {}),
+            **_chrome_kwargs(config),
         )
 
         if hooks:
@@ -244,7 +273,10 @@ class Window:
                     raise FileNotFoundError(
                         f"Secondary window frontend does not exist: {cfg.frontend}"
                     )
-                sec_url = cfg.frontend
+                if serve_url:
+                    sec_url = f"{serve_url.rstrip('/')}/{sec_frontend.name}"
+                else:
+                    sec_url = cfg.frontend
             sec_win = webview.create_window(
                 title=cfg.title,
                 url=sec_url,
@@ -256,6 +288,7 @@ class Window:
                 minimized=cfg.minimized,
                 on_top=cfg.on_top,
                 hidden=True,
+                **_chrome_kwargs(cfg),
             )
             handle._attach(sec_win)
 
@@ -477,7 +510,14 @@ class Window:
         if not self.window:
             raise RuntimeError("Window has not been created yet.")
 
+        kwargs = {}
         if self._menu:
-            webview.start(menu=_to_webview_menu(self._menu))
-        else:
-            webview.start()
+            kwargs["menu"] = _to_webview_menu(self._menu)
+
+        # Set by `vesper dev` (like VESPER_DEV_URL), never by `vesper run` or a
+        # packaged build — so the inspector exists exactly when the dev server does.
+        # Distinct from App(debug=...), which only controls IPC error detail.
+        if os.environ.get("VESPER_DEVTOOLS"):
+            kwargs["debug"] = True
+
+        webview.start(**kwargs)

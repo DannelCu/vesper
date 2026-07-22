@@ -2,18 +2,17 @@ from __future__ import annotations
 
 import argparse
 import http.server
-import json
-import mimetypes
 import os
 import re
 import subprocess
 import sys
 import threading
 import time
-import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
+
+from vesper.core.static_server import make_static_handler
 
 from vesper.commands.utils import (
     APP_ENTRYPOINTS,
@@ -73,62 +72,17 @@ def _get_frontend_mtimes(frontend_dir: Path) -> dict[Path, float]:
 
 
 def _make_dev_handler(frontend_dir: Path, version: list[int]) -> type:
-    class _Handler(http.server.BaseHTTPRequestHandler):
-        def log_message(self, *args) -> None:
-            pass
+    # The serving/confinement logic lives in core.static_server, shared with the
+    # production localhost mode; this only adds what is dev-specific — the version
+    # endpoint the reload poller hits and the script injection itself.
+    def _inject_reload(content: bytes) -> bytes:
+        return content.replace(b"</body>", _RELOAD_SCRIPT + b"</body>", 1)
 
-        def do_GET(self) -> None:
-            path = self.path.split("?")[0]
-
-            if path == "/__vesper_dev":
-                body = json.dumps({"version": version[0]}).encode()
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
-                return
-
-            if path == "/":
-                path = "/index.html"
-
-            # Percent-decode before resolving, so the traversal check below sees the
-            # same path the filesystem will. Decoding after would let %2e%2e slip past.
-            path = urllib.parse.unquote(path)
-
-            file_path = frontend_dir / path.lstrip("/")
-
-            # Confine every request to the frontend directory. resolve() collapses
-            # ".." segments and follows symlinks, so this covers both a crafted URL
-            # and a symlink inside the project pointing somewhere else.
-            try:
-                resolved = file_path.resolve()
-                resolved.relative_to(frontend_dir.resolve())
-            except (ValueError, OSError):
-                self.send_response(403)
-                self.end_headers()
-                return
-
-            file_path = resolved
-
-            if not file_path.is_file():
-                self.send_response(404)
-                self.end_headers()
-                return
-
-            content = file_path.read_bytes()
-            content_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
-
-            if file_path.suffix == ".html":
-                content = content.replace(b"</body>", _RELOAD_SCRIPT + b"</body>", 1)
-
-            self.send_response(200)
-            self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", str(len(content)))
-            self.end_headers()
-            self.wfile.write(content)
-
-    return _Handler
+    return make_static_handler(
+        frontend_dir,
+        html_postprocess=_inject_reload,
+        routes={"/__vesper_dev": lambda: {"version": version[0]}},
+    )
 
 
 def _start_dev_server(frontend_dir: Path) -> tuple[http.server.HTTPServer, list[int]]:
@@ -278,7 +232,7 @@ def _find_entrypoint_or_exit(project_dir: Path) -> Path:
     return entrypoint
 
 
-def run_vanilla_dev(project_dir: Path) -> None:
+def run_vanilla_dev(project_dir: Path, *, devtools: bool = True) -> None:
     entrypoint = _find_entrypoint_or_exit(project_dir)
     frontend_dir = project_dir / "frontend"
 
@@ -288,6 +242,8 @@ def run_vanilla_dev(project_dir: Path) -> None:
     print(f"Running Vesper app: {entrypoint.name}")
 
     extra_env = {"VESPER_DEV_URL": f"http://localhost:{port}"}
+    if devtools:
+        extra_env["VESPER_DEVTOOLS"] = "1"
 
     try:
         _watch_and_restart(
@@ -301,7 +257,7 @@ def run_vanilla_dev(project_dir: Path) -> None:
         server.shutdown()
 
 
-def run_framework_dev(project_dir: Path, pm: str = "npm") -> None:
+def run_framework_dev(project_dir: Path, pm: str = "npm", *, devtools: bool = True) -> None:
     entrypoint = _find_entrypoint_or_exit(project_dir)
 
     vite_process, port = start_vite(project_dir, pm)
@@ -311,6 +267,8 @@ def run_framework_dev(project_dir: Path, pm: str = "npm") -> None:
     print(f"Running Vesper app: {entrypoint.name}")
 
     extra_env = {"VESPER_DEV_URL": f"http://localhost:{port}"}
+    if devtools:
+        extra_env["VESPER_DEVTOOLS"] = "1"
 
     try:
         _watch_and_restart(project_dir, entrypoint, extra_env)
@@ -321,28 +279,33 @@ def run_framework_dev(project_dir: Path, pm: str = "npm") -> None:
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 
 
-def dev() -> None:
+def dev(*, devtools: bool = True) -> None:
     project_dir = Path.cwd()
     config = read_vesper_toml(project_dir)
     template = config.get("template", "vanilla")
     pm = get_project_package_manager(project_dir)
 
     if template in FRAMEWORK_TEMPLATES:
-        run_framework_dev(project_dir, pm)
+        run_framework_dev(project_dir, pm, devtools=devtools)
     else:
-        run_vanilla_dev(project_dir)
+        run_vanilla_dev(project_dir, devtools=devtools)
 
 
 def add_dev_parser(subparsers: argparse._SubParsersAction) -> None:
-    subparsers.add_parser(
+    parser = subparsers.add_parser(
         "dev",
         help="Start the Vesper app in development mode.",
+    )
+    parser.add_argument(
+        "--no-devtools",
+        action="store_true",
+        help="Do not open the WebView inspector for this session.",
     )
 
 
 def handle_dev(args: argparse.Namespace) -> bool:
     if args.command == "dev":
-        dev()
+        dev(devtools=not args.no_devtools)
         return True
 
     return False

@@ -10,6 +10,70 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+
+**Core (zero new dependencies)**
+
+- **DevTools in `vesper dev`.** The WebView inspector is now available by default in
+  development on all three platforms (wired as `VESPER_DEVTOOLS` →
+  `webview.start(debug=True)`), with `--no-devtools` to opt out. `vesper run` and
+  packaged builds never set the variable, so production cannot expose the inspector.
+  Distinct from `App(debug=True)`, which only controls IPC error detail.
+- **Complete filesystem API.** `vesper.fs` gains `mkdir`, `copy`, `move` (covers
+  rename), `remove` (permanent; directories require an explicit `recursive` flag),
+  `stat`, and `readBytes`/`writeBytes` (base64 over IPC, formalising what
+  docs/file-transfers.md taught by hand). Every operation validates against
+  `fs_scope` — `copy`/`move` validate both ends. The scope is now also exposed as
+  `app.fs_scope` for plugins.
+- **Frameless and transparent windows.** `App(...)` and `register_window(...)` accept
+  `frameless`, `easy_drag`, `transparent`, `vibrancy` (macOS), and
+  `min_width`/`min_height`. Drag regions for custom titlebars via the
+  `data-vesper-drag` attribute or `vesper.window.makeDraggable()` — the functional
+  equivalent of `-webkit-app-region`, which system WebViews do not support. New
+  [Frameless Windows](docs/frameless.md) guide and
+  [Custom Titlebar recipe](docs/recipes/custom-titlebar.md).
+- **Windows 11 backdrop materials.** `vesper.window.setBackdrop("mica" | "acrylic" |
+  "tabbed" | "none")` via `DwmSetWindowAttribute` through ctypes. Honest no-op
+  (resolves `false`) everywhere else — reported as the `mica` capability, N/A
+  without a fix line since there is nothing to install.
+- **Production localhost server.** `App(serve_frontend=True)` serves the bundled
+  frontend from `127.0.0.1` (ephemeral port, per-session token in the URL path, SPA
+  fallback to index.html) instead of `file://`, fixing ES modules,
+  `history.pushState` routing and relative fetch in packaged apps. The server lives
+  and dies with `app.run()`; the dev server takes precedence. The static handler is
+  shared with `vesper dev` (`vesper.core.static_server`). Threat model documented in
+  docs/project-config.md — an `App` parameter rather than a `vesper.toml` key
+  because the config file is not bundled into the binary.
+- **Scoped process execution.** New `vesper.process` namespace (`run`, `spawn` with
+  streamed `vesper:process:stdout|stderr|exit` events, `kill`) behind a declarative
+  `ShellScope` allowlist (`App(shell_scope=...)`) — executables by name or path,
+  optional fnmatch argument patterns. Secure by default: no scope, no execution.
+  Never `shell=True`; argv lists end to end. Spawned processes are terminated at app
+  teardown. See [docs/process.md](docs/process.md).
+- **Generic downloads with progress.** `vesper.net.download(url, dest, onProgress,
+  sha256?)` — the updater's download machinery generalised to a scope-validated
+  destination, with optional SHA-256 verification that deletes the file on mismatch.
+  The updater now consumes the same transport (`net.fetch`) with no behaviour change.
+  See [docs/network.md](docs/network.md).
+- **Semantic window positioning.** `vesper.window.position("top-right", { screen,
+  offset })` — nine named positions, monitor by index or `"cursor"` (ctypes on
+  Windows, pyobjc on macOS; degrades to primary on Linux), correct with negative
+  multi-monitor coordinates. Tray-icon-relative positioning is documented as not
+  obtainable (pystray does not expose it); the supported menubar pattern lives in
+  the [Menubar App recipe](docs/recipes/menubar-app.md).
+- **Native installers.** `vesper package --installer` builds a `.dmg` on macOS
+  (`hdiutil`, drag-to-install layout, signs the `.app` first when `[sign]` is
+  configured) and a `.deb` on Debian/Ubuntu (`dpkg-deb`, menu entry, clean
+  uninstall), with metadata from the new `[installer]` section of `vesper.toml`.
+  Windows installers stay outside the core (NSIS is non-pip tooling): the flag
+  explains what is missing, `vesper doctor` reports NSIS as the `nsis` capability,
+  and the [Windows Installer recipe](docs/recipes/windows-installer.md) provides a
+  ready-to-adapt NSIS script plus an AppImage walkthrough.
+- **File clipboard.** `vesper.clipboard.writeFiles(paths)` / `readFiles()` — the OS
+  clipboard's file object, interoperating with Explorer/Finder/file managers.
+  CF_HDROP via ctypes on Windows, `osascript` on macOS (reads return at most one
+  file — platform limitation), `xclip -t text/uri-list` on Linux (same xclip as
+  text/images, reported as the `clipboard_files` capability). Paths read from the
+  clipboard are filtered through `fs_scope` before reaching the frontend.
 - **CONTRIBUTING.md — "Where a feature lives".** A four-level decision tree (core →
   plugin → recipe → known issue) that governs where every proposed feature lands,
   with the admission criteria for each level and one worked example per level. It

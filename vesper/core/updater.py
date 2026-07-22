@@ -92,18 +92,13 @@ def download(url: str, on_progress: Callable[[int], None] | None = None) -> str:
     Calls on_progress(percent) with integer values 0–100 during the transfer.
     Returns the local path to the downloaded file.
     """
+    from vesper.core import net
+
     suffix = Path(url.split("?")[0]).suffix or ""
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
     tmp.close()
 
-    def _reporthook(block_num: int, block_size: int, total_size: int) -> None:
-        if total_size > 0:
-            percent = min(100, int(block_num * block_size * 100 / total_size))
-            on_progress(percent)
-
-    urllib.request.urlretrieve(
-        url, tmp.name, reporthook=_reporthook if on_progress else None
-    )
+    net.fetch(url, tmp.name, on_progress)
     return tmp.name
 
 

@@ -25,6 +25,20 @@ class WindowConfig:
     x: int | None = None
     y: int | None = None
 
+    # Chrome and compositing. easy_drag only matters when frameless is True: it
+    # makes the whole window draggable, which a custom titlebar app turns off in
+    # favour of declared drag regions. vibrancy is macOS-only; elsewhere PyWebView
+    # ignores it. transparent depends on the compositor on Linux.
+    frameless: bool = False
+    easy_drag: bool = True
+    transparent: bool = False
+    vibrancy: bool = False
+
+    # Minimum window size. None leaves the backend default; both must be set
+    # together for a minimum to apply.
+    min_width: int | None = None
+    min_height: int | None = None
+
     def __post_init__(self) -> None:
         self.title = self._validate_non_empty_string("title", self.title)
         self.width = self._validate_positive_integer("width", self.width)
@@ -36,6 +50,14 @@ class WindowConfig:
         self.frontend = self._validate_frontend(self.frontend)
         self.x = self._validate_optional_integer("x", self.x)
         self.y = self._validate_optional_integer("y", self.y)
+        self.frameless = self._validate_boolean("frameless", self.frameless)
+        self.easy_drag = self._validate_boolean("easy_drag", self.easy_drag)
+        self.transparent = self._validate_boolean("transparent", self.transparent)
+        self.vibrancy = self._validate_boolean("vibrancy", self.vibrancy)
+        self.min_width = self._validate_optional_positive_integer("min_width", self.min_width)
+        self.min_height = self._validate_optional_positive_integer("min_height", self.min_height)
+        if (self.min_width is None) != (self.min_height is None):
+            raise ValueError("min_width and min_height must be set together.")
 
     @staticmethod
     def _validate_optional_integer(field_name: str, value: int | None) -> int | None:
@@ -46,6 +68,13 @@ class WindowConfig:
             raise TypeError(f"{field_name} must be an integer or None.")
 
         return value
+
+    @classmethod
+    def _validate_optional_positive_integer(cls, field_name: str, value: int | None) -> int | None:
+        if value is None:
+            return None
+
+        return cls._validate_positive_integer(field_name, value)
 
     @staticmethod
     def _validate_non_empty_string(field_name: str, value: str) -> str:

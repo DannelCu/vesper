@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import base64
 import json
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -101,6 +104,99 @@ def _trash_fallback(target: str) -> bool:
 def _ps_quote(value: str) -> str:
     """Quote a string for a PowerShell single-quoted literal."""
     return "'" + value.replace("'", "''") + "'"
+
+
+def mkdir(path: str, parents: bool = False, *, scope: FsScope | None = None) -> None:
+    """Create a directory. With ``parents=True``, missing ancestors are created too."""
+    p = Path(scope.check(path) if scope else Path(path))
+    p.mkdir(parents=parents, exist_ok=False)
+
+
+def copy(src: str, dst: str, *, scope: FsScope | None = None) -> None:
+    """
+    Copy a file or directory tree to *dst*.
+
+    Both ends are validated against the scope: a copy is a read of the source and a
+    write of the destination, so an in-scope source must not become a way to write
+    outside the sandbox (or the reverse).
+    """
+    s = Path(scope.check(src) if scope else Path(src))
+    d = Path(scope.check(dst) if scope else Path(dst))
+    if s.is_dir():
+        shutil.copytree(s, d)
+    else:
+        shutil.copy2(s, d)
+
+
+def move(src: str, dst: str, *, scope: FsScope | None = None) -> None:
+    """Move (or rename) a file or directory. Both ends are validated like copy()."""
+    s = Path(scope.check(src) if scope else Path(src))
+    d = Path(scope.check(dst) if scope else Path(dst))
+    shutil.move(str(s), str(d))
+
+
+def remove(path: str, recursive: bool = False, *, scope: FsScope | None = None) -> None:
+    """
+    Delete a file, permanently.
+
+    Directories require ``recursive=True`` explicitly — an unqualified remove() that
+    silently took a whole tree with it would make the destructive case the default.
+    For anything a user might want back, use :func:`trash` instead.
+
+    Raises:
+        IsADirectoryError: the path is a directory and *recursive* is False.
+    """
+    p = Path(scope.check(path) if scope else Path(path))
+    if p.is_dir() and not p.is_symlink():
+        if not recursive:
+            raise IsADirectoryError(
+                f"{path} is a directory; pass recursive=True to remove it and its contents."
+            )
+        shutil.rmtree(p)
+    else:
+        os.remove(p)
+
+
+def stat(path: str, *, scope: FsScope | None = None) -> dict:
+    """
+    File metadata: ``{size, mtime, is_dir, type}``.
+
+    ``mtime`` is seconds since the epoch as a float; ``type`` is ``"dir"`` or
+    ``"file"``, mirroring the ``is_dir`` flag that ``list_dir`` entries carry.
+    """
+    p = Path(scope.check(path) if scope else Path(path))
+    st = p.stat()
+    is_dir = p.is_dir()
+    return {
+        "size": st.st_size,
+        "mtime": st.st_mtime,
+        "is_dir": is_dir,
+        "type": "dir" if is_dir else "file",
+    }
+
+
+def read_bytes(path: str, *, scope: FsScope | None = None) -> str:
+    """
+    Read a file's raw bytes, returned as base64.
+
+    The IPC bridge is JSON, which cannot carry raw bytes — base64 is the canonical
+    encoding for binary data crossing it (see docs/file-transfers.md).
+    """
+    p = Path(scope.check(path) if scope else Path(path))
+    return base64.b64encode(p.read_bytes()).decode("ascii")
+
+
+def write_bytes(path: str, data: str, *, scope: FsScope | None = None) -> None:
+    """
+    Write base64-encoded *data* to a file as raw bytes.
+
+    Creates parent directories like :func:`write`. Invalid base64 raises rather than
+    writing a corrupted file.
+    """
+    raw = base64.b64decode(data, validate=True)
+    p = Path(scope.check(path) if scope else Path(path))
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(raw)
 
 
 def list_dir(path: str, *, scope: FsScope | None = None) -> list[dict]:

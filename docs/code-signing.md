@@ -147,6 +147,14 @@ Signs the specified path instead of `package/<app-name>[.exe]`.
 
 ---
 
+## Signing and installers
+
+`vesper package --installer` integrates with signing on macOS: when `[sign]` has an `identity`, the `.app` bundle is signed (and notarized, if enabled) **before** the `.dmg` is built — a dmg of an unsigned app just postpones the quarantine dialog to the user's machine.
+
+On Windows, sign both binaries when building an installer via the [NSIS recipe](recipes/windows-installer.md): the app exe before wrapping, and the produced setup exe (`vesper sign --path package/MyApp-setup.exe`) — SmartScreen judges the installer itself.
+
+---
+
 ## CI / CD
 
 For automated builds, set credentials as environment variables in your CI system (GitHub Actions secrets, etc.):

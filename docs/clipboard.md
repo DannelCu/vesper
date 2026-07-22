@@ -57,8 +57,10 @@ clipboard.write("Hello, clipboard!")
 
 - `vesper:clipboard:read` — called by `vesper.clipboard.read()`
 - `vesper:clipboard:write` — called by `vesper.clipboard.write()`
+- `vesper:clipboard:read_image` / `write_image` — `readImage()` / `writeImage()`
+- `vesper:clipboard:read_files` / `write_files` — `readFiles()` / `writeFiles()`
 
-Both are filtered from `vesper sync-types` output.
+All are filtered from `vesper sync-types` output.
 
 ---
 
@@ -96,3 +98,34 @@ the clipboard should not have to catch an exception for the ordinary empty case.
 
 Backends: `xclip` on Linux, `osascript` on macOS, PowerShell (`-STA`, which the
 Windows clipboard API requires) on Windows.
+
+---
+
+## Files
+
+The OS clipboard's *file object* — what Explorer, Finder and Linux file managers put on the clipboard on Copy, and read back on Paste. Distinct from copying a path as text: pasting these into a file manager copies the files themselves.
+
+```js
+// Copy files out of the app — Paste in the file manager copies them.
+await vesper.clipboard.writeFiles(["/data/export.csv", "/data/report.pdf"])
+
+// Read files the user copied in their file manager.
+const paths = await vesper.clipboard.readFiles()
+```
+
+```python
+from vesper.core import clipboard
+
+clipboard.write_files(["/data/export.csv"])     # True when accepted
+paths = clipboard.read_files(scope=my_scope)    # [] when none / tool missing
+```
+
+Backends: `ctypes` with `CF_HDROP` on Windows, `osascript` (`POSIX file`) on macOS, and `xclip` with the `text/uri-list` target on Linux — the same xclip install that backs text and images.
+
+Three things to know:
+
+- **Scope filtering.** Paths read from the clipboard are validated against the app's `fs_scope` before reaching the frontend. Out-of-scope entries are dropped (logged at debug), not raised — the clipboard's content is the user's doing, not the frontend's.
+- **macOS reads at most one file.** The scripting interface coerces the clipboard to a single file reference; writing multiple files works, reading back returns only the first.
+- **Degradation.** A missing platform tool means `readFiles()` resolves `[]` and `writeFiles()` resolves `false`, same contract as the rest of the clipboard API. Ask `vesper.capabilities()` for `clipboard_files`.
+
+The end-to-end round trip (copy in the app, paste in the OS file manager, and the reverse) is verified manually per platform — CI covers the calls being built correctly, not the paste landing; see the coverage table in KNOWN-ISSUES.md.

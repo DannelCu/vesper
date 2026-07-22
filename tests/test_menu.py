@@ -140,7 +140,7 @@ def test_app_run_passes_menu_to_window_create(monkeypatch):
     captured = {}
 
     def fake_create(self, ipc_handler, config, hooks=None, secondary_windows=None,
-                    menu=None, splash=None):
+                    menu=None, splash=None, serve_url=None):
         captured["menu"] = menu
 
     monkeypatch.setattr(Window, "create", fake_create)
@@ -158,7 +158,7 @@ def test_app_run_no_menu_passes_none(monkeypatch):
     captured = {}
 
     def fake_create(self, ipc_handler, config, hooks=None, secondary_windows=None,
-                    menu=None, splash=None):
+                    menu=None, splash=None, serve_url=None):
         captured["menu"] = menu
 
     monkeypatch.setattr(Window, "create", fake_create)

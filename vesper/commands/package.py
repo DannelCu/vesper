@@ -220,7 +220,7 @@ def _print_distribution_note(*, bundler: str) -> None:
 # ─── Dispatcher ──────────────────────────────────────────────────────────────
 
 
-def package() -> None:
+def package(installer: bool = False) -> None:
     project_dir = Path.cwd()
     config = read_vesper_toml(project_dir)
 
@@ -243,20 +243,32 @@ def package() -> None:
     else:
         package_with_pyinstaller(project_dir, entrypoint, app_name, data_src, data_dst)
 
+    if installer:
+        from vesper.commands.installer import build_installer
+
+        print("")
+        build_installer(project_dir, app_name)
+
 
 # ─── CLI ─────────────────────────────────────────────────────────────────────
 
 
 def add_package_parser(subparsers: argparse._SubParsersAction) -> None:
-    subparsers.add_parser(
+    parser = subparsers.add_parser(
         "package",
         help="Package the Vesper app into a native executable.",
+    )
+    parser.add_argument(
+        "--installer",
+        action="store_true",
+        help="Also build a native installer: .dmg on macOS, .deb on Debian/Ubuntu. "
+             "On Windows, prints what is needed (NSIS) and where the recipe lives.",
     )
 
 
 def handle_package(args: argparse.Namespace) -> bool:
     if args.command == "package":
-        package()
+        package(installer=getattr(args, "installer", False))
         return True
 
     return False

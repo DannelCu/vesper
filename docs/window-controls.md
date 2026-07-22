@@ -82,49 +82,50 @@ screens = app.window.list_screens()
 # [{'width': 1920, 'height': 1080, 'x': 0, 'y': 0}, ...]
 ```
 
-Each entry has `width`, `height`, `x`, and `y` (position of the top-left corner of the monitor).
+Each entry has `width`, `height`, `x`, and `y` (position of the top-left corner of the monitor). Coordinates can be negative — a monitor arranged to the left of or above the primary one starts at negative x/y.
+
+---
+
+## Semantic positioning
+
+Place the window at a named position instead of computing pixels:
+
+```js
+await vesper.window.position("bottom-right")
+await vesper.window.position("top-center", { screen: 1 })
+await vesper.window.position("top-right", {
+    screen: "cursor",              // the monitor the cursor is on
+    offset: { x: -12, y: 12 },     // nudge off the corner
+})
+```
+
+Positions: `top-left`, `top-center`, `top-right`, `center-left`, `center`, `center-right`, `bottom-left`, `bottom-center`, `bottom-right`.
+
+- `screen` is a monitor index (`0` is primary), or `"cursor"` for the monitor under the cursor. Asking for the cursor needs nothing installed on Windows and macOS; on Linux there is no dependency-free way to know, so `"cursor"` falls back to the primary monitor.
+- `offset` is added to the computed position as-is — use negative values to pull a bottom/right-anchored window away from the edge.
+- Multi-monitor layouts with negative coordinates work: positioning on a monitor left of the primary produces negative x, as it should.
+
+**Tray apps:** the exact position of *your tray icon* is not obtainable — pystray does not expose it on any platform. The supported pattern for a menubar/tray-style app is "corner of the monitor the user is working on" (`{ screen: "cursor" }`), which is what most of the ecosystem ships. See the [Menubar App recipe](recipes/menubar-app.md).
+
+```python
+# From Python
+from vesper.core import positioner
+
+screens = app.window.list_screens()
+geo = app.window.get_geometry()
+x, y = positioner.compute("bottom-right", (geo["width"], geo["height"]), screens)
+app.window.move(x, y)
+```
 
 ---
 
 ## Custom titlebar pattern
 
-A common use case is to hide the native titlebar and implement a custom one in HTML. Configure the window without a titlebar and wire the drag/close controls yourself:
+A common use case is to hide the native titlebar and implement a custom one in HTML: configure `App(frameless=True, easy_drag=False)`, mark your titlebar as a drag region with the `data-vesper-drag` attribute, and wire the buttons to `vesper.window.minimize()` / `maximize()` / `restore()` and `vesper.quit()`.
 
-```python
-app = App(
-    title="My App",
-    frontend="dist/index.html",
-    frameless=True,   # removes the native titlebar (PyWebView option)
-)
-```
+Note that `-webkit-app-region: drag` is an Electron/Chromium convention — it does **not** work in the system WebViews Vesper renders in. Use the drag-region attribute instead.
 
-In your HTML, implement drag and controls:
-
-```html
-<div id="titlebar">
-    <span>My App</span>
-    <div class="controls">
-        <button onclick="vesper.window.minimize()">─</button>
-        <button onclick="vesper.window.maximize()">□</button>
-        <button onclick="vesper.quit()">✕</button>
-    </div>
-</div>
-```
-
-Add `-webkit-app-region: drag` CSS to make the titlebar draggable:
-
-```css
-#titlebar {
-    -webkit-app-region: drag;
-    height: 32px;
-    display: flex;
-    align-items: center;
-}
-
-#titlebar .controls {
-    -webkit-app-region: no-drag;  /* buttons must be no-drag */
-}
-```
+The full pattern — options, dragging, transparency, platform differences — lives in [Frameless Windows](frameless.md), with a complete working example in the [Custom Titlebar recipe](recipes/custom-titlebar.md).
 
 ---
 
@@ -151,6 +152,8 @@ All window controls are registered as built-in commands:
 - `vesper:window:fullscreen`
 - `vesper:window:resize`
 - `vesper:window:move`
+- `vesper:window:position`
+- `vesper:window:set_backdrop`
 - `vesper:screen:list`
 - `vesper:app:quit`
 
