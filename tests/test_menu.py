@@ -75,17 +75,18 @@ class _Recorder:
         return len(self.calls)
 
 
+# The attributes Window.create()/show() touch on the webview module. A list spec,
+# not spec=webview: spec=webview walks every attribute of the real module to set
+# itself up, and one of them — webview.screens — is a lazy proxy that calls
+# initialize(), which raises on a headless Linux box with no GTK/Qt (the CI
+# runners). A list spec still rejects any attribute not named here, which is the
+# protection that matters, without importing a backend.
+_WEBVIEW_USED = ("create_window", "start")
+
+
 def _mock_webview():
-    """
-    A webview stand-in for the Window.create/show tests, which genuinely need one.
-
-    spec=webview is the point: the mock exposes only attributes the real module
-    has, so reaching for one that does not exist raises here instead of silently
-    succeeding. A bare MagicMock is what hid the MenuAction bug.
-    """
-    import webview
-
-    mock = MagicMock(spec=webview)
+    """A webview stand-in for the Window.create/show tests, which need one."""
+    mock = MagicMock(spec=_WEBVIEW_USED)
     mock.create_window.return_value = MagicMock()
     return mock
 
