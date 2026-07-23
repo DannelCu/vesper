@@ -14,18 +14,42 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 **Examples**
 
 - **[examples/media-vault](examples/media-vault/)** — a media library with an in-app
-  video player, built to make one point concrete: seeking needs HTTP byte ranges, so
-  a `<video>` on `file://` has a dead scrub bar and one on the production localhost
-  server does not. Also covers the scoped filesystem API, a real `ShellScope`
-  allowlist over ffprobe/ffmpeg, downloads with taskbar progress, keep-awake and
-  suspend handling, multi-window, splash, single-instance and the file clipboard. Runs
-  with no optional dependency installed: without ffmpeg there are no thumbnails and a
-  banner says why.
+  video player, built to make two points concrete. First: seeking needs HTTP byte
+  ranges, so a `<video>` on `file://` has a dead scrub bar and one on the production
+  localhost server does not. Second: a WebView plays *web* formats, so a `.avi` the
+  user can see in their file manager will not play — the app indexes it anyway and
+  converts it on demand with ffmpeg, with live progress, rather than hiding the file.
+  Also covers the scoped filesystem API, a real `ShellScope` allowlist over
+  ffprobe/ffmpeg, taskbar progress, keep-awake and suspend handling, multi-window,
+  splash, single-instance and the file clipboard. Runs with no optional dependency
+  installed: without ffmpeg there are no thumbnails, unplayable formats say so instead
+  of offering a dead button, and a banner explains why.
+- **[examples/launcher](examples/launcher/)** — a Spotlight-style command bar, built
+  for the shell a launcher needs and a normal window does not: frameless and
+  transparent with a hand-built drag region (`easy_drag=False` + `data-vesper-drag`,
+  so the search field stays typeable), always-on-top, dropped onto the active screen
+  with the positioner, hidden to the tray and summoned by a global hotkey. Carries a
+  calculator that evaluates a user-typed string **without `eval()`** — a tokeniser and
+  the shunting-yard algorithm, since in a desktop app `eval` hands the process holding
+  your filesystem bridge to whatever was typed — and a 2048 game. Runs with none of
+  its four optional pieces: each missing one greys out its command with the reason,
+  and with neither tray nor hotkey the window minimizes instead of hiding, so it can
+  never strand itself off-screen with nothing to summon it.
 - **[examples/README.md](examples/README.md)** — an index of the examples, with what
   each one demonstrates and who should read it first.
 
 **Recipes and known issues (documentation of what Vesper cannot do — yet)**
 
+- **[Playing Video](docs/recipes/video-playback.md)** — why `.avi`, `.wmv` and friends
+  refuse to play in a Vesper window: the UI is a WebView, so it plays what browsers
+  play, and container and codec each have to be supported (which is why an H.265 `.mp4`
+  fails too). Covers the reliable formats, the extra GStreamer wrinkle on Linux, why
+  filtering unplayable files out of your UI is the wrong answer, and the pattern that
+  is the right one — index everything, mark what is `web_playable`, transcode the rest
+  on demand with `-movflags +faststart` so the converted copy still seeks, cache it,
+  and report progress from ffmpeg's own `-progress` stream. Explains why this is a
+  recipe and not a core API: it would put an external binary behind a core call, and
+  caching and quality policy are product decisions.
 - **[Asking the User for Text](docs/recipes/text-input.md)** — there is no native
   text-input dialog (KI7), so this is the `<dialog>`-based pattern that replaces it:
   focus trapping, Escape-to-cancel and top-layer rendering for free, identical on all
@@ -101,6 +125,16 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 **Core (zero new dependencies)**
 
+- **`process.run(on_output=…)`** — stream a command's stdout line by line while it
+  runs, instead of getting everything at the end. A transcode or a build can now report
+  progress rather than looking frozen; the full stdout is still captured and returned,
+  stderr is still captured whole, the shell scope and timeout still apply, and without
+  the callback there are no extra threads. Also adds `process.terminate_running()`, so
+  app teardown can end children that are still going.
+- **`window.hide()` / `window.show()` on the main window** — take the window out of the
+  taskbar and alt-tab entirely, unlike `minimize()`, which is what a tray app or a
+  launcher wants when it "closes" to the tray and comes back on a hotkey. Exposed on
+  the SDK as `vesper.window.hide()` / `.show()` and as `vesper:window:hide` / `:show`.
 - **`FsScope.set_roots()`** — narrow (or replace) the filesystem scope while the app
   runs, for apps whose working folder the user picks: a folder picker, a recent-project
   list. The commands registered on the `App` hold a reference to the scope *object*, so
@@ -219,6 +253,125 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   for the per-platform table.
 
 ### Fixed
+
+*The ones below were found by building `examples/media-vault` and `examples/launcher`
+and using them like real apps. Each had shipped, and each is now covered by a
+regression test.*
+
+- **`vesper dev` hung on exit and had to be killed with Ctrl+C.** Quitting the app
+  left the CLI stuck in `server.shutdown()` — `socketserver` waits on an event that
+  only `serve_forever` sets, and `serve_forever` was never getting back to check the
+  shutdown request. The dev server was a plain `http.server.HTTPServer`, which
+  handles one connection at a time to completion, and `BaseHTTPRequestHandler` blocks
+  in `rfile.readline()` with no timeout: a browser that opens a socket speculatively
+  and sends nothing — which WebKit does as a matter of course — parks the server there
+  forever. Both the dev server and the production localhost server are now
+  `ThreadingHTTPServer`.
+
+- **The production localhost server served one request at a time, so a playing video
+  blocked the whole app.** Same single-threaded server, but the consequence is worse
+  than a hang on exit: a ranged `GET` from a `<video>` element stays open for as long
+  as it plays, and every other request — thumbnails, a second video, the SDK itself —
+  queued behind it. This is the server that exists so `<video>` can seek at all
+  (`examples/media-vault`), so the feature it was built for was also the thing that
+  disabled it. Threading fixes both; the regression tests hold a stream open and
+  require a second request to be served, and require `shutdown()` to return with an
+  idle connection open.
+
+- **One click on a tray menu item froze the entire application.** The window stopped
+  responding, no further tray action did anything, and Quit did not quit — the app had
+  to be killed. pystray has no single answer for which thread a menu item runs on: the
+  win32 backend pumps a message loop on a thread it owns, while the AppIndicator and
+  GTK backends attach to whatever GLib main loop is already running, which under
+  Vesper is PyWebView's, on the **main** thread. An action that waits on that loop
+  therefore deadlocks it: `app.emit()` is `evaluate_js`, which schedules the script
+  with `glib.idle_add` and blocks until it completes, and the idle callback cannot run
+  while the loop is blocked waiting for it. Every tray action now runs on its own
+  short-lived thread, which is the contract [docs/tray.md](docs/tray.md) already
+  stated and the behaviour win32 already had; an action that raises is logged to the
+  `vesper.tray` logger instead of reaching pystray. The earlier tests missed it
+  because they invoked the *callback* rather than the *dispatch* — the new ones assert
+  the action leaves the calling thread and that the handler returns before a slow
+  action finishes.
+
+- **`vesper-shortcuts` could not register any shortcut whose key was not a single
+  character.** `ctrl+alt+space`, `alt+f4`, `ctrl+shift+enter`, the arrow keys and every
+  function key — all documented in the plugin's own README — raised a bare
+  `ValueError: space`. pynput spells named keys in angle brackets (`<space>`) and
+  feeds anything else to `KeyCode.from_char`, which takes one character; the
+  conversion only ever bracketed the *modifiers*. `_to_pynput` now brackets named keys
+  too and accepts the obvious alternative spellings (`escape`, `return`, `pgup`,
+  `arrowleft`). The tests missed it because the suite mocks pynput wholesale, so
+  nothing ever parsed the string the plugin produced; the new tests check the
+  conversion against the **real** `HotKey.parse`, including every named key pynput
+  knows.
+
+- **One bad accelerator permanently disabled every shortcut in the app.** A rejected
+  accelerator was left in the registry, so the next `add()` or `remove()` rebuilt the
+  listener from a map that still contained it and raised again — and since the old
+  listener had already been stopped, the shortcuts that *were* working were gone for
+  the rest of the run. Accelerators are now validated before anything is mutated, and
+  a listener that fails to start rolls back to the previous set.
+
+- **The `vesper-shortcuts` README documented a JavaScript API that does not exist.**
+  Every example passed a callback to `vesper.shortcuts.register(accel, fn)`; the SDK
+  takes the accelerator only and delivers firings as a `shortcut` event. Code copied
+  from the README registered the shortcut and then silently did nothing when it fired.
+  The examples now show the real two-part shape, and the key list matches what the
+  backend actually accepts.
+
+- **`vesper-shortcuts` raised `AttributeError: _display_record` when shortcuts were
+  registered in quick succession.** pynput marks its listener `_running` at the top of
+  its thread but builds the X11 recording context part-way through, and `stop()` inside
+  that window fails. Registering a second shortcut could therefore kill the listener
+  holding the first. The plugin now waits for the backend to come up before replacing
+  a listener, and a `stop()` that fails anyway no longer escapes `add()`.
+
+- **Every system-tray menu action was dead.** Clicking any tray entry raised
+  `TypeError: MenuItem.__call__() missing 1 required positional argument: 'icon'`
+  and did nothing else. pystray decides how to invoke a callback from its
+  `__code__.co_argcount` — 0 means "call with nothing", 1 "call with the icon", 2
+  "call with (icon, item)", more is an error — and **parameters with defaults are
+  counted**. The wrapper `lambda _, a=action: a()` reads as taking one argument but
+  counts as two, so pystray passed `(icon, menu_item)`, the MenuItem was bound over
+  `a`, and the item ended up calling itself. The action is now captured in a closure,
+  which keeps the count at zero and also binds each item to its own callback. The
+  tests missed this because they mocked pystray, and a `MagicMock` accepts any
+  callable and never calls it back; the new tests construct and invoke a **real**
+  `pystray.MenuItem`.
+
+- **A window created hidden never became visible again, so splash screens and
+  secondary windows were broken.** PyWebView's GTK `show()` re-hides a window whose
+  `hidden` flag is still set whenever the GTK main level reads `0` — and it always
+  reads `0`, because PyWebView drives the loop with `Gtk.Application.run()` rather than
+  `Gtk.main()`. Nothing ever cleared that flag. Two user-visible failures came from
+  this single cause: an app with `app.splash()` showed the splash, dismissed it, and
+  then displayed **nothing at all** while the process stayed alive; and a window opened
+  with `WindowHandle.show()` loaded and even played audio while remaining invisible.
+  `WindowHandle.show()` and the main window's show now clear the flag first, and the
+  splash hand-off shows the main window *before* destroying the splash so a mapped
+  window exists throughout.
+- **Closing the main window left the process running when the app had a secondary
+  window.** The companion to the `app.quit()` fix below, by the other route: the native
+  close button does not go through `quit()`. Secondary windows are created hidden, so a
+  registered-but-never-shown second window kept PyWebView's loop — and the process,
+  and the console — alive after the user had closed the only visible window. The main
+  window's `closed` event now tears the secondaries down.
+- **A long `process.run()` kept the app alive after its window closed.**
+  `run()` blocks the thread that called it, which is PyWebView's non-daemon JS-bridge
+  thread, and its child was tracked nowhere — `ProcessManager.kill_all()` only covers
+  `spawn()`. Closing a window mid-transcode therefore left the process running with no
+  UI until ffmpeg finished on its own. `run()` now registers its child, and
+  `App.close()` terminates any still running. Measured on the real example: an app
+  closing during a 5-minute encode now exits in 8 seconds instead of waiting the full
+  five minutes, leaving no orphaned children.
+- **`net.download()` had no timeout, so a stalled connection hung forever.**
+  `urllib.request.urlretrieve` was called with no timeout at all: a download to an
+  unreachable host blocked indefinitely with no progress and no error — a button the
+  user pressed that never came back. It now streams the response under a
+  `DEFAULT_TIMEOUT` of 30 s applied to the connection and to every read, which bounds
+  *inactivity* rather than total time, so a slow but steady download is never cut off.
+  `fetch()` and `download()` both take `timeout=`.
 - **Native menus were completely broken.** `app.menu()` raised
   `AttributeError: module 'webview' has no attribute 'MenuAction'` before the window
   opened — only `Menu` is re-exported at PyWebView's top level, while `MenuAction` and
