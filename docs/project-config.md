@@ -134,6 +134,8 @@ app = App(
 
 The frontend directory is then served from `http://127.0.0.1:<ephemeral-port>/<session-token>/`, with an `index.html` fallback for extensionless paths so SPA routes survive a reload. The server lives and dies with the app process — it starts inside `app.run()` and is shut down when the window closes. Under `vesper dev` the flag is ignored: the dev server already serves over HTTP and takes precedence.
 
+It handles connections concurrently, which matters more than it sounds: a ranged `GET` from a `<video>` element stays open for as long as the video plays, so a one-request-at-a-time server would leave every other request — thumbnails, a second video, the SDK — queued behind whatever is currently playing.
+
 **Why is this an `App` parameter and not a `vesper.toml` key?** The config file is a CLI-side artifact — it is not bundled into the packaged binary, so the runtime could not read it. The `App` constructor is the configuration surface the packaged app actually has.
 
 ### Threat model — read before enabling

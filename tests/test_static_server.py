@@ -420,3 +420,55 @@ def test_html_postprocess_still_applies_with_ranges_supported(tmp_path):
 ])
 def test_parse_range(header, expected):
     assert static_server.parse_range(header, 1000) == expected
+
+
+# ── Concurrency ──────────────────────────────────────────────────────────────
+#
+# The server used to be a plain http.server.HTTPServer, which handles one
+# connection at a time to completion. Two consequences, both of which shipped:
+# a <video> streaming a ranged response held the server for as long as it
+# played, and an idle connection — which browsers open speculatively and leave
+# silent — parked the handler in readline() with no timeout, so serve_forever
+# never noticed shutdown() and the app hung on exit.
+
+
+def test_a_slow_stream_does_not_block_other_requests(frontend, tmp_path):
+    (frontend / "big.bin").write_bytes(b"x" * (4 * 1024 * 1024))
+    server, base = static_server.start(frontend, token=None)
+    reading = threading.Event()
+    stop = threading.Event()
+
+    def slow_reader():
+        response = urllib.request.urlopen(f"{base}/big.bin", timeout=20)
+        reading.set()
+        while not stop.is_set() and response.read(4096):
+            stop.wait(0.01)
+
+    try:
+        threading.Thread(target=slow_reader, daemon=True).start()
+        assert reading.wait(5), "the stream never started"
+
+        # Must be served while the stream is still open.
+        body = urllib.request.urlopen(f"{base}/index.html", timeout=5).read()
+        assert b"spa shell" in body
+    finally:
+        stop.set()
+        server.shutdown()
+        server.server_close()
+
+
+def test_shutdown_returns_with_an_idle_connection_open(frontend):
+    server, base = static_server.start(frontend, token=None)
+    host, port = base.rsplit(":", 1)
+    idle = socket.create_connection(("127.0.0.1", int(port)))
+
+    finished = threading.Event()
+    threading.Thread(
+        target=lambda: (server.shutdown(), finished.set()), daemon=True
+    ).start()
+
+    try:
+        assert finished.wait(5), "shutdown() hung on an idle connection"
+    finally:
+        idle.close()
+        server.server_close()

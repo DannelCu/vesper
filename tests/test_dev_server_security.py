@@ -133,3 +133,32 @@ def test_percent_encoded_space_in_filename_is_served(dev_server):
     status, body = _raw_get(server, "/my%20file.css")
     assert status == 200
     assert b"body{}" in body
+
+
+# ── Exit ─────────────────────────────────────────────────────────────────────
+
+
+def test_dev_server_shutdown_returns_with_an_idle_connection_open(tmp_path):
+    """
+    `vesper dev` shuts the server down in a finally block when the app exits.
+    With a single-threaded server one idle connection — which WebKit opens as a
+    matter of course — left serve_forever parked in readline(), so shutdown()
+    waited on an event that was never set and `vesper dev` never returned to the
+    shell. Quitting the app left the terminal needing Ctrl+C.
+    """
+    from vesper.commands.dev import _start_dev_server
+
+    (tmp_path / "index.html").write_text("<body>hi</body>")
+    server, _version = _start_dev_server(tmp_path)
+    idle = socket.create_connection(("localhost", server.server_address[1]))
+
+    finished = threading.Event()
+    threading.Thread(
+        target=lambda: (server.shutdown(), finished.set()), daemon=True
+    ).start()
+
+    try:
+        assert finished.wait(5), "shutdown() hung on an idle connection"
+    finally:
+        idle.close()
+        server.server_close()

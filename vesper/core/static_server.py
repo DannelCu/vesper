@@ -244,7 +244,15 @@ def start(
     the base URL, token included when one was given.
     """
     handler = make_static_handler(frontend_dir, token=token, spa_fallback=spa_fallback)
-    server = http.server.HTTPServer((host, 0), handler)
+    # Threaded, not http.server.HTTPServer, and the distinction is not academic.
+    # A single-threaded server handles one connection at a time to completion, so
+    # a `<video>` streaming a ranged response holds the whole server for as long as
+    # it plays — thumbnails, other media and the SDK itself all stall behind it.
+    # An idle connection is worse: browsers routinely open sockets speculatively
+    # and send nothing, and the handler blocks in readline() with no timeout, so
+    # serve_forever never returns to notice shutdown() and the app hangs on exit.
+    # ThreadingHTTPServer sets daemon_threads, so shutdown does not wait on them.
+    server = http.server.ThreadingHTTPServer((host, 0), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
     base = f"http://{host}:{server.server_address[1]}"

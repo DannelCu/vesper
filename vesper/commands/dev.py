@@ -87,7 +87,14 @@ def _make_dev_handler(frontend_dir: Path, version: list[int]) -> type:
 
 def _start_dev_server(frontend_dir: Path) -> tuple[http.server.HTTPServer, list[int]]:
     version: list[int] = [0]
-    server = http.server.HTTPServer(("localhost", 0), _make_dev_handler(frontend_dir, version))
+    # Threaded for the same reason as the production server (see
+    # core.static_server.start): one idle connection — which WebKit opens as a
+    # matter of course — parks a single-threaded server inside readline() forever,
+    # so serve_forever never sees the shutdown request and `vesper dev` hangs on
+    # exit instead of returning to the shell.
+    server = http.server.ThreadingHTTPServer(
+        ("localhost", 0), _make_dev_handler(frontend_dir, version)
+    )
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server, version
 
