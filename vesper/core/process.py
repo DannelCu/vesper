@@ -107,12 +107,64 @@ def _require_scope(scope: ShellScope | None) -> ShellScope:
     return scope
 
 
+# Children started by run(), so a closing app can end them.
+#
+# run() blocks the thread that called it, and that thread is PyWebView's JS-bridge
+# thread — which is not a daemon. A long job (a transcode, a build) therefore keeps
+# the whole process alive after the user has closed the window: the UI is gone, the
+# console is not. ProcessManager.kill_all() only covers spawn()ed children, so
+# these were untracked and unkillable. Tracking them lets App.close() end them.
+_live_runs: set[subprocess.Popen] = set()
+_live_runs_lock = threading.Lock()
+
+
+def _track(proc: subprocess.Popen) -> None:
+    with _live_runs_lock:
+        _live_runs.add(proc)
+
+
+def _untrack(proc: subprocess.Popen) -> None:
+    with _live_runs_lock:
+        _live_runs.discard(proc)
+
+
+def terminate_running(grace: float = _TERMINATE_GRACE_SECONDS) -> int:
+    """
+    Terminate every still-running child started by :func:`run`.
+
+    Called at app teardown so a closed window never leaves a transcode — and the
+    process waiting on it — running with no UI. Polite terminate first, kill if it
+    will not go. Returns how many were ended.
+
+    Safe to call when nothing is running, and safe to call more than once.
+    """
+    with _live_runs_lock:
+        procs = list(_live_runs)
+
+    ended = 0
+    for proc in procs:
+        if proc.poll() is not None:
+            continue
+        try:
+            proc.terminate()
+            try:
+                proc.wait(timeout=grace)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+            ended += 1
+        except Exception:
+            logger.exception("Could not terminate a running child process")
+    return ended
+
+
 def run(
     argv: list[str],
     *,
     scope: ShellScope | None,
     cwd: str | None = None,
     timeout: float | None = None,
+    on_output: Callable[[str], None] | None = None,
 ) -> dict:
     """
     Run a command to completion and capture its output.
@@ -120,20 +172,85 @@ def run(
     Returns ``{"code": int, "stdout": str, "stderr": str}``. A nonzero exit code
     is a result, not an exception — the caller decides what failure means.
 
+    When *on_output* is given, stdout is streamed to it line by line (newline
+    stripped) as the process runs, so a long job — a transcode, a build — can
+    report progress instead of going silent until it finishes. stdout is still
+    captured and returned in full; stderr is always captured whole. Without the
+    callback this is a plain blocking capture with no extra threads.
+
     Raises:
         ShellScopeError: no scope configured, or the invocation falls outside it.
         subprocess.TimeoutExpired: *timeout* elapsed (the process is killed).
     """
     argv = _require_scope(scope).check(argv)
-    result = subprocess.run(
+
+    if on_output is None:
+        # Popen rather than subprocess.run purely so the child is trackable and a
+        # closing app can end it; the semantics are otherwise identical.
+        proc = subprocess.Popen(
+            argv,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=cwd,
+        )
+        _track(proc)
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            raise
+        finally:
+            _untrack(proc)
+        return {"code": proc.returncode, "stdout": stdout, "stderr": stderr}
+
+    # Streaming path: read stdout and stderr on their own threads so neither can
+    # deadlock the other by filling its pipe, and so on_output fires as lines
+    # arrive rather than all at once at the end.
+    proc = subprocess.Popen(
         argv,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
-        check=False,
         cwd=cwd,
-        timeout=timeout,
+        bufsize=1,
     )
-    return {"code": result.returncode, "stdout": result.stdout, "stderr": result.stderr}
+    _track(proc)
+    stdout_lines: list[str] = []
+    stderr_lines: list[str] = []
+
+    def _pump(stream, sink: list[str], emit: bool) -> None:
+        for line in stream:
+            sink.append(line)
+            if emit:
+                on_output(line.rstrip("\n"))
+
+    readers = [
+        threading.Thread(target=_pump, args=(proc.stdout, stdout_lines, True), daemon=True),
+        threading.Thread(target=_pump, args=(proc.stderr, stderr_lines, False), daemon=True),
+    ]
+    for reader in readers:
+        reader.start()
+
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+        for reader in readers:
+            reader.join()
+        raise
+    finally:
+        _untrack(proc)
+    for reader in readers:
+        reader.join()
+
+    return {
+        "code": proc.returncode,
+        "stdout": "".join(stdout_lines),
+        "stderr": "".join(stderr_lines),
+    }
 
 
 class ProcessManager:

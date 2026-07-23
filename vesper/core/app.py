@@ -975,6 +975,17 @@ class App:
         except Exception:
             logger.exception("Could not terminate spawned processes")
 
+        # …nor children of process.run(). Those block the thread that called them,
+        # which is PyWebView's non-daemon JS-bridge thread, so a transcode still
+        # going when the window closed would keep the whole process — and the
+        # console — alive with no UI until it finished on its own.
+        try:
+            from vesper.core import process as _process_mod
+
+            _process_mod.terminate_running()
+        except Exception:
+            logger.exception("Could not terminate running child processes")
+
         if self._static_server is not None:
             try:
                 self._static_server.shutdown()

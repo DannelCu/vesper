@@ -100,6 +100,88 @@ def test_run_captures_output_and_code():
     assert result["stderr"].strip() == "err"
 
 
+def test_run_streams_stdout_lines_to_on_output():
+    lines = []
+    result = process.run(
+        [sys.executable, "-c",
+         "import sys; [print('line', i) or sys.stdout.flush() for i in range(3)]; "
+         "print('oops', file=sys.stderr)"],
+        scope=_python_scope(),
+        on_output=lines.append,
+    )
+    # Streamed line by line, newline stripped…
+    assert lines == ["line 0", "line 1", "line 2"]
+    # …and the full capture is still returned, stderr included.
+    assert result["stdout"].splitlines() == ["line 0", "line 1", "line 2"]
+    assert result["stderr"].strip() == "oops"
+    assert result["code"] == 0
+
+
+def test_run_on_output_still_enforces_scope():
+    with pytest.raises(ShellScopeError):
+        process.run(["echo", "hi"], scope=ShellScope(["git"]), on_output=lambda _l: None)
+
+
+def test_terminate_running_ends_a_long_child_and_unblocks_run():
+    """
+    The scenario that kept the console alive: a long job still running when the
+    app closes. App.close() calls terminate_running(), which must end the child
+    so the thread blocked in run() unwinds and the process can exit.
+    """
+    started = threading.Event()
+    finished = threading.Event()
+    box = {}
+
+    def call():
+        started.set()
+        try:
+            box["result"] = process.run(
+                [sys.executable, "-c", "import time; time.sleep(60)"],
+                scope=_python_scope(),
+            )
+        except BaseException as exc:      # noqa: BLE001 - recorded for the assert
+            box["error"] = exc
+        finished.set()
+
+    threading.Thread(target=call, daemon=True).start()
+    assert started.wait(5)
+    # Give the child a moment to actually exist before asking for it to stop.
+    time.sleep(0.4)
+
+    assert process.terminate_running() >= 1
+    assert finished.wait(10), "run() stayed blocked after terminate_running()"
+    # It returns rather than raising; the exit code reflects the signal.
+    assert "result" in box and box["result"]["code"] != 0
+
+
+def test_terminate_running_is_safe_with_nothing_running():
+    assert process.terminate_running() == 0
+
+
+def test_run_untracks_the_child_when_it_finishes():
+    process.run([sys.executable, "-c", "pass"], scope=_python_scope())
+    # Nothing left behind to terminate.
+    assert process.terminate_running() == 0
+
+
+def test_app_close_terminates_running_children(monkeypatch):
+    called = {}
+    monkeypatch.setattr(process, "terminate_running",
+                        lambda *a, **k: called.setdefault("yes", True) or 0)
+    App().close()
+    assert called.get("yes") is True
+
+
+def test_run_on_output_honours_timeout_and_kills():
+    with pytest.raises(subprocess.TimeoutExpired):
+        process.run(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            scope=_python_scope(),
+            timeout=0.5,
+            on_output=lambda _l: None,
+        )
+
+
 # ── ProcessManager: spawn / stream / kill ────────────────────────────────────
 
 
