@@ -33,7 +33,9 @@
       "Bash(free -m | head -2; pgrep -af \"app.py|vesper|Xvfb\" | head; echo \"--- devout ---\"; tail -5 /tmp/devout.log 2>/dev/null)",
       "Bash(python -m pytest tests/test_static_server.py -q)",
       "Bash(python -m pytest tests/test_dev_server_security.py -q)",
-      "Bash(git fetch *)"
+      "Bash(git fetch *)",
+      "Bash(python -c \"import json;json.load\\(open\\('.claude/settings.json'\\)\\);print\\('valid JSON'\\)\")",
+      "Bash(git branch *)"
     ]
   }
 }
