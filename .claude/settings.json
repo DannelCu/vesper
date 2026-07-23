@@ -35,7 +35,15 @@
       "Bash(python -m pytest tests/test_dev_server_security.py -q)",
       "Bash(git fetch *)",
       "Bash(python -c \"import json;json.load\\(open\\('.claude/settings.json'\\)\\);print\\('valid JSON'\\)\")",
-      "Bash(git branch *)"
+      "Bash(git branch *)",
+      "Bash(python3 -c \"import sys; print\\(sys.version\\)\")",
+      "Bash(python3 -c \"import pystray\")",
+      "Bash(xvfb-run -a python3 -c \"import pystray; print\\('ok', pystray.__file__\\)\")",
+      "Bash(env -u DISPLAY python3 -c \"import pystray\")",
+      "Bash(env -u DISPLAY xvfb-run -a python3 -c \"import pystray; print\\(pystray.Icon\\)\")",
+      "Bash(env -u DISPLAY xvfb-run -a python3 -m pytest tests/test_tray.py -q)",
+      "Bash(env -u DISPLAY python3 -m pytest tests/test_tray.py -q)",
+      "Bash(env -u DISPLAY xvfb-run -a python3 -m pytest tests/ plugins/ --ignore=tests/test_lifecycle_hooks.py -q)"
     ]
   }
 }

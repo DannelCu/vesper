@@ -26,6 +26,12 @@ jobs:
           python-version: ${{ matrix.python }}
           allow-prereleases: true   # needed for 3.14 while it's in pre-release
 
+      - name: Install xvfb (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
       - name: Install core + tray extras
         run: pip install -e ".[tray]"
 
@@ -48,7 +54,15 @@ jobs:
       - name: Install test dependencies
         run: pip install pytest sqlalchemy httpx pymongo mongomock keyring pynput
 
-      - name: Run tests
+      - name: Run tests (Linux)
+        if: runner.os == 'Linux'
+        # test_tray.py imports the real pystray to catch dispatch bugs mocks
+        # would hide; on Linux that import reaches into Xlib and needs a
+        # display to connect to even when it isn't showing anything.
+        run: xvfb-run -a python -m pytest tests/ plugins/ --ignore=tests/test_lifecycle_hooks.py -q
+
+      - name: Run tests (macOS / Windows)
+        if: runner.os != 'Linux'
         run: python -m pytest tests/ plugins/ --ignore=tests/test_lifecycle_hooks.py -q
 
   smoke:

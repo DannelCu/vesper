@@ -294,6 +294,16 @@ regression test.*
   the action leaves the calling thread and that the handler returns before a slow
   action finishes.
 
+- **CI failed collection on every Ubuntu runner as soon as `test_tray.py` existed.**
+  The test imports the real `pystray` — deliberately, per above — via
+  `pytest.importorskip("pystray")`, which only skips on `ImportError`. On Linux
+  without `python3-gi` installed, pystray falls through to its Xorg backend, whose
+  import eagerly opens a connection with `Xlib.display.Display()`; with no `DISPLAY`
+  at all, that raises `Xlib.error.DisplayNameError`, which `importorskip` does not
+  catch, aborting collection for the whole run. The `test` job now installs `xvfb`
+  and runs its Linux step under `xvfb-run -a`, the same fix already applied to the
+  `smoke` job's WebView checks.
+
 - **`vesper-shortcuts` could not register any shortcut whose key was not a single
   character.** `ctrl+alt+space`, `alt+f4`, `ctrl+shift+enter`, the arrow keys and every
   function key — all documented in the plugin's own README — raised a bare
