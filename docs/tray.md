@@ -60,13 +60,13 @@ For production apps, embed the icon using your bundler:
 
 ## Actions from tray menu items
 
-Tray callbacks run in the pystray thread. For anything that touches the PyWebView window (like `window.show()`), the callback is dispatched correctly because PyWebView handles thread-safe calls internally. For long operations, use a background thread:
+**Tray callbacks run on a background thread**, one per click, and Vesper guarantees
+that on every platform. Window methods are safe to call from them — PyWebView
+marshals those onto the GUI thread itself — and slow work does not need wrapping:
 
 ```python
-import threading
-
 def export_action():
-    threading.Thread(target=heavy_export, daemon=True).start()
+    heavy_export()          # already off the GUI thread
 
 app.tray(
     icon="icon.png",
@@ -74,11 +74,33 @@ app.tray(
 )
 ```
 
+An exception in an action is logged to the `vesper.tray` logger and does not reach
+pystray, so one failing item cannot take the menu down with it.
+
+### Why Vesper does this rather than handing you pystray's thread
+
+pystray has no single answer for which thread a menu item runs on. The win32
+backend pumps its own message loop on a thread it owns, while the AppIndicator and
+GTK backends attach to whatever GLib main loop is already running — which, under
+Vesper, is PyWebView's, on the **main** thread.
+
+That difference is not cosmetic. Anything that waits on the GUI loop deadlocks it
+when called from the loop itself: `app.emit()` is `evaluate_js`, which schedules
+the script with `glib.idle_add` and then blocks until it completes — and the idle
+callback cannot run while the loop is blocked waiting for it. A single tray click
+that emitted an event froze the entire application: unresponsive window, no further
+tray action, not even Quit.
+
+Running each action on its own short-lived thread makes the platforms agree and
+makes the rule above simply true.
+
 ---
 
 ## Lifecycle
 
-- The tray starts in a background thread via `pystray.Icon.run_detached()` before `webview.start()`.
+- The tray starts via `pystray.Icon.run_detached()` before `webview.start()`. On the
+  GTK and AppIndicator backends that attaches the icon to the GLib main loop
+  PyWebView goes on to run, rather than starting a thread of its own.
 - The tray is stopped in a `finally` block in `app.run()` — it always cleans up on exit, even if the app crashes.
 
 ---

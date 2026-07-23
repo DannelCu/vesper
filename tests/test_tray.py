@@ -1,6 +1,9 @@
 """Tests for system tray support (vesper.core.tray + App.tray())."""
 from __future__ import annotations
 
+import logging
+import threading
+import time
 from collections.abc import Callable
 from unittest.mock import MagicMock, call, patch
 
@@ -68,6 +71,141 @@ def test_tray_start_passes_title_to_icon(tmp_path):
 
     _, kwargs = mock_pystray.Icon.call_args
     assert kwargs.get("title") == "Settings" or mock_pystray.Icon.call_args[0][2] == "Settings"
+
+
+# ── The handler against REAL pystray ──────────────────────────────────────────
+#
+# These deliberately do not mock pystray. A MagicMock accepts any callable and
+# never calls it back, which is exactly why a broken handler shipped: pystray
+# validates the callback's arity at construction and invokes it with its own
+# arguments, and only the real class does either.
+
+pystray = pytest.importorskip("pystray")
+
+
+def _fired_recorder():
+    """An action plus an Event that is set once it has run on its own thread."""
+    done = threading.Event()
+    record = {}
+
+    def action():
+        record["thread"] = threading.current_thread().ident
+        done.set()
+
+    return action, done, record
+
+
+def test_handler_is_accepted_by_real_pystray_and_runs_the_action():
+    """
+    The regression test for "every tray action was dead".
+
+    pystray counts default parameters in co_argcount, so `lambda _, a=action:`
+    counted as two and was invoked as (icon, menu_item) — binding the MenuItem
+    over the real action. Constructing and invoking a real MenuItem catches both
+    that and the opposite error (too many parameters → ValueError).
+    """
+    from vesper.core.tray import _handler
+
+    action, done, _ = _fired_recorder()
+    item = pystray.MenuItem("Show", _handler(action))
+
+    # Exactly how pystray invokes a clicked item: MenuItem.__call__(icon).
+    item(object())
+
+    assert done.wait(2.0), "the action never ran"
+
+
+def test_handler_binds_each_item_to_its_own_action():
+    from vesper.core.tray import _handler
+
+    fired = []
+    lock = threading.Lock()
+    done = threading.Semaphore(0)
+
+    def record(name):
+        def action():
+            with lock:
+                fired.append(name)
+            done.release()
+        return action
+
+    items = [
+        pystray.MenuItem("One", _handler(record("one"))),
+        pystray.MenuItem("Two", _handler(record("two"))),
+    ]
+    for item in items:
+        item(object())
+
+    assert done.acquire(timeout=2.0) and done.acquire(timeout=2.0)
+    assert sorted(fired) == ["one", "two"]
+
+
+# ── Which thread the action runs on ───────────────────────────────────────────
+#
+# The regression test for "one tray click froze the whole app". pystray's
+# AppIndicator and GTK backends dispatch menu items from the GLib main loop that
+# is already running — PyWebView's, on the main thread. An action that waits on
+# that loop (app.emit is evaluate_js, which blocks until an idle callback runs)
+# deadlocks it forever. Vesper therefore runs every action off the caller's
+# thread, whatever backend is underneath.
+
+
+def test_action_does_not_run_on_the_calling_thread():
+    from vesper.core.tray import _handler
+
+    action, done, record = _fired_recorder()
+    _handler(action)()
+
+    assert done.wait(2.0), "the action never ran"
+    assert record["thread"] != threading.current_thread().ident
+
+
+def test_handler_returns_before_a_slow_action_finishes():
+    """
+    A tray click must never hold up the dispatching loop — that is what turns a
+    blocking action into a frozen UI.
+    """
+    from vesper.core.tray import _handler
+
+    release = threading.Event()
+    started = threading.Event()
+
+    def slow_action():
+        started.set()
+        release.wait(5.0)
+
+    began = time.monotonic()
+    _handler(slow_action)()
+    elapsed = time.monotonic() - began
+
+    assert started.wait(2.0)
+    assert elapsed < 0.5, f"the handler blocked for {elapsed:.2f}s"
+    release.set()
+
+
+def test_action_that_raises_does_not_reach_the_caller(caplog):
+    """pystray would otherwise see the exception and, on some backends, tear the
+    icon down — one bad click costing the whole menu."""
+    from vesper.core.tray import _handler
+
+    done = threading.Event()
+
+    def boom():
+        try:
+            raise RuntimeError("action exploded")
+        finally:
+            done.set()
+
+    with caplog.at_level(logging.ERROR, logger="vesper.tray"):
+        _handler(boom)()          # must not raise here
+        assert done.wait(2.0)
+        # The thread has to unwind past the raise before the log lands.
+        for _ in range(200):
+            if "Tray menu action raised" in caplog.text:
+                break
+            time.sleep(0.01)
+
+    assert "Tray menu action raised" in caplog.text
 
 
 def test_tray_stop_calls_icon_stop(tmp_path):
