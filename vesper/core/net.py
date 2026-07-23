@@ -16,23 +16,54 @@ from pathlib import Path
 
 from vesper.core.fs_scope import FsScope
 
+# Applied to the connection and to every read, so a stalled network raises
+# instead of hanging the caller forever. urllib's default is no timeout at all —
+# a download to an unreachable host would block indefinitely with no progress and
+# no error, which is exactly the failure a desktop app must not inflict on a user
+# who clicked a button. This bounds *inactivity*, not total time: a slow but
+# steady download is never interrupted, only one that goes quiet.
+DEFAULT_TIMEOUT = 30.0
 
-def fetch(url: str, dest: str, on_progress: Callable[[int], None] | None = None) -> None:
+_CHUNK_BYTES = 64 * 1024
+
+
+def fetch(
+    url: str,
+    dest: str,
+    on_progress: Callable[[int], None] | None = None,
+    *,
+    timeout: float = DEFAULT_TIMEOUT,
+) -> None:
     """
     Stream *url* to *dest*, reporting integer percentages 0–100.
 
     The transport primitive shared with the updater; no scope, no checksum —
-    callers own their destination policy.
+    callers own their destination policy. Streamed in blocks so a large file
+    never becomes a large allocation, and read under a timeout so a dead
+    connection surfaces as an error rather than a hang.
     """
+    request = urllib.request.Request(url, headers={"User-Agent": "vesper"})
+    last_percent = -1
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        total = int(response.headers.get("Content-Length") or 0)
+        read = 0
+        with open(dest, "wb") as out:
+            while True:
+                chunk = response.read(_CHUNK_BYTES)
+                if not chunk:
+                    break
+                out.write(chunk)
+                read += len(chunk)
+                if on_progress and total > 0:
+                    percent = min(100, int(read * 100 / total))
+                    if percent != last_percent:
+                        last_percent = percent
+                        on_progress(percent)
 
-    def _reporthook(block_num: int, block_size: int, total_size: int) -> None:
-        if total_size > 0:
-            percent = min(100, int(block_num * block_size * 100 / total_size))
-            on_progress(percent)
-
-    urllib.request.urlretrieve(
-        url, dest, reporthook=_reporthook if on_progress else None
-    )
+    # Guarantee a final 100% even when the length was unknown or rounding stopped
+    # short, so a caller wiring a progress bar always sees it complete.
+    if on_progress and last_percent < 100:
+        on_progress(100)
 
 
 def download(
@@ -42,6 +73,7 @@ def download(
     expected_sha256: str = "",
     *,
     scope: FsScope | None = None,
+    timeout: float = DEFAULT_TIMEOUT,
 ) -> str:
     """
     Download *url* to *dest*, optionally verifying its SHA-256.
@@ -56,7 +88,7 @@ def download(
     dest_path = Path(scope.check(dest) if scope else Path(dest))
     dest_path.parent.mkdir(parents=True, exist_ok=True)
 
-    fetch(url, str(dest_path), on_progress)
+    fetch(url, str(dest_path), on_progress, timeout=timeout)
 
     if expected_sha256:
         # Lazy import: updater imports this module at load, so the reverse

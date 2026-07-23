@@ -65,6 +65,30 @@ def _mock_urlopen(body: bytes):
     return resp
 
 
+class _StreamResponse:
+    """
+    urlopen stand-in for net.fetch, which reads in a loop until read() is empty.
+
+    net.download streams the body block by block (unlike updater.check, which
+    reads it whole), so the response has to yield the body once and then signal
+    EOF, and carry a Content-Length for progress. Used wherever a test that used
+    to patch urlretrieve now patches urlopen.
+    """
+    def __init__(self, body: bytes):
+        self._body = body
+        self.headers = {"Content-Length": str(len(body))}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self, _size=-1):
+        chunk, self._body = self._body, b""
+        return chunk
+
+
 def test_check_returns_update_info_when_newer():
     with patch("urllib.request.urlopen", return_value=_mock_urlopen(_manifest("2.0.0"))):
         result = updater.check("https://manifest.example.com", "1.0.0")
@@ -124,13 +148,8 @@ def test_check_includes_notes():
 
 def test_download_returns_file_path(tmp_path):
     fake_binary = b"fake binary content"
-    dest = tmp_path / "app_new"
-    dest.write_bytes(fake_binary)
 
-    def fake_urlretrieve(url, filename, reporthook=None):
-        Path(filename).write_bytes(fake_binary)
-
-    with patch("urllib.request.urlretrieve", side_effect=fake_urlretrieve):
+    with patch("urllib.request.urlopen", return_value=_StreamResponse(fake_binary)):
         path = updater.download("https://example.com/app")
 
     assert Path(path).exists()
@@ -141,14 +160,7 @@ def test_download_returns_file_path(tmp_path):
 def test_download_calls_on_progress(tmp_path):
     calls = []
 
-    def fake_urlretrieve(url, filename, reporthook=None):
-        Path(filename).write_bytes(b"data")
-        if reporthook:
-            reporthook(0, 512, 1024)
-            reporthook(1, 512, 1024)
-            reporthook(2, 512, 1024)
-
-    with patch("urllib.request.urlretrieve", side_effect=fake_urlretrieve):
+    with patch("urllib.request.urlopen", return_value=_StreamResponse(b"data")):
         path = updater.download("https://example.com/app", on_progress=calls.append)
 
     assert len(calls) > 0
@@ -157,10 +169,7 @@ def test_download_calls_on_progress(tmp_path):
 
 
 def test_download_preserves_file_extension(tmp_path):
-    def fake_urlretrieve(url, filename, reporthook=None):
-        Path(filename).write_bytes(b"exe")
-
-    with patch("urllib.request.urlretrieve", side_effect=fake_urlretrieve):
+    with patch("urllib.request.urlopen", return_value=_StreamResponse(b"exe")):
         path = updater.download("https://example.com/myapp.exe")
 
     assert path.endswith(".exe")
@@ -243,10 +252,7 @@ def test_update_check_returns_none_when_up_to_date():
 def test_update_download_returns_path():
     app = App()
 
-    def fake_urlretrieve(url, filename, reporthook=None):
-        Path(filename).write_bytes(b"binary")
-
-    with patch("urllib.request.urlretrieve", side_effect=fake_urlretrieve):
+    with patch("urllib.request.urlopen", return_value=_StreamResponse(b"binary")):
         resp = app.ipc.handle({
             "id": "1",
             "command": "vesper:update:download",
@@ -275,12 +281,7 @@ def test_app_download_update_calls_progress(tmp_path):
     app = App()
     progress_calls = []
 
-    def fake_urlretrieve(url, filename, reporthook=None):
-        Path(filename).write_bytes(b"data")
-        if reporthook:
-            reporthook(1, 100, 100)
-
-    with patch("urllib.request.urlretrieve", side_effect=fake_urlretrieve):
+    with patch("urllib.request.urlopen", return_value=_StreamResponse(b"data")):
         path = app.download_update("https://example.com/app", on_progress=progress_calls.append)
 
     assert Path(path).exists()
