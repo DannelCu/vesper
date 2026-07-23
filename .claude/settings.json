@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/bin/python -m pytest tests/test_capabilities.py tests/test_frameless.py tests/test_capabilities_wiring.py -q)",
+      "Bash(.venv/bin/python -m pytest tests/test_dev_server_security.py tests/test_devtools.py -q)",
+      "Bash(.venv/bin/python -m pytest tests/test_static_server.py -q)",
+      "Bash(.venv/bin/python -m pytest tests/test_process.py -q)",
+      "Bash(.venv/bin/python -m pytest tests/test_updater.py tests/test_updater_checksum.py -q)",
+      "Bash(.venv/bin/python -m pytest tests/test_net.py tests/test_updater.py -q)",
+      "Bash(.venv/bin/python -m pytest tests/test_positioner.py -q)",
+      "Bash(.venv/bin/python -m pytest tests/test_installer.py tests/test_capabilities.py -q)",
+      "Bash(.venv/bin/python -m pytest tests/test_installer.py -q)",
+      "Bash(.venv/bin/python -m pytest tests/test_clipboard_files.py tests/test_clipboard.py tests/test_capabilities.py -q)",
+      "Bash(sed -i 's/menu=None, splash=None\\):/menu=None, splash=None, serve_url=None\\):/' tests/test_menu.py tests/test_splash.py)",
+      "Bash(.venv/bin/python -m pytest tests/test_menu.py tests/test_splash.py -q)",
+      "Bash(xvfb-run -a .venv/bin/python scripts/smoke_window.py)",
+      "Bash(.venv/bin/pip install *)",
+      "Bash(.venv/bin/python -c \"import watchdog, desktop_notifier, sentry_sdk, mss, serial, psutil; print\\('deps ok'\\)\")",
+      "Bash(timeout 60 xvfb-run -a python hidetest.py)",
+      "Bash(grep -v \"^$\")",
+      "Bash(python -c ' *)",
+      "Bash(python -m pytest plugins/vesper-shortcuts/tests/ -q)",
+      "Bash(timeout 900 python -m pytest -q)",
+      "Bash(find ~/.config ~/.cache ~/.local/share /tmp -maxdepth 3 -name \"*launcher*lock*\" -o -maxdepth 3 -name \"*vesper*lock*\" 2>/dev/null | head; grep -rn \"def _lock_path\\\\|lock\" vesper/core/single_instance.py | head -20)",
+      "Read(//tmp/**)",
+      "Bash(ps -o pid,etime,cmd -p 33753)",
+      "Bash(awk '{print $2, $11, $12, $13}')",
+      "Bash(timeout 90 xvfb-run -a python /tmp/claude-1000/-home-dannel-VESPER-vesper/86adf366-791b-4cf0-a733-7870ceb80c8d/scratchpad/deadlock.py)",
+      "Bash(grep -viE \"libayatana|^$\")",
+      "Bash(sed -i 's|print\\(\"#status present after:.*|print\\('\\\\''title:'\\\\'', js\\('\\\\''document.title'\\\\''\\)\\); print\\('\\\\''body head:'\\\\'', js\\('\\\\''document.body.innerHTML.slice\\(0,400\\)'\\\\''\\)\\)|' /tmp/claude-1000/-home-dannel-VESPER-vesper/86adf366-791b-4cf0-a733-7870ceb80c8d/scratchpad/diag.py)",
+      "Bash(timeout 90 xvfb-run -a -s '-screen 0 1600x1000x24' python /tmp/claude-1000/-home-dannel-VESPER-vesper/86adf366-791b-4cf0-a733-7870ceb80c8d/scratchpad/diag.py)",
+      "Bash(grep -viE \"libayatana|single_instance|^$\")",
+      "Bash(free -m | head -2; pgrep -af \"app.py|vesper|Xvfb\" | head; echo \"--- devout ---\"; tail -5 /tmp/devout.log 2>/dev/null)",
+      "Bash(python -m pytest tests/test_static_server.py -q)",
+      "Bash(python -m pytest tests/test_dev_server_security.py -q)"
+    ]
+  }
+}

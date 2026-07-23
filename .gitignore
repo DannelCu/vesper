@@ -46,6 +46,15 @@ examples/**/notes.txt
 # Keep root conftest
 !conftest.py
 
+# Keep the Claude Code project rules and agents
+!CLAUDE.md
+!.claude/
+!.claude/**
+
+# ...but not the per-developer settings file: it holds machine-specific paths and
+# personal permission grants, and Claude Code treats it as local by design.
+.claude/settings.local.json
+
 # Ignore Python cache files
 __pycache__/
 *.py[cod]
