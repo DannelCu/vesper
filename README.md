@@ -53,6 +53,39 @@ Use any Python library — pandas, SQLAlchemy, PyMongo, OpenCV, scikit-learn —
 
 ---
 
+## How Vesper Compares
+
+The one-line version: Vesper is to PyWebView what Tauri is to a bare webview, or what NestJS is to Express — a framework layer on top of a primitive. PyWebView opens a native window, renders your HTML, and lets Python and JavaScript call each other. That's genuinely all it promises, and it does it well — Vesper is built directly on it (`pywebview` is one of exactly two required dependencies, see [pyproject.toml](pyproject.toml)) and adds what turns a window into an application: architecture, a security boundary, a full lifecycle, and a path to a signed binary.
+
+**Application architecture.** The strongest, most checkable claim here: Vesper has a NestJS-shaped module system — `@Module`, `@Controller`, `@Injectable`, and a DI container that resolves constructor types automatically ([vesper/core/module.py](vesper/core/module.py)). IPC calls pass through guards and middleware before reaching a command, and each phase reports its own error type: a guard rejecting a call (`ForbiddenError`) is distinguishable from a guard raising (`GuardError`), a middleware raising (`MiddlewareError`), and the command itself failing — on top of upfront argument validation ([vesper/core/ipc.py](vesper/core/ipc.py), [docs/module-system.md](docs/module-system.md)). No other Python project in this space has this; it's what keeps a backend from becoming one 3,000-line file as an app grows.
+
+**Native integration depth.** Tray, native menu bar, splash screen, multi-window (secondary windows sharing one IPC registry), native dialogs, frameless/transparent windows, notifications, clipboard (text, images, files), deep linking, single-instance enforcement, remembered window state, autostart, power/keep-awake, taskbar badges, semantic positioning, a production-grade localhost server, an auto-updater with SHA-256 verification, and a CLI covering `init` through `package`, `sign`, and `doctor`. Each is a real file under [vesper/core/](vesper/core) or [vesper/commands/](vesper/commands) — [docs/optional-features.md](docs/optional-features.md) is the per-backend matrix of what each needs and how it degrades without it.
+
+**Security model.** Every filesystem call the frontend can make goes through `FsScope`, which confines paths to declared roots — checking both endpoints of a `copy()`/`move()`, so a crafted destination can't write outside the sandbox ([vesper/core/fs_scope.py](vesper/core/fs_scope.py)). Every process the frontend can spawn goes through `ShellScope`, an allowlist of executables and argument patterns, deny-by-default: no scope configured means no process starts ([vesper/core/process.py](vesper/core/process.py)). The dev and production localhost servers are confined to their root directory and gated by a per-session token in the URL ([vesper/core/static_server.py](vesper/core/static_server.py)). If you know Tauri, it's the same instinct — don't trust the webview with the filesystem or the shell by default — expressed as two small, auditable Python classes instead of a capability-file ACL.
+
+**Degradation you can query.** `capabilities.probe()` reports what's actually available on the running machine and drives three things: `vesper doctor` gives an actionable diagnosis at install time, `vesper.capabilities()` lets the frontend adapt its own UI at runtime, and every optional-backend feature fails soft instead of raising across the IPC boundary ([vesper/core/capabilities.py](vesper/core/capabilities.py), [vesper/commands/doctor.py](vesper/commands/doctor.py)). This is more explicit than what Tauri or Electron expose out of the box — it's the one place Vesper doesn't just catch up to the non-Python frameworks, it's ahead of them.
+
+**Minimalism as a rule.** Two required dependencies: `pywebview` and `packaging`. Everything else — tray support, trash, and all 13 official plugins — is opt-in. What keeps it that way is a four-level decision tree in [CONTRIBUTING.md](CONTRIBUTING.md#where-a-feature-lives): a feature lives in the core only if it needs zero new dependencies; otherwise it's a plugin, a documented recipe, or — genuinely last resort — a `KNOWN-ISSUES.md` entry.
+
+| | PyWebView | Eel | NiceGUI | Flet | **Vesper** | Tauri / Electron |
+|---|---|---|---|---|---|---|
+| Frontend | your HTML/JS | your HTML/JS | framework-generated UI | framework-generated UI | **your HTML/JS** | your HTML/JS |
+| App architecture (modules, DI, guards, middleware) | ✗ | ✗ | partial (FastAPI DI underneath) | ✗ | **✓** | plugin systems, not this DI shape |
+| IPC with arg validation & typed error phases | ✗ | ✗ | n/a (no separate frontend) | n/a (no separate frontend) | **✓** | partial (typed commands, different model) |
+| Filesystem / process sandboxing | ✗ | ✗ | ✗ | ✗ | **✓** | ✓ (capability/ACL-based) |
+| Native lifecycle (tray, menu, deep link, single-instance…) | partial (menu + dialogs only) | ✗ | partial (native mode wraps PyWebView) | partial | **✓** | ✓ |
+| Packaging + code signing, integrated | ✗ | ✗ | partial (packaging only) | partial (build tooling, no signing) | **✓** | ✓ |
+| Auto-updates | ✗ | ✗ | ✗ | ✗ | **✓ (SHA-256 verified)** | ✓ |
+| Capability introspection / declared degradation | ✗ | ✗ | ✗ | ✗ | **✓** | ✗ (fails at call time) |
+
+*The Vesper and Tauri/Electron columns reflect this repository; the other four reflect public documentation, not code executed here — read "partial" as "some, unverified extent," not a precise claim.*
+
+**A different problem, on purpose.** NiceGUI and Flet aren't really in the same lane as Vesper, Eel, or PyWebView — they solve the opposite problem. Both let you write only Python and never touch HTML, CSS, or JavaScript; the framework generates the UI. Vesper does the opposite on purpose: you bring React, Vue, Svelte, or vanilla JS and use it for real. Neither approach is more correct — if you never want to leave Python, NiceGUI or Flet is the right tool, not a lesser version of this one.
+
+**Where this actually stands.** Vesper is `0.1.0`, pre-1.0, with one maintainer, not yet used in production anywhere but its own examples. What backs the claims above: `pytest -q` currently runs 1,600 tests (13 skipped) — check it yourself rather than trust the number, it'll be stale the moment the suite grows; CI runs that suite across 3 operating systems and 5 Python versions on every push ([.github/workflows/ci.yml](.github/workflows/ci.yml)); and [KNOWN-ISSUES.md](KNOWN-ISSUES.md) names what Vesper genuinely can't do yet and why — native file drag-out, native context menus, custom protocol handlers, programmatic printing, all blocked on PyWebView not exposing the underlying engine API. A framework that names its limits is easier to trust than one that only lists what works.
+
+---
+
 ## Features
 
 **IPC & Architecture**
