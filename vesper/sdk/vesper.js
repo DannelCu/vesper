@@ -436,6 +436,18 @@
         maximize: function() { return invoke("vesper:window:maximize", {}); },
         /** Restore the window from minimized or maximized state. @returns {Promise<void>} */
         restore: function() { return invoke("vesper:window:restore", {}); },
+        /**
+         * Hide the window without destroying it.
+         *
+         * Unlike minimize(), this removes the window from the taskbar and
+         * alt-tab — the pattern for a tray app or launcher that "closes" to
+         * the tray and reappears on a hotkey or tray click. Bring it back
+         * with show().
+         * @returns {Promise<void>}
+         */
+        hide: function() { return invoke("vesper:window:hide", {}); },
+        /** Show the window again after hide(). @returns {Promise<void>} */
+        show: function() { return invoke("vesper:window:show", {}); },
         /** Toggle fullscreen mode. @returns {Promise<void>} */
         fullscreen: function() { return invoke("vesper:window:fullscreen", {}); },
         /**

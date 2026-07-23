@@ -32,6 +32,29 @@ def test_window_handle_show_before_attach_is_noop():
     handle.show()  # must not raise
 
 
+def test_window_handle_show_clears_the_hidden_flag_before_showing():
+    """
+    Secondary windows are created hidden. PyWebView's GTK show() re-hides a
+    window whose `hidden` flag is still set whenever the GTK main level reads 0 —
+    which it always does, because PyWebView runs Gtk.Application.run() rather
+    than Gtk.main(). Leaving the flag set means the window loads and plays audio
+    but never appears, so it must be cleared before show().
+    """
+    cfg = WindowConfig(frontend="dist/index.html")
+    handle = WindowHandle(cfg)
+    win = MagicMock()
+    win.hidden = True
+    handle._attach(win)
+
+    order = MagicMock()
+    order.attach_mock(win.show, "show")
+
+    handle.show()
+
+    assert win.hidden is False
+    win.show.assert_called_once()
+
+
 def test_window_handle_hide_before_attach_is_noop():
     cfg = WindowConfig(frontend="dist/index.html")
     handle = WindowHandle(cfg)
@@ -397,3 +420,82 @@ def test_quit_is_idempotent():
     window.quit()   # must not raise, and must not re-destroy the secondary
 
     assert made[1].destroy.call_count == 1
+
+
+# ── Native close of the main window tears down secondaries ────────────────────
+#
+# PyWebView's loop only returns once the LAST window is destroyed. Secondary
+# windows are created hidden, so a registered-but-never-shown second window keeps
+# the loop (and the process) alive after the user closes the main window from the
+# native title bar — which does not route through quit(). The main window's
+# `closed` event must destroy the secondaries.
+
+
+def _created_capturing_close(secondary_count: int):
+    """
+    Like _created_window, but captures the main window's `closed` event mock
+    BEFORE create() runs. `events.closed += handler` reassigns events.closed to
+    __iadd__'s return value, so the call has to be inspected on the original
+    reference, exactly as the splash test does for `loaded`.
+    """
+    from unittest.mock import MagicMock, patch
+
+    from vesper.core.config import WindowConfig
+    from vesper.core.ipc import IPC
+    from vesper.core.registry import CommandRegistry
+    from vesper.core.window import Window, WindowHandle
+    import vesper.core.window as window_mod
+
+    handles = [
+        WindowHandle(WindowConfig(title=f"sec{i}", frontend="index.html"))
+        for i in range(secondary_count)
+    ]
+
+    main = MagicMock()
+    main.events = MagicMock()
+    closed_event = main.events.closed  # capture before += reassigns it
+    secondaries = [MagicMock() for _ in range(secondary_count)]
+    made = [main, *secondaries]
+
+    window = Window()
+    with patch.object(window_mod.webview, "create_window", side_effect=list(made)), \
+         patch.dict("os.environ", {"VESPER_DEV_URL": "http://localhost:3000"}):
+        window.create(
+            IPC(CommandRegistry()),
+            WindowConfig(frontend="index.html"),
+            secondary_windows=handles or None,
+        )
+
+    return closed_event, secondaries
+
+
+def _main_close_handler(closed_event):
+    """The handler Window.create() attached to the main window's closed event."""
+    return closed_event.__iadd__.call_args[0][0]
+
+
+def test_main_close_wires_a_closed_handler_when_secondaries_exist():
+    closed_event, _ = _created_capturing_close(1)
+    closed_event.__iadd__.assert_called_once()
+
+
+def test_no_close_handler_wired_without_secondaries():
+    closed_event, _ = _created_capturing_close(0)
+    closed_event.__iadd__.assert_not_called()
+
+
+def test_main_close_destroys_secondaries():
+    closed_event, secondaries = _created_capturing_close(2)
+    _main_close_handler(closed_event)()
+
+    for win in secondaries:
+        win.destroy.assert_called_once()
+
+
+def test_main_close_handler_survives_a_secondary_already_gone():
+    closed_event, secondaries = _created_capturing_close(2)
+    secondaries[0].destroy.side_effect = RuntimeError("already destroyed")
+
+    _main_close_handler(closed_event)()   # must not raise
+
+    secondaries[1].destroy.assert_called_once()

@@ -345,6 +345,8 @@ class App:
         self.registry.register(lambda: _w.minimize(), name="vesper:window:minimize")
         self.registry.register(lambda: _w.maximize(), name="vesper:window:maximize")
         self.registry.register(lambda: _w.restore(), name="vesper:window:restore")
+        self.registry.register(lambda: _w.hide(), name="vesper:window:hide")
+        self.registry.register(lambda: _w.show_window(), name="vesper:window:show")
         self.registry.register(lambda: _w.toggle_fullscreen(), name="vesper:window:fullscreen")
 
         def _window_resize(width: int, height: int) -> None:

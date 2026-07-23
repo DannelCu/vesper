@@ -63,8 +63,19 @@ class WindowHandle:
         self._win = win
 
     def show(self) -> None:
-        """Make the window visible."""
+        """
+        Make the window visible.
+
+        Clearing the backend's "created hidden" flag first is what actually makes
+        it appear. Secondary windows are created hidden, and PyWebView's GTK
+        show() re-hides the window when that flag is still set and the GTK main
+        level reads 0 — which it always does here, because PyWebView drives the
+        loop with ``Gtk.Application.run()`` rather than ``Gtk.main()``. Without
+        this the window is shown and instantly hidden again: it loads, and even
+        plays audio, but never appears on screen.
+        """
         if self._win is not None:
+            self._win.hidden = False
             self._win.show()
 
     def hide(self) -> None:
@@ -337,6 +348,27 @@ class Window:
             handle._attach(sec_win)
             self._secondary_wins.append(sec_win)
 
+        # Closing the main window must end the app, even when secondary windows
+        # exist. PyWebView's event loop only returns once the LAST window is
+        # destroyed, and secondary windows are created hidden — so a registered
+        # (but never shown) second window would keep the loop, and the process,
+        # alive after the user closed the main window from the native title bar.
+        # quit() already tears secondaries down first, but the native close
+        # button does not route through it; this makes the main window's close do
+        # the same. Guarded so it only wires up when there is something to close.
+        if self._secondary_wins:
+            _secondaries = self._secondary_wins
+
+            def _close_secondaries():
+                for win in list(_secondaries):
+                    try:
+                        win.destroy()
+                    except Exception:
+                        logger.debug("Secondary window was already gone at close")
+                _secondaries.clear()
+
+            self.window.events.closed += _close_secondaries
+
         if splash is not None:
             _DEFAULT_HTML = (
                 "<body style='background:#1a1a1a;display:flex;align-items:center;"
@@ -359,8 +391,18 @@ class Window:
             _main = self.window
 
             def _dismiss():
-                _splash.destroy()
+                # Show the main window BEFORE tearing the splash down, not after.
+                # The main window was created hidden (so the splash covers the
+                # blank load); destroying the splash first leaves a moment with no
+                # mapped window, and on WebKitGTK the hidden main window then
+                # fails to map at all — the splash vanishes and nothing replaces
+                # it, leaving the process alive with no visible window. Mapping
+                # the main window first keeps a window on screen throughout the
+                # hand-off. Clearing `hidden` keeps the backend's own show logic,
+                # which still reads that flag, consistent.
+                _main.hidden = False
                 _main.show()
+                _splash.destroy()
 
             self.window.events.loaded += _dismiss
 
@@ -493,6 +535,33 @@ class Window:
         """Restore the main window from minimized or maximized state."""
         if self.window is not None:
             self.window.restore()
+
+    def hide(self) -> None:
+        """
+        Hide the main window without destroying it.
+
+        Unlike ``minimize()``, this takes the window out of the taskbar and
+        alt-tab entirely — the behaviour a tray app or launcher wants when it
+        "closes" to the tray and reappears on a hotkey or tray click.
+        ``show_window()`` brings it back.
+        """
+        if self.window is not None:
+            self.window.hide()
+
+    def show_window(self) -> None:
+        """
+        Make the main window visible again after :meth:`hide`.
+
+        Named ``show_window`` rather than ``show`` because ``show()`` on this
+        class starts the GUI event loop; this only toggles visibility.
+
+        Clears the backend's ``hidden`` flag first for the same reason
+        :meth:`WindowHandle.show` does — PyWebView's GTK show() re-hides a window
+        whose flag is still set.
+        """
+        if self.window is not None:
+            self.window.hidden = False
+            self.window.show()
 
     def toggle_fullscreen(self) -> None:
         """Toggle fullscreen mode on the main window."""

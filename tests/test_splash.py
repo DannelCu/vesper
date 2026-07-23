@@ -218,3 +218,36 @@ def test_dismiss_handler_destroys_splash_and_shows_main(monkeypatch):
 
     splash_win.destroy.assert_called_once()
     main_win.show.assert_called_once()
+
+
+def test_dismiss_shows_main_before_destroying_splash(monkeypatch):
+    # Ordering is load-bearing: the main window is created hidden, and destroying
+    # the splash first leaves a moment with no mapped window that WebKitGTK does
+    # not recover from — the splash vanishes and the main window never appears.
+    # The main window must be shown (and un-hidden) BEFORE the splash is torn down.
+    mock_wv, main_win, splash_win = _make_webview_mock()
+    monkeypatch.setattr(window_mod, "webview", mock_wv)
+    monkeypatch.setenv("VESPER_DEV_URL", "http://localhost:3000")
+
+    from vesper.core.ipc import IPC
+    from vesper.core.registry import CommandRegistry
+    from vesper.core.config import WindowConfig
+
+    ipc = IPC(CommandRegistry())
+    config = WindowConfig(frontend="index.html")
+
+    loaded_event = main_win.events.loaded
+
+    # A shared parent records the interleaving of calls across both windows.
+    order = MagicMock()
+    order.attach_mock(main_win.show, "main_show")
+    order.attach_mock(splash_win.destroy, "splash_destroy")
+
+    w = Window()
+    w.create(ipc, config, splash={"html": "", "width": 400, "height": 300})
+
+    dismiss = loaded_event.__iadd__.call_args[0][0]
+    dismiss()
+
+    assert [c[0] for c in order.mock_calls] == ["main_show", "splash_destroy"]
+    assert main_win.hidden is False
