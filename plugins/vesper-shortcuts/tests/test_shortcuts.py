@@ -29,8 +29,10 @@ def test_to_pynput_multiple_modifiers():
 
 
 def test_to_pynput_alt_modifier():
+    # f4 is a named key, so pynput wants it bracketed. This assertion used to
+    # read "<alt>+f4", which is what pynput rejects.
     p = ShortcutsPlugin()
-    assert p._to_pynput("alt+f4") == "<alt>+f4"
+    assert p._to_pynput("alt+f4") == "<alt>+<f4>"
 
 
 def test_to_pynput_cmd_modifier():
@@ -51,6 +53,79 @@ def test_to_pynput_super_alias():
 def test_to_pynput_lowercases_input():
     p = ShortcutsPlugin()
     assert p._to_pynput("Ctrl+Shift+S") == "<ctrl>+<shift>+s"
+
+
+@pytest.mark.parametrize("accelerator, expected", [
+    ("ctrl+alt+space", "<ctrl>+<alt>+<space>"),
+    ("ctrl+shift+enter", "<ctrl>+<shift>+<enter>"),
+    ("ctrl+alt+up", "<ctrl>+<alt>+<up>"),
+    ("ctrl+alt+backspace", "<ctrl>+<alt>+<backspace>"),
+    ("ctrl+f12", "<ctrl>+<f12>"),
+])
+def test_to_pynput_brackets_named_keys(accelerator, expected):
+    """The whole class of key that could not be registered before."""
+    p = ShortcutsPlugin()
+    assert p._to_pynput(accelerator) == expected
+
+
+@pytest.mark.parametrize("spelling, canonical", [
+    ("escape", "esc"),
+    ("return", "enter"),
+    ("del", "delete"),
+    ("pgup", "page_up"),
+    ("pagedown", "page_down"),
+    ("arrowleft", "left"),
+    ("spacebar", "space"),
+    ("printscreen", "print_screen"),
+])
+def test_to_pynput_accepts_common_spellings(spelling, canonical):
+    p = ShortcutsPlugin()
+    assert p._to_pynput(f"ctrl+{spelling}") == f"<ctrl>+<{canonical}>"
+
+
+def test_to_pynput_leaves_punctuation_keys_alone():
+    p = ShortcutsPlugin()
+    assert p._to_pynput("ctrl+/") == "<ctrl>+/"
+
+
+# ── Against the real pynput ───────────────────────────────────────────────────
+#
+# The mock above accepts anything, which is exactly how "ctrl+alt+space" shipped
+# as the documented example of an accelerator while being impossible to register.
+# These check the conversion against the parser it actually has to satisfy.
+
+real_keyboard = None
+try:  # pragma: no cover - depends on the machine having an input backend
+    from pynput import keyboard as real_keyboard
+except Exception:  # ImportError, or a headless X failure
+    pass
+
+requires_pynput = pytest.mark.skipif(
+    real_keyboard is None, reason="pynput cannot load an input backend here"
+)
+
+
+@requires_pynput
+@pytest.mark.parametrize("accelerator", [
+    "ctrl+alt+space", "ctrl+shift+enter", "alt+f4", "ctrl+alt+up",
+    "ctrl+alt+esc", "ctrl+alt+delete", "ctrl+k", "cmd+shift+3",
+])
+def test_documented_accelerators_parse_in_pynput(accelerator):
+    # real_keyboard was imported before the autouse mock replaced sys.modules,
+    # and _to_pynput is pure string work, so this needs no unpatching.
+    p = ShortcutsPluginDirect()
+    real_keyboard.HotKey.parse(p._to_pynput(accelerator))
+
+
+@requires_pynput
+def test_every_named_key_pynput_knows_can_be_used_in_an_accelerator():
+    p = ShortcutsPluginDirect()
+    # ctrl+ctrl is a duplicate, not a shortcut — skip the modifiers themselves.
+    modifiers = {"ctrl", "ctrl_r", "shift", "shift_r", "alt", "alt_r", "alt_gr", "cmd", "cmd_r"}
+    for key in real_keyboard.Key:
+        if key.name in modifiers:
+            continue
+        real_keyboard.HotKey.parse(p._to_pynput(f"ctrl+{key.name}"))
 
 
 # ── add() / remove() / remove_all() ──────────────────────────────────────────
@@ -98,6 +173,103 @@ def test_restart_listener_stops_old_one(mock_pynput):
     p.add("ctrl+a", lambda: None)
     p.add("ctrl+b", lambda: None)  # triggers restart
     mock_listener.stop.assert_called()
+
+
+def test_remove_unknown_key_leaves_the_listener_alone(mock_pynput):
+    """Restarting the listener for a no-op is a pointless window to race in."""
+    mock_kb, mock_listener = mock_pynput
+    p = ShortcutsPlugin()
+    p.add("ctrl+a", lambda: None)
+    mock_listener.stop.reset_mock()
+    p.remove("ctrl+z")
+    mock_listener.stop.assert_not_called()
+
+
+# ── Bad accelerators must not take working ones down with them ────────────────
+
+
+def _reject_unknown_keys(mock_kb):
+    """Give the mocked pynput the one behaviour that matters here: refusing a
+    key it does not know, the way the real HotKey.parse does."""
+    known = {"space", "enter", "esc", "f4", "up", "delete", "ctrl", "shift", "alt", "cmd"}
+
+    def parse(spec):
+        for part in spec.split("+"):
+            if part.startswith("<") and part.endswith(">"):
+                if part[1:-1] not in known:
+                    raise ValueError(part)
+            elif len(part) != 1:
+                raise ValueError(part)
+        return []
+
+    mock_kb.HotKey.parse.side_effect = parse
+    mock_kb.Key = []
+    return mock_kb
+
+
+def test_invalid_accelerator_raises_valueerror_that_names_it(mock_pynput):
+    mock_kb, _ = mock_pynput
+    _reject_unknown_keys(mock_kb)
+    p = ShortcutsPlugin()
+
+    with pytest.raises(ValueError) as excinfo:
+        p.add("ctrl+alt+nosuchkey", lambda: None)
+
+    message = str(excinfo.value)
+    assert "ctrl+alt+nosuchkey" in message
+    assert "nosuchkey" in message
+
+
+def test_invalid_accelerator_keeps_existing_shortcuts_working(mock_pynput):
+    """
+    The regression: a rejected accelerator used to stay in the map, so every
+    later add() re-raised on it and the app lost every shortcut it already had.
+    """
+    mock_kb, mock_listener = mock_pynput
+    _reject_unknown_keys(mock_kb)
+    p = ShortcutsPlugin()
+    p.add("ctrl+alt+space", lambda: None)
+
+    with pytest.raises(ValueError):
+        p.add("ctrl+alt+nosuchkey", lambda: None)
+
+    assert list(p._hotkeys) == ["ctrl+alt+space"]
+
+    # …and the plugin still works afterwards.
+    p.add("ctrl+alt+up", lambda: None)
+    assert sorted(p._hotkeys) == ["ctrl+alt+space", "ctrl+alt+up"]
+
+
+def test_listener_that_fails_to_start_rolls_back_to_the_previous_set(mock_pynput):
+    mock_kb, mock_listener = mock_pynput
+    p = ShortcutsPlugin()
+    p.add("ctrl+a", lambda: None)
+
+    # The next construction blows up; the one after it (the rollback) succeeds.
+    mock_kb.GlobalHotKeys.side_effect = [RuntimeError("no input backend"), mock_listener]
+
+    with pytest.raises(RuntimeError):
+        p.add("ctrl+b", lambda: None)
+
+    assert list(p._hotkeys) == ["ctrl+a"]
+    assert p._listener is mock_listener
+
+
+def test_add_survives_pynput_stop_race(mock_pynput):
+    """
+    pynput's stop() raises AttributeError when the backend thread has not
+    finished starting. That used to escape add() and leave the plugin holding a
+    listener it believed it had replaced.
+    """
+    mock_kb, mock_listener = mock_pynput
+    p = ShortcutsPlugin()
+    p.add("ctrl+a", lambda: None)
+    mock_listener.stop.side_effect = AttributeError("_display_record")
+
+    p.add("ctrl+b", lambda: None)
+
+    assert sorted(p._hotkeys) == ["ctrl+a", "ctrl+b"]
+    assert p._listener is mock_listener
 
 
 # ── IPC commands ──────────────────────────────────────────────────────────────
