@@ -19,6 +19,8 @@ const state = {
   features: {},      // ffprobe / ffmpeg / watch, from the app
   caps: {},          // vesper.capabilities(), the framework's own backends
   playing: null,
+  playingUrl: null,  // effective source (transcoded copy when needed)
+  converting: null,  // path currently being transcoded, for progress routing
 };
 
 function setStatus(text, isError = false) {
@@ -99,7 +101,7 @@ async function openLibrary(path) {
     state.items = result.items;
     $("library-path").textContent = result.root;
     $("refresh").disabled = false;
-    $("download-sample").disabled = false;
+    $("make-sample").disabled = false;
     render();
     setStatus(`Indexed ${result.items.length} file(s).`);
   } catch (error) {
@@ -115,6 +117,24 @@ async function refresh() {
 }
 
 // ── Rendering ───────────────────────────────────────────────────────────────
+
+// A video's play control depends on whether the browser can open its format.
+// Web-native formats play directly; the rest need transcoding, which the app
+// does with ffmpeg — so the button is "Convert & Play" when ffmpeg is present
+// and a disabled, explained Play when it is not. Nothing is offered that would
+// do nothing.
+function playButton(item, index) {
+  if (item.web_playable) {
+    return `<button data-act="play" data-i="${index}">Play</button>`;
+  }
+  const ext = item.name.split(".").pop().toUpperCase();
+  if (state.features.ffmpeg) {
+    return `<button data-act="convert" data-i="${index}"
+                    title="${ext} needs converting to play in a browser">Convert &amp; Play</button>`;
+  }
+  return `<button disabled
+                  title="The browser can't play ${ext}; install ffmpeg to convert it">Play</button>`;
+}
 
 function render() {
   const grid = $("grid");
@@ -139,7 +159,7 @@ function render() {
           <div class="tile-meta">${meta.join(" · ")}</div>
         </div>
         <div class="tile-actions">
-          ${item.kind === "video" ? `<button data-act="play" data-i="${index}">Play</button>` : ""}
+          ${item.kind === "video" ? playButton(item, index) : ""}
           <button data-act="duplicate" data-i="${index}">Duplicate</button>
           <button data-act="rename" data-i="${index}">Rename</button>
           <button data-act="clipboard" data-i="${index}"
@@ -173,29 +193,68 @@ async function loadThumbnails() {
 
 // ── Playback ────────────────────────────────────────────────────────────────
 
-async function play(item) {
+// srcUrl overrides item.url — used for a transcoded copy, whose URL points at
+// the converted mp4 rather than the original the browser cannot open.
+async function play(item, srcUrl = null) {
   state.playing = item;
+  state.playingUrl = srcUrl || item.url;
   $("player-panel").hidden = false;
   $("player-name").textContent = item.name;
-  $("player").src = item.url;
+  $("player").src = state.playingUrl;
   $("player").play().catch(() => {});
   // Keep the machine awake only while something is actually playing.
   await vesper.invoke("vault:playback_started");
 }
+
+// Transcode a non-web format to mp4, then play the result. The conversion can
+// take a while for a long film, so the button turns into a live progress
+// indicator (fed by transcode:progress events) instead of looking frozen.
+async function convertAndPlay(item, button) {
+  state.converting = item.path;
+  if (button) {
+    button.disabled = true;
+    button.dataset.label = button.textContent;
+    button.textContent = "Converting… 0%";
+  }
+  setStatus(`Converting ${item.name} to a web-playable format… this can take a while.`);
+  try {
+    const url = await vesper.invoke("vault:transcode", { path: item.path });
+    setStatus(`Playing ${item.name}`);
+    return play(item, url);
+  } catch (error) {
+    setStatus(error.message, true);
+  } finally {
+    state.converting = null;
+    if (button) {
+      button.disabled = false;
+      button.textContent = button.dataset.label || "Convert & Play";
+    }
+  }
+}
+
+// Progress for the running conversion, pushed from the Python side. Updates the
+// button of the file being converted; ignored for any other.
+vesper.on("transcode:progress", ({ path, percent }) => {
+  if (path !== state.converting) return;
+  const button = document.querySelector('[data-act="convert"]:disabled');
+  if (button) button.textContent = `Converting… ${percent}%`;
+});
 
 async function stopPlayback() {
   $("player").pause();
   $("player").removeAttribute("src");
   $("player-panel").hidden = true;
   state.playing = null;
+  state.playingUrl = null;
   await vesper.invoke("vault:playback_stopped");
 }
 
 // ── Item actions ────────────────────────────────────────────────────────────
 
-async function handleAction(action, item) {
+async function handleAction(action, item, button) {
   try {
     if (action === "play") return play(item);
+    if (action === "convert") return convertAndPlay(item, button);
 
     if (action === "duplicate") {
       await vesper.invoke("vault:duplicate", { path: item.path });
@@ -267,7 +326,8 @@ $("close-player").addEventListener("click", stopPlayback);
 $("detach").addEventListener("click", async () => {
   if (!state.playing) return;
   await vesper.invoke("vault:open_player", {
-    url: state.playing.url, name: state.playing.name,
+    // The effective URL — the transcoded copy when the original needed it.
+    url: state.playingUrl, name: state.playing.name,
   });
   await stopPlayback();
 });
@@ -275,27 +335,27 @@ $("detach").addEventListener("click", async () => {
 $("grid").addEventListener("click", (event) => {
   const button = event.target.closest("[data-act]");
   if (!button) return;
-  handleAction(button.dataset.act, state.items[Number(button.dataset.i)]);
+  handleAction(button.dataset.act, state.items[Number(button.dataset.i)], button);
 });
 
-$("download-sample").addEventListener("click", async () => {
+$("make-sample").addEventListener("click", async () => {
   $("progress").hidden = false;
-  $("download-sample").disabled = true;
+  $("make-sample").disabled = true;
   try {
-    await vesper.invoke("vault:download_sample");
+    await vesper.invoke("vault:generate_sample");
     setStatus("Sample clip downloaded.");
     await refresh();
   } catch (error) {
     setStatus(`Download failed: ${error.message}`, true);
   } finally {
     $("progress").hidden = true;
-    $("download-sample").disabled = false;
+    $("make-sample").disabled = false;
   }
 });
 
 // Progress arrives as events while the Python side downloads, which is what
 // lets the taskbar bar and this one stay in step.
-vesper.on("download:progress", ({ percent }) => {
+vesper.on("sample:progress", ({ percent }) => {
   $("progress-bar").style.width = `${percent}%`;
 });
 

@@ -69,6 +69,19 @@ prefers Qt automatically.
 **Wayland** works, but a few integrations are weaker than on X11 — see
 [Optional Features](optional-features.md).
 
+**Playing video needs codec packages.** WebKitGTK decodes through GStreamer, so what
+your `<video>` element can play depends on which plugin packages are installed — a
+machine without `gstreamer1.0-libav` refuses H.264 in an `.mp4` that plays fine on
+Windows and macOS. This is on top of the limits every platform shares: a WebView plays
+*web* formats, so `.avi`, `.wmv` and friends never play anywhere, whatever is
+installed. [Playing Video](recipes/video-playback.md) covers both, and how to convert
+what the engine cannot open.
+
+```bash
+# Debian / Ubuntu — H.264 and the common codecs
+sudo apt install gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-plugins-bad
+```
+
 ---
 
 ## macOS

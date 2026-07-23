@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Launcher</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <!-- The window is transparent and frameless; this panel is the only thing
+       painted, so its rounded corners and shadow float over whatever is behind.
+       On Windows 11 a mica/acrylic backdrop is applied to the window itself when
+       vesper.capabilities().mica says so — see app.js applyBackdrop(). -->
+  <div class="shell">
+
+    <!-- Our titlebar. easy_drag is off on the App, so this element is the drag
+         region: data-vesper-drag is wired automatically by vesper.js on load.
+         The buttons inside stay clickable — only empty titlebar space drags. -->
+    <header class="titlebar" data-vesper-drag>
+      <div class="brand">
+        <span class="caret">›_</span>
+        <span>Launcher</span>
+      </div>
+      <div class="win-buttons">
+        <button id="btn-settings" title="Settings" aria-label="Settings">⚙</button>
+        <button id="btn-hide" title="Hide" aria-label="Hide">–</button>
+        <button id="btn-close" title="Close" aria-label="Close">×</button>
+      </div>
+    </header>
+
+    <!-- ── Command palette (default view) ─────────────────────────────────── -->
+    <section id="view-palette" class="view">
+      <div class="search-row">
+        <input id="search" type="text" autocomplete="off" spellcheck="false"
+               placeholder="Type a command, or a sum like 12 * (3 + 4)…" />
+      </div>
+
+      <!-- Live arithmetic answer, shown when the query looks like maths. -->
+      <div id="calc-banner" class="calc-banner" hidden>
+        <span id="calc-expr" class="calc-expr"></span>
+        <span class="calc-eq">=</span>
+        <span id="calc-value" class="calc-value"></span>
+        <span class="calc-hint">Enter to copy</span>
+      </div>
+
+      <ul id="results" class="results"></ul>
+    </section>
+
+    <!-- ── Calculator view ────────────────────────────────────────────────── -->
+    <section id="view-calc" class="view" hidden>
+      <div class="pane-head">
+        <button class="back" data-back>‹ Back</button>
+        <h2>Calculator</h2>
+      </div>
+      <output id="calc-display" class="calc-display">0</output>
+      <div class="keypad">
+        <button data-key="(">(</button>
+        <button data-key=")">)</button>
+        <button data-key="%">%</button>
+        <button data-op="clear" class="fn">C</button>
+        <button data-key="7">7</button>
+        <button data-key="8">8</button>
+        <button data-key="9">9</button>
+        <button data-key="/" class="op">÷</button>
+        <button data-key="4">4</button>
+        <button data-key="5">5</button>
+        <button data-key="6">6</button>
+        <button data-key="*" class="op">×</button>
+        <button data-key="1">1</button>
+        <button data-key="2">2</button>
+        <button data-key="3">3</button>
+        <button data-key="-" class="op">−</button>
+        <button data-key="0">0</button>
+        <button data-key=".">.</button>
+        <button data-op="back" class="fn">⌫</button>
+        <button data-key="+" class="op">+</button>
+      </div>
+      <div class="calc-row">
+        <button id="calc-copy" class="wide">Copy result</button>
+        <button id="calc-eval" class="wide primary">=</button>
+      </div>
+    </section>
+
+    <!-- ── 2048 view ──────────────────────────────────────────────────────── -->
+    <section id="view-game" class="view" hidden>
+      <div class="pane-head">
+        <button class="back" data-back>‹ Back</button>
+        <h2>2048</h2>
+        <div class="scores">
+          <span class="score">Score <b id="score">0</b></span>
+          <span class="score">Best <b id="best">0</b></span>
+        </div>
+      </div>
+      <div id="game-mount" tabindex="0"></div>
+      <div class="calc-row">
+        <button id="game-new" class="wide">New game</button>
+        <span class="game-hint">Arrow keys or WASD to slide.</span>
+      </div>
+    </section>
+
+    <!-- ── Settings / capabilities view ───────────────────────────────────── -->
+    <section id="view-settings" class="view" hidden>
+      <div class="pane-head">
+        <button class="back" data-back>‹ Back</button>
+        <h2>Settings</h2>
+      </div>
+
+      <div class="setting">
+        <div>
+          <div class="setting-title">Global hotkey</div>
+          <div id="hotkey-detail" class="setting-detail">—</div>
+        </div>
+        <button id="hotkey-rebind" disabled>Change</button>
+      </div>
+
+      <div class="setting">
+        <div>
+          <div class="setting-title">Launch at login</div>
+          <div id="autostart-detail" class="setting-detail">—</div>
+        </div>
+        <button id="autostart-toggle" disabled>—</button>
+      </div>
+
+      <div class="caps">
+        <div class="caps-title">What this machine can do</div>
+        <ul id="caps-list" class="caps-list"></ul>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span id="status">Ready.</span>
+      <span class="footer-hint" id="footer-hint"></span>
+    </footer>
+  </div>
+
+  <script src="./vesper.js"></script>
+  <!-- Plugin SDKs. Each guards on window.vesper and simply does not define its
+       namespace when absent, so a missing plugin leaves vesper.store /
+       vesper.shortcuts / vesper.screenshot undefined and app.js degrades. Copied
+       here by `vesper sync-sdk`; loading a missing one is a harmless 404. -->
+  <script src="./vesper-shortcuts.js"></script>
+  <script src="./vesper-store.js"></script>
+  <script src="./vesper-screenshot.js"></script>
+  <script src="./calc.js"></script>
+  <script src="./game2048.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

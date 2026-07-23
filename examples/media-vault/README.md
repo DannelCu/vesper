@@ -8,6 +8,11 @@ That seek bar is the reason this example exists. It is the difference between lo
 a page from `file://` and serving it over HTTP, and it is not a detail you can read
 about and really believe until you have dragged a scrub bar that does nothing.
 
+The second reason is the one nobody warns you about: **your app's UI is a browser, so
+it will not play every video file.** A `.avi` that VLC opens without complaint shows
+nothing at all. This app indexes those files anyway and converts them on demand —
+see [Why some videos need converting](#why-some-videos-need-converting).
+
 ---
 
 ## Running it
@@ -23,7 +28,8 @@ vesper dev
 Optional, and the app runs fine without any of it:
 
 ```bash
-# Thumbnails and duration/resolution metadata
+# Thumbnails, duration/resolution metadata, converting non-web formats,
+# and generating the sample clip. The one worth installing.
 sudo apt install ffmpeg       # macOS: brew install ffmpeg
                               # Windows: winget install Gyan.FFmpeg
 
@@ -41,14 +47,20 @@ sudo apt install xclip
 There is no login. The app asks you to choose a folder on first use.
 
 **Use any folder with a video or two in it.** A folder with a mix of videos and
-images shows the most: `~/Videos`, or a downloads folder.
+images shows the most: `~/Videos`, or a downloads folder. A folder with a `.avi` or
+`.mkv` in it shows the conversion path as well.
 
-**Nothing to hand?** Open any writable folder and press **Download sample clip** in
-the toolbar. It fetches a small Creative Commons test video (~2 MB) straight into the
-library and re-indexes, so you have something to play in about ten seconds.
+**Nothing to hand?** Open any writable folder and press **Generate sample clip**. It
+synthesises a 30-second test video with ffmpeg — locally, offline, in a few seconds —
+and re-indexes so you have something to play.
 
-The app writes thumbnails to a `.vault-thumbs/` subfolder inside the library, and
-nothing else. Deleting a file goes to the system trash, never a permanent unlink.
+> It generates rather than downloads on purpose. This button used to fetch a clip from
+> a public bucket; that URL now answers `403`, which broke the example for everyone.
+> An example that depends on a third-party URL staying up is an example that breaks.
+
+The app writes thumbnails to `.vault-thumbs/` and converted copies to
+`.vault-transcodes/`, both inside the library folder, and nothing else. Deleting a
+file goes to the system trash, never a permanent unlink.
 
 The filesystem scope starts empty — before you open a folder, every path is refused —
 and narrows to exactly the folder you pick. Try it: with a library open, nothing
@@ -74,6 +86,12 @@ outside it is reachable, including its own parent directory.
    the file is coming over `http://127.0.0.1` and the browser can ask for byte ranges.
    Load the same file over `file://` and the bar is dead: no HTTP, no ranges, no seek.
 
+   Tiles for `.avi`, `.mkv`, `.wmv` and friends show **Convert & Play** instead of
+   Play, because the WebView cannot open those. Press it and the button becomes a live
+   `Converting… 42%` — real progress parsed from ffmpeg — then plays the converted
+   copy, seek bar and all. The result is cached in `.vault-transcodes/`, so the second
+   time is instant. Without ffmpeg the button is disabled and says what would fix it.
+
 5. **Press "Open in own window."** The player detaches into a second native window
    while the library stays browsable in the first. The two windows share no
    JavaScript state; the main one hands the video over as an event.
@@ -94,9 +112,10 @@ outside it is reachable, including its own parent directory.
 8. **Use the Library menu** in the native menu bar — Open Folder and Refresh are
    there too, and Quit closes the app including the detached player window.
 
-9. **Press Download sample clip** and watch two progress bars at once: one in the app,
+9. **Press Generate sample clip** and watch two progress bars at once: one in the app,
    and one on the taskbar button or dock icon. Switch to another window and you can
-   still see how far along it is, which is the point of taskbar progress.
+   still see how far along it is, which is the point of taskbar progress. Both are fed
+   by the same ffmpeg progress stream.
 
 10. **With `vesper-watch` installed**, drop a file into the library folder from your
    file manager. The grid refreshes by itself. Without it, press **Refresh**.
@@ -114,7 +133,8 @@ arrows to skip) once the player has focus.
 | The seek bar works at all | Production localhost server, `App(serve_frontend=True)` | [project-config.md](../../docs/project-config.md) |
 | Indexing, duplicate, rename, trash | Scoped filesystem API, narrowed to the chosen folder at runtime | [filesystem.md](../../docs/filesystem.md) |
 | Durations, resolutions, thumbnails | Scoped process execution (`ShellScope` over ffprobe/ffmpeg) | [process.md](../../docs/process.md) |
-| Download sample clip | `net.download` with progress | [network.md](../../docs/network.md) |
+| `Converting… 42%` on the button | Streamed process output, `process.run(on_output=…)` | [process.md](../../docs/process.md) |
+| Playing a `.avi` at all | Transcoding on demand | [video-playback.md](../../docs/recipes/video-playback.md) |
 | Progress on the taskbar/dock | Taskbar progress | [badge.md](../../docs/badge.md) |
 | No sleep while playing; pause on suspend | Keep-awake and power events | [power.md](../../docs/power.md) |
 | Choose folder, confirm delete | Native dialogs | [dialogs.md](../../docs/dialogs.md) |
@@ -122,7 +142,7 @@ arrows to skip) once the player has focus.
 | Splash during indexing | Splash screen | [splash.md](../../docs/splash.md) |
 | Window size remembered between runs | Window state | [window-state.md](../../docs/window-state.md) |
 | Second launch focuses the running app | Single instance | [single-instance.md](../../docs/single-instance.md) |
-| "Downloaded X" toast | Notifications | [notifications.md](../../docs/notifications.md) |
+| "Created X" toast | Notifications | [notifications.md](../../docs/notifications.md) |
 | Copy button | File clipboard | [clipboard.md](../../docs/clipboard.md) |
 | Auto-refresh on new files | `vesper-watch` plugin | [plugins.md](../../docs/plugins.md) |
 | Library and Help menus | Native menu bar | [menu.md](../../docs/menu.md) |
@@ -147,12 +167,70 @@ Both bind to `127.0.0.1` on an ephemeral port behind a random per-session token.
 
 ---
 
+## Why some videos need converting
+
+Open a folder holding `Movie.avi` and this app lists it — but the Play button says
+**Convert & Play**. That is not a limitation of Vesper. It is what your UI *is*.
+
+A Vesper window is a real WebView — WebKit on Linux and macOS, Edge/Chromium on
+Windows — and the `<video>` element in it is the same one a web page uses, bound by
+the same rules. Browsers ship the codecs they can license and keep patched, not every
+codec ever written. **It is web technology, so it plays web formats.**
+
+Two things have to be supported, and they are easy to conflate:
+
+- **The container** — `.mp4`, `.webm`, `.mkv`, `.avi`: the envelope holding the streams.
+- **The codecs inside** — H.264, VP9, AAC, DivX: how picture and sound are encoded.
+
+Either one being unsupported kills playback, which is why even a `.mp4` can refuse to
+play if it holds H.265/HEVC.
+
+| What it is | Plays directly? |
+|---|---|
+| `.mp4` / `.m4v` with H.264 + AAC | **Yes** — the safe default everywhere |
+| `.webm` (VP8/VP9), `.ogv` (Theora) | Yes |
+| `.mov` with H.264 | Usually — an mp4 relative |
+| `.mkv` | Unreliable; depends on the platform's codec plugins |
+| `.avi`, `.wmv`, `.flv`, `.mpg`, `.ts`, `.3gp` | **No** — not web formats |
+| Anything in H.265/HEVC or AV1 | Patchy; do not depend on it |
+
+On Linux there is an extra wrinkle: WebKitGTK decodes through **GStreamer**, so what
+plays depends on which plugin packages are installed. A machine without
+`gstreamer1.0-libav` refuses H.264 that works fine elsewhere.
+
+### What this app does about it
+
+The tempting response is to filter the library down to formats that work. This app
+does not, because a user who can see `Movie.avi` in their file manager is not helped
+by an app pretending it does not exist.
+
+Instead it indexes every known video format and splits them in two — the ones the
+browser plays directly, and the ones needing conversion first
+(`WEB_VIDEO_SUFFIXES` / `OTHER_VIDEO_SUFFIXES` at the top of [`app.py`](app.py)). The
+index marks each item `web_playable`, and the UI offers the honest control:
+
+- **web-playable** → **Play**, straight from the loopback server.
+- **needs converting, ffmpeg present** → **Convert & Play**. ffmpeg re-encodes to
+  H.264/AAC mp4 with `-movflags +faststart` (so the converted copy still seeks),
+  caches it in `.vault-transcodes/`, and plays that. Progress is parsed from ffmpeg's
+  own `-progress` stream and shown live on the button.
+- **needs converting, no ffmpeg** → **Play, disabled**, with a tooltip saying the
+  browser cannot play that format and ffmpeg would convert it.
+
+Nothing is ever offered that would silently do nothing. The full pattern, including
+the `ShellScope` allowlist and the progress parsing, is written up as a recipe:
+[Playing Video](../../docs/recipes/video-playback.md).
+
+---
+
 ## Without the optional pieces
 
 | Missing | What you get instead | To enable |
 |---|---|---|
 | ffmpeg | No thumbnails — a ▶ placeholder tile. A banner explains it. | `apt install ffmpeg` / `brew install ffmpeg` |
-| ffprobe (ships with ffmpeg) | No durations or resolutions; file size only. | as above |
+| ffmpeg, for `.avi`/`.mkv`/… | Those files are still listed, but Play is disabled with a tooltip saying the browser cannot play the format and ffmpeg would convert it. | as above |
+| ffmpeg, for the sample clip | **Generate sample clip** reports that it needs ffmpeg instead of doing nothing. | as above |
+| ffprobe (ships with ffmpeg) | No durations or resolutions; file size only. Conversion still works, but its progress bar cannot show a percentage without a known duration. | as above |
 | `vesper-watch` | The library does not refresh by itself; the **Refresh** button does. | `pip install -e ../../plugins/vesper-watch` |
 | `xclip` (Linux) | The **Copy** button is disabled with a tooltip saying why. | `apt install xclip` |
 | No trash backend | **Trash** reports an error instead of silently doing nothing — deleting is destructive, so Vesper refuses rather than pretends. | `pip install "vesper[trash]"` |
@@ -174,8 +252,16 @@ Both bind to `127.0.0.1` on an ephemeral port behind a random per-session token.
   expose one — and `window.prompt()` does not exist inside a WebView either. See
   [KNOWN-ISSUES KI7](../../KNOWN-ISSUES.md).
 
-- **No transcoding, no playlists, no subtitles.** The point is the plumbing, not
-  competing with VLC.
+- **Formats the WebView cannot play are converted, not played directly.** This is a
+  property of building UI on web technology, not a Vesper bug — the full explanation is
+  in [Why some videos need converting](#why-some-videos-need-converting) and the
+  [Playing Video recipe](../../docs/recipes/video-playback.md). Conversion needs ffmpeg
+  and takes real time on a long film; the result is cached so it happens once.
+
+- **No playlists, no subtitles.** Subtitles would also need
+  `gstreamer1.0-plugins-bad` on Linux — WebKit logs a warning about a missing WebVTT
+  encoder at startup, which is harmless and unrelated to playback. The point here is
+  the plumbing, not competing with VLC.
 
 ---
 
@@ -183,10 +269,10 @@ Both bind to `127.0.0.1` on an ephemeral port behind a random per-session token.
 
 | File | What is in it |
 |---|---|
-| [`app.py`](app.py) | All the Python. Start at the `App(...)` call — every option is commented — then read `_serve_library` for the seek story and `shell_scope` for the ffmpeg allowlist. |
+| [`app.py`](app.py) | All the Python. Start at the `App(...)` call — every option is commented — then read the suffix sets at the top for the format story, `_serve_library` for the seek story, `transcode` for the conversion, and `shell_scope` for the ffmpeg allowlist. |
 | [`frontend/index.html`](frontend/index.html) | The library view and the inline rename dialog. |
-| [`frontend/app.js`](frontend/app.js) | The frontend logic. `applyCapabilities()` is where every degradation is decided. |
-| [`frontend/player.html`](frontend/player.html) | The detached player window — a separate document that receives its video over the event bus. |
+| [`frontend/app.js`](frontend/app.js) | The frontend logic. `applyCapabilities()` is where every degradation is decided; `playButton()` is where a file's format decides its control. |
+| [`frontend/player.html`](frontend/player.html) | The detached player window — a separate document that receives its video over the event bus, and pulls the current selection on load in case it missed the event. |
 | [`frontend/styles.css`](frontend/styles.css) | Plain CSS, no framework, no CDN. |
 | [`vesper.toml`](vesper.toml) | Project metadata. |
 

@@ -1,0 +1,14 @@
+[project]
+name = "vesper-launcher"
+template = "vanilla"
+styles = "none"
+bundler = "pyinstaller"
+package_manager = "npm"
+
+# Optional plugins. `vesper sync-sdk` reads this section and copies each plugin's
+# JavaScript SDK into frontend/. All three are optional — the launcher runs with
+# none installed (the command list greys out what is missing and says why).
+[plugins]
+shortcuts = "vesper-shortcuts"
+store = "vesper-store"
+screenshot = "vesper-screenshot"

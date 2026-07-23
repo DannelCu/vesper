@@ -310,6 +310,7 @@ my-app/
 | [Printing](docs/recipes/printing.md) | window.print(), print stylesheets, PDF per platform |
 | [Asking the User for Text](docs/recipes/text-input.md) | An in-page `<dialog>` prompt — there is no native text dialog |
 | [Camera & Microphone](docs/recipes/media-capture.md) | Making getUserMedia work, per platform, with honest limits |
+| [Playing Video](docs/recipes/video-playback.md) | Why `.avi` refuses to play in a WebView, and transcoding on demand |
 | [Windows Installer & AppImage](docs/recipes/windows-installer.md) | NSIS script and AppImage walkthrough for packaged apps |
 | [Context Menus](docs/recipes/context-menus.md) | Native-looking right-click menus in HTML/CSS |
 | [Saving Files (drag-out alternative)](docs/recipes/drag-out.md) | Export generated content to disk |
