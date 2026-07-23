@@ -8,7 +8,7 @@ from vesper.core.logging import configure as configure_logging
 from vesper.core.logging import get_logger
 from vesper.core.module import Container
 from vesper.core.registry import CommandRegistry
-from vesper.core.window import Window, WindowHandle, _HOOK_TO_EVENT
+from vesper.core.window import Window, WindowHandle, _HOOK_TO_EVENT, _to_webview_menu
 from vesper.core.ipc import IPC
 
 _VALID_HOOKS: frozenset[str] = frozenset(_HOOK_TO_EVENT) | {"deeplink"}
@@ -1025,6 +1025,21 @@ class App:
         if self._single_instance is not None and not self._single_instance.acquire():
             logger.debug("Another instance is running; handed it our arguments")
             return
+
+        if self._menu_items:
+            # PyWebView's GTK backend builds its menu bar exactly once, in
+            # setup_app(), and only if webview._state['menu'] is already populated
+            # at that moment — it never retries. setup_app() runs lazily on first
+            # touch of webview.screens, which _restore_window_state() below does
+            # (via list_screens(), to check the remembered position is still
+            # on-screen) *before* the normal webview.start(menu=...) call gets a
+            # chance to set it. Without this, remember_window silently drops the
+            # native menu on Linux — no error, the bar just never appears. See
+            # KNOWN-ISSUES.md. Harmless on Windows/macOS, which read this at
+            # actual window-creation time instead.
+            import webview
+
+            webview._state["menu"] = _to_webview_menu(self._menu_items)
 
         self._preflight()
 

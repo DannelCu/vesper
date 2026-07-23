@@ -258,6 +258,8 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 and using them like real apps. Each had shipped, and each is now covered by a
 regression test.*
 
+- **The native menu bar silently never appeared on Linux whenever `App(remember_window=True)` was combined with `app.menu()`** — no error, no warning, the window just opened without it. PyWebView's GTK backend builds its menu bar exactly once, and only if its internal menu state is already populated at that moment; `remember_window`'s startup geometry check touches PyWebView in a way that triggers this build *before* Vesper had registered the menu, so it locked in empty. Reproduces on any Linux desktop, not a particular one — first suspected as an XFCE quirk before the real ordering bug was isolated. `App.run()` now registers the menu before anything can trigger that early build.
+
 - **`vesper dev` hung on exit and had to be killed with Ctrl+C.** Quitting the app
   left the CLI stuck in `server.shutdown()` — `socketserver` waits on an event that
   only `serve_forever` sets, and `serve_forever` was never getting back to check the

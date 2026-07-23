@@ -218,6 +218,65 @@ def test_app_run_no_menu_passes_none(monkeypatch):
     assert captured["menu"] is None
 
 
+# ── remember_window must not lose the menu on the GTK backend ──────────────────
+#
+# PyWebView's GTK backend builds its menu bar exactly once, in setup_app(), and
+# only if webview._state['menu'] is already populated at that moment — it never
+# retries. setup_app() runs lazily on the first touch of webview.screens, which
+# remember_window's _restore_window_state() does (via list_screens(), to check
+# the saved position is still on-screen) — normally *before* the real
+# webview.start(menu=...) call gets a chance to set it. Confirmed by bisecting a
+# real app down to this exact interaction (see KNOWN-ISSUES.md): the menu bar
+# never appears, silently, no error. App.run() must seed webview._state['menu']
+# before anything can touch webview.screens.
+
+
+def test_app_run_seeds_webview_menu_state_before_restoring_geometry(monkeypatch, tmp_path):
+    import webview as real_webview
+
+    from vesper.core import window_state
+
+    monkeypatch.setattr(window_state, "config_dir", lambda app_name=".": tmp_path / app_name)
+    monkeypatch.setitem(real_webview._state.data, "menu", None)
+
+    seen = {}
+
+    def fake_list_screens(self):
+        # The regression: this used to run while webview._state['menu'] was
+        # still None, because seeding only happened later inside Window.show().
+        seen["menu"] = real_webview._state["menu"]
+        return []
+
+    monkeypatch.setattr(Window, "list_screens", fake_list_screens)
+    monkeypatch.setattr(Window, "create", lambda self, *a, **k: None)
+    monkeypatch.setattr(Window, "show", lambda self: None)
+
+    app = App(remember_window=True)
+    app.menu([MenuItem("File", submenu=[MenuItem("Quit")])])
+    app.run()
+
+    assert "menu" in seen, "list_screens() was never called"
+    assert seen["menu"], "webview._state['menu'] was still empty when list_screens() ran"
+
+
+def test_app_run_without_menu_does_not_touch_webview_state(monkeypatch, tmp_path):
+    """No menu declared: nothing should seed webview._state at all."""
+    import webview as real_webview
+
+    from vesper.core import window_state
+
+    monkeypatch.setattr(window_state, "config_dir", lambda app_name=".": tmp_path / app_name)
+    monkeypatch.setitem(real_webview._state.data, "menu", None)
+
+    monkeypatch.setattr(Window, "list_screens", lambda self: [])
+    monkeypatch.setattr(Window, "create", lambda self, *a, **k: None)
+    monkeypatch.setattr(Window, "show", lambda self: None)
+
+    App(remember_window=True).run()
+
+    assert real_webview._state["menu"] is None
+
+
 # ── Window.create() stores menu and Window.show() passes it to webview.start() ─
 
 

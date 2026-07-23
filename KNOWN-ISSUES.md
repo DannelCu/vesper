@@ -405,3 +405,42 @@ registered a startup entry — every fresh Windows image, GitHub runners include
 Autostart was silently broken there for anyone in that situation. The mocked tests
 could not have found it: a `MagicMock` `OpenKey` never raises. Fixed with
 `CreateKeyEx`, which opens or creates.
+
+---
+
+## ~~Native menu bar silently disappeared on Linux when `remember_window` was combined with `app.menu()`~~ — fixed
+
+`app.menu([...])` items never appeared on Linux when the same `App` also set
+`remember_window=True`. No error, no warning — the window opened at the right size
+and position, just without the menu bar. First reported as "is this an XFCE
+limitation?" and confirmed **not** to be: it reproduced identically on any Linux
+desktop using PyWebView's GTK backend, isolated by bisecting a real
+[examples/media-vault](examples/media-vault) run down to a 7-line repro.
+
+**Why it happened.** PyWebView's GTK backend builds its `Gio.Menu` exactly once, in
+`setup_app()`, guarded by `if _app is not None: return`. It only connects the
+`'startup' → set_menubar` signal if PyWebView's global `_state['menu']` is already
+truthy *at that moment*. `App.run()` called `_restore_window_state()` (to size and
+position the window from the last run) before the window was created, and that path
+called `Window.list_screens()` to make sure the stored position was still
+on-screen — which touches `webview.screens`. Reading `webview.screens` is the first
+thing that lazily initialises PyWebView's backend (`guilib = initialize()` →
+`guilib.setup_app()`), and this happened *before* `webview.start(menu=...)` had any
+chance to populate `_state['menu']`. `setup_app()` therefore ran with an empty menu,
+connected nothing, and the later `webview.start(menu=[...])` call was a no-op on GTK
+because of the `_app is not None` guard — the menu was lost for the rest of that run.
+
+Windows (`winforms`) and macOS (`cocoa`) read `_state['menu']` at actual
+window-construction time inside `create_window()`, always *after* `webview.start()`
+has set it, so they never had this failure mode — it was GTK/Linux-only.
+
+**Resolved.** `App.run()` now seeds `webview._state['menu']` from the declared menu
+before anything can touch `webview.screens` — before `_preflight()` and
+`_restore_window_state()`. `webview.start()`'s own `if menu: _state['menu'] = menu`
+then just redundantly re-sets the same value, harmlessly. This reaches into
+PyWebView internals, consistent with the existing `_menu_class()` workaround in
+`core/window.py`, and carries the same kind of comment explaining why, so it
+survives a PyWebView version bump.
+`tests/test_menu.py::test_app_run_seeds_webview_menu_state_before_restoring_geometry`
+fails without the fix — it asserts `webview._state['menu']` is already populated by
+the time `list_screens()` runs.
