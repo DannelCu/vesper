@@ -143,6 +143,7 @@ These built-ins are filtered from `vesper sync-types` output and accessed via `v
 - `vesper:fs:write`
 - `vesper:fs:exists`
 - `vesper:fs:list`
+- `vesper:fs:trash`
 - `vesper:fs:mkdir`
 - `vesper:fs:copy`
 - `vesper:fs:move`

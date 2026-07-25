@@ -45,7 +45,7 @@ vesper sync-sdk
 
 ```html
 <script src="vesper.js"></script>
-<script src="vesper-mongo.js"></script>
+<script src="vesper-mongodb.js"></script>
 ```
 
 ### Methods
@@ -54,6 +54,7 @@ vesper sync-sdk
 // Find multiple documents
 const users = await vesper.mongo.find("users")
 const admins = await vesper.mongo.find("users", { role: "admin" })
+const firstTen = await vesper.mongo.find("users", { role: "admin" }, 10)   // limit
 
 // Find one document
 const user = await vesper.mongo.findOne("users", { email: "alice@example.com" })
@@ -65,14 +66,14 @@ const result = await vesper.mongo.insertOne("users", {
     email: "alice@example.com",
     role: "user",
 })
-// result: { inserted_id: "507f1f77bcf86cd799439011" }
+// result: { id: "507f1f77bcf86cd799439011" }
 
 // Insert multiple documents
 const result = await vesper.mongo.insertMany("users", [
     { name: "Bob" },
     { name: "Carol" },
 ])
-// result: { inserted_ids: ["...", "..."] }
+// result: { ids: ["...", "..."] }
 
 // Update one document
 await vesper.mongo.updateOne(
@@ -161,10 +162,10 @@ def get_user(id: str) -> dict | None:
 
 | Command | Args | Returns |
 |---|---|---|
-| `mongo:find` | `collection, filter?` | `list[dict]` |
+| `mongo:find` | `collection, filter?, limit?` | `list[dict]` |
 | `mongo:find_one` | `collection, filter?` | `dict \| null` |
-| `mongo:insert_one` | `collection, document` | `{ inserted_id }` |
-| `mongo:insert_many` | `collection, documents` | `{ inserted_ids }` |
+| `mongo:insert_one` | `collection, document` | `{ id }` |
+| `mongo:insert_many` | `collection, documents` | `{ ids }` |
 | `mongo:update_one` | `collection, filter, update` | `{ matched, modified }` |
 | `mongo:update_many` | `collection, filter, update` | `{ matched, modified }` |
 | `mongo:delete_one` | `collection, filter` | `{ deleted }` |

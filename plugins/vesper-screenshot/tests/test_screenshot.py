@@ -17,12 +17,12 @@ def app():
 
 
 def _capture(app, **args):
-    return app.ipc.handle({"id": "1", "command": "vesper:screenshot:capture", "args": args})
+    return app.ipc.handle({"id": "1", "command": "screenshot:capture", "args": args})
 
 
 def test_commands_registered(app):
-    assert "vesper:screenshot:capture" in app.registry._commands
-    assert "vesper:screenshot:monitors" in app.registry._commands
+    assert "screenshot:capture" in app.registry._commands
+    assert "screenshot:monitors" in app.registry._commands
 
 
 def test_capture_returns_png_data_url(app, mock_mss):
@@ -92,7 +92,7 @@ def test_backend_failure_explains_macos_permission(app, mock_mss, monkeypatch):
 
 
 def test_monitors_lists_geometry(app, mock_mss):
-    resp = app.ipc.handle({"id": "1", "command": "vesper:screenshot:monitors", "args": {}})
+    resp = app.ipc.handle({"id": "1", "command": "screenshot:monitors", "args": {}})
     assert resp["ok"] is True
     assert len(resp["result"]) == 3
     assert resp["result"][1]["width"] == 1920

@@ -131,7 +131,7 @@ Register shortcuts from Python via IPC:
 ```python
 resp = app.ipc.handle({
     "id": "1",
-    "command": "vesper:shortcuts:register",
+    "command": "shortcuts:register",
     "args": {"accelerator": "ctrl+shift+s"},
 })
 ```
@@ -152,9 +152,9 @@ vesper.on("shortcut", ({ accelerator }) => {
 
 | Command | Args | Description |
 |---|---|---|
-| `vesper:shortcuts:register` | `accelerator: str` | Register a global shortcut |
-| `vesper:shortcuts:unregister` | `accelerator: str` | Unregister a specific shortcut |
-| `vesper:shortcuts:unregister_all` | — | Unregister all shortcuts |
+| `shortcuts:register` | `accelerator: str` | Register a global shortcut |
+| `shortcuts:unregister` | `accelerator: str` | Unregister a specific shortcut |
+| `shortcuts:unregister_all` | — | Unregister all shortcuts |
 
 ---
 

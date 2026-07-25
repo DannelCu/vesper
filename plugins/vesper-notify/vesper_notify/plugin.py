@@ -53,7 +53,7 @@ class NotifyPlugin(VesperPlugin):
         ) -> str:
             return self.send(title, body, buttons=buttons, icon=icon, sound=sound)
 
-        app.registry.register(_send, name="vesper:notify:send")
+        app.registry.register(_send, name="notify:send")
 
     # ── asyncio bridge ───────────────────────────────────────────────────────
 

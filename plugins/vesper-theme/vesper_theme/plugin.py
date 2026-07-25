@@ -45,7 +45,7 @@ class ThemePlugin(VesperPlugin):
             theme = darkdetect.theme() or "Light"
             return {"theme": theme, "is_dark": theme == "Dark"}
 
-        app.registry.register(_get_theme, name="vesper:theme:get")
+        app.registry.register(_get_theme, name="theme:get")
 
         if self._watch:
             def _listener():

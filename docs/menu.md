@@ -94,7 +94,7 @@ vesper.on("toggle-sidebar", () => {
 
 - **macOS**: The menu replaces the system application menu in the global menu bar at the top of the screen.
 - **Windows / Linux**: The menu appears as an inline menu bar within the application window.
-- Menu items without an `action` and without a `submenu` are rendered as disabled no-op items. Always provide one or the other.
+- Menu items without an `action` and without a `submenu` are still rendered as ordinary, clickable items — they are wired to a no-op internally, not disabled or greyed out. Always provide one or the other.
 
 ---
 

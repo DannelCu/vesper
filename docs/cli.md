@@ -10,27 +10,31 @@ Scaffold a new project.
 
 ```bash
 vesper init app                                    # interactive wizard
-vesper init app --name "my-app"                   # skip name prompt
-vesper init app --template react --pm pnpm        # fully non-interactive
+vesper init app --name "my-app"                   # non-interactive; everything else defaults
+vesper init app --template react --pm pnpm        # non-interactive; name/styles/bundler default
 ```
 
 **Flags**
 
-| Flag | Values | Default |
+| Flag | Values | Default (non-interactive) |
 |---|---|---|
-| `--name` | any string | prompted |
-| `--template` | `vanilla`, `react`, `vue`, `svelte` | prompted |
-| `--styles` | `none`, `bootstrap`, `tailwind` | prompted |
-| `--bundler` | `pyinstaller`, `nuitka` | prompted |
-| `--pm`, `--package-manager` | `npm`, `pnpm`, `yarn` | prompted |
+| `--name` | any string | `my-vesper-app` |
+| `--template` | `vanilla`, `react`, `vue`, `svelte` | `vanilla` |
+| `--styles` | `none`, `bootstrap`, `tailwind` | `none` |
+| `--bundler` | `pyinstaller`, `nuitka` | `pyinstaller` |
+| `--pm`, `--package-manager` | `npm`, `pnpm`, `yarn` | `npm` |
 
-When all flags are provided, no prompts appear. Missing flags are prompted interactively.
+The interactive wizard only runs when **none** of these flags are passed. Passing any
+one of them skips the wizard entirely — every flag you did *not* pass falls back to
+its default above, it is not prompted individually. `vesper init app --name "my-app"`
+does not stop to ask about the template, styles, bundler, or package manager; it
+silently picks vanilla/none/pyinstaller/npm for them.
 
 **Generated files**
 
-Vanilla: `app.py`, `vesper.toml`, `frontend/index.html`, `frontend/vesper.js`
+Vanilla: `app.py`, `vesper.toml`, `frontend/index.html`, `frontend/vesper.js`, `frontend/vesper-icon-dark.svg` (or `-light.svg` with `--styles bootstrap`)
 
-React/Vue/Svelte: `app.py`, `vesper.toml`, `package.json`, `vite.config.js`, `index.html`, `public/vesper.js`, `src/App.*`, `src/main.*`
+React/Vue/Svelte: `app.py`, `vesper.toml`, `package.json`, `vite.config.js`, `index.html`, `public/vesper.js`, `public/vesper-icon-*.svg`, `public/{react,vue,svelte}-logo.svg`, `public/vite-logo.svg`, `src/App.*`, `src/main.*`
 
 ---
 
@@ -132,7 +136,7 @@ On macOS, if `[sign]` is configured in `vesper.toml` the `.app` bundle is signed
 **Nuitka**
 - `--standalone --onefile`
 - `--windows-disable-console` or `--macos-disable-console` per platform
-- Requires a C compiler (`mingw-w64` on Windows, Xcode CLI tools on macOS, `gcc` on Linux)
+- Requires a C compiler (Visual Studio Build Tools on Windows, Xcode CLI tools on macOS, `gcc` on Linux)
 
 ---
 
@@ -248,9 +252,20 @@ Remove all build artifacts.
 
 ```bash
 vesper clean
+vesper clean --yes        # skip the confirmation prompt
+vesper clean --dry-run    # list what would be removed, delete nothing
 ```
 
-Removes: `dist/`, `build/`, `package/`, `.pyinstaller/`, `__pycache__/`, `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`, `*.pyc`.
+**Flags**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--yes`, `-y` | off | Remove files without asking for confirmation. |
+| `--dry-run` | off | Show what would be removed without deleting anything. |
+
+Lists every match first, then — unless `--yes` or `--dry-run` was passed — asks `Remove these files and directories? [y/N]` before deleting.
+
+Removes: `dist/`, `build/`, `package/`, `.pyinstaller/`, `__pycache__/`, `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`, `*.pyc`, `*.pyo`.
 
 ---
 

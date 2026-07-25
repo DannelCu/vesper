@@ -55,6 +55,9 @@ examples/**/notes.txt
 # personal permission grants, and Claude Code treats it as local by design.
 .claude/settings.local.json
 
+# ...nor its scheduled-wakeup lock file: ephemeral per-session runtime state.
+.claude/scheduled_tasks.lock
+
 # Ignore Python cache files
 __pycache__/
 *.py[cod]

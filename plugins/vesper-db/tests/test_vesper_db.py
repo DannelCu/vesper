@@ -97,15 +97,19 @@ def test_register_global_makes_type_resolvable():
 
 
 def test_clear_global_removes_all():
+    from vesper.exceptions import MissingProviderError
+
     sentinel = object()
     Container.register_global(DbSession, sentinel)
     Container.clear_global()
     assert DbSession not in Container._global
-    # resolve() now falls through to instantiate a fresh DbSession(),
-    # NOT the sentinel — confirming the global was cleared
+    # DbSession carries no @Injectable/@Controller marker, so resolve() no
+    # longer falls through to a silent, fresh DbSession() — it raises,
+    # proving the global was actually cleared rather than just returning a
+    # blank instance nobody asked for.
     container = Container([])
-    result = container.resolve(DbSession)
-    assert result is not sentinel
+    with pytest.raises(MissingProviderError):
+        container.resolve(DbSession)
 
 
 def test_global_provider_injected_into_service():
@@ -337,6 +341,37 @@ def test_file_based_sqlite_persists_data(tmp_path):
     app2 = App(plugins=[DatabasePlugin(url=url)], root_module=UserModule)
     resp = app2.ipc.handle({"id": "2", "command": "users.list", "args": {}})
     assert resp["result"][0]["email"] == "persist@test.com"
+
+
+# ── create_tables=False (Alembic-managed schema) ─────────────────────────────
+
+def test_create_tables_false_skips_create_all(tmp_path):
+    """
+    With create_tables=False, DatabasePlugin never calls Base.metadata.create_all() —
+    a query against a model's table fails because the table was never created,
+    proving the flag actually suppresses it rather than just being accepted and
+    ignored.
+    """
+    db_file = tmp_path / "no_auto_create.db"
+    url = f"sqlite:///{db_file}"
+
+    app = App(plugins=[DatabasePlugin(url=url, create_tables=False)], root_module=UserModule)
+    resp = app.ipc.handle({"id": "1", "command": "users.list", "args": {}})
+
+    assert resp["ok"] is False
+    assert "no such table" in resp["error"]["message"].lower()
+
+
+def test_create_tables_true_is_the_default(tmp_path):
+    """The default (unspecified) behavior is unchanged: tables are created."""
+    db_file = tmp_path / "auto_create.db"
+    url = f"sqlite:///{db_file}"
+
+    app = App(plugins=[DatabasePlugin(url=url)], root_module=UserModule)
+    resp = app.ipc.handle({"id": "1", "command": "users.list", "args": {}})
+
+    assert resp["ok"] is True
+    assert resp["result"] == []
 
 
 # ── Thread safety ─────────────────────────────────────────────────────────────

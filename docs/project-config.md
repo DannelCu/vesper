@@ -156,7 +156,10 @@ If `vesper.toml` is absent, commands fall back to sensible defaults:
 - Bundler: `pyinstaller`
 - Package manager: auto-detected from lock files, defaults to `npm`
 
-Missing sections (`[plugins]`, `[sign]`) are silently ignored.
+A missing `[plugins]` section is silently ignored. A missing `[sign]` section is
+also ignored by commands that only consult it optionally (`vesper package
+--installer`, `vesper doctor`) — but `vesper sign` itself requires it and exits
+with an error if it is absent.
 
 ---
 
@@ -167,6 +170,8 @@ The framework provides helpers in `commands/utils.py` for CLI use. You do not no
 ```python
 from vesper.commands.utils import read_vesper_toml, read_vesper_toml_section
 
-config = read_vesper_toml(".")         # → dict[str, str], all [project] keys
-sign   = read_vesper_toml_section(".", "sign")  # → dict[str, str] for [sign]
+config = read_vesper_toml(".")         # → dict[str, str], every key=value line in the
+                                        # file regardless of section (last one wins on
+                                        # a name collision) — use this for [project] keys
+sign   = read_vesper_toml_section(".", "sign")  # → dict[str, str], keys scoped to [sign]
 ```

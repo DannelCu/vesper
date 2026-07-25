@@ -33,13 +33,15 @@ app = App(title="My App", frontend="dist/index.html")
 def on_deeplink(url: str):
     print(f"Received deep link: {url}")
     # url = "myapp://action?param=value"
-    app.emit("deeplink", {"url": url})
 
 if __name__ == "__main__":
     app.run()
 ```
 
-The `deeplink` callback receives the full URL string as its first argument.
+The `deeplink` callback receives the full URL string as its first argument. Vesper
+already forwards it to the frontend as a `vesper:deeplink` event on its own — your
+`@app.on("deeplink")` handler does not need to (and should not) call `app.emit()`
+itself; doing so fires the frontend event twice for the same link.
 
 In JavaScript, listen for the `deeplink` event:
 
@@ -68,10 +70,11 @@ def on_deeplink(url: str):
     # parsed.netloc  → "action"
     # parsed.query   → "param=value"
     params = parse_qs(parsed.query)
-    app.emit("deeplink", {
-        "action": parsed.netloc,
-        "params": {k: v[0] for k, v in params.items()},
-    })
+    action = parsed.netloc
+    # Do your own routing/state update with `action` and `params` here.
+    # The raw URL already reaches the frontend as a "deeplink" event
+    # (see below) — this hook is for Python-side handling, not for
+    # re-emitting the event yourself.
 ```
 
 ---

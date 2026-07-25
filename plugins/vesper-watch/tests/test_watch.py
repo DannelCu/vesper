@@ -28,8 +28,8 @@ def _wait_for(events, kind, path_fragment, timeout=10.0):
 def test_commands_registered():
     app = App(plugins=[WatchPlugin()])
     try:
-        assert "vesper:fs:watch" in app.registry._commands
-        assert "vesper:fs:unwatch" in app.registry._commands
+        assert "fs:watch" in app.registry._commands
+        assert "fs:unwatch" in app.registry._commands
     finally:
         app.ipc.close()
 
@@ -40,7 +40,7 @@ def test_create_modify_delete_emit_events(tmp_path):
     events = _collector(app)
     try:
         resp = app.ipc.handle({
-            "id": "1", "command": "vesper:fs:watch",
+            "id": "1", "command": "fs:watch",
             "args": {"path": str(tmp_path)},
         })
         assert resp["ok"] is True
@@ -67,7 +67,7 @@ def test_move_carries_dest_path(tmp_path):
     app = App(plugins=[plugin])
     events = _collector(app)
     try:
-        app.ipc.handle({"id": "1", "command": "vesper:fs:watch", "args": {"path": str(tmp_path)}})
+        app.ipc.handle({"id": "1", "command": "fs:watch", "args": {"path": str(tmp_path)}})
 
         src = tmp_path / "old.txt"
         src.write_text("x")
@@ -86,11 +86,11 @@ def test_unwatch_stops_events(tmp_path):
     app = App(plugins=[plugin])
     events = _collector(app)
     try:
-        resp = app.ipc.handle({"id": "1", "command": "vesper:fs:watch", "args": {"path": str(tmp_path)}})
+        resp = app.ipc.handle({"id": "1", "command": "fs:watch", "args": {"path": str(tmp_path)}})
         watch_id = resp["result"]
 
         assert app.ipc.handle({
-            "id": "2", "command": "vesper:fs:unwatch", "args": {"id": watch_id},
+            "id": "2", "command": "fs:unwatch", "args": {"id": watch_id},
         })["result"] is True
 
         (tmp_path / "after.txt").write_text("x")
@@ -105,7 +105,7 @@ def test_unwatch_unknown_id_is_false(tmp_path):
     plugin = WatchPlugin()
     app = App(plugins=[plugin])
     try:
-        resp = app.ipc.handle({"id": "1", "command": "vesper:fs:unwatch", "args": {"id": 999}})
+        resp = app.ipc.handle({"id": "1", "command": "fs:unwatch", "args": {"id": 999}})
         assert resp["result"] is False
     finally:
         app.ipc.close()
@@ -121,7 +121,7 @@ def test_watch_outside_fs_scope_is_rejected(tmp_path):
     app = App(plugins=[plugin], fs_scope=[str(inside)])
     try:
         resp = app.ipc.handle({
-            "id": "1", "command": "vesper:fs:watch", "args": {"path": str(outside)},
+            "id": "1", "command": "fs:watch", "args": {"path": str(outside)},
         })
         assert resp["ok"] is False
         assert resp["error"]["type"] == "FsScopeError"
@@ -135,7 +135,7 @@ def test_missing_path_is_rejected(tmp_path):
     app = App(plugins=[plugin])
     try:
         resp = app.ipc.handle({
-            "id": "1", "command": "vesper:fs:watch", "args": {"path": str(tmp_path / "nope")},
+            "id": "1", "command": "fs:watch", "args": {"path": str(tmp_path / "nope")},
         })
         assert resp["ok"] is False
         assert resp["error"]["type"] == "FileNotFoundError"
@@ -149,7 +149,7 @@ def test_debounce_collapses_bursts(tmp_path):
     events = _collector(app)
     try:
         app.ipc.handle({
-            "id": "1", "command": "vesper:fs:watch",
+            "id": "1", "command": "fs:watch",
             "args": {"path": str(tmp_path), "debounce": 5.0},
         })
 
@@ -172,8 +172,8 @@ def test_stop_all_leaves_no_observers(tmp_path):
     plugin = WatchPlugin()
     app = App(plugins=[plugin])
     try:
-        app.ipc.handle({"id": "1", "command": "vesper:fs:watch", "args": {"path": str(tmp_path)}})
-        app.ipc.handle({"id": "2", "command": "vesper:fs:watch", "args": {"path": str(tmp_path)}})
+        app.ipc.handle({"id": "1", "command": "fs:watch", "args": {"path": str(tmp_path)}})
+        app.ipc.handle({"id": "2", "command": "fs:watch", "args": {"path": str(tmp_path)}})
         assert len(plugin._observers) == 2
 
         plugin.stop_all()

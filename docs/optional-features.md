@@ -98,10 +98,17 @@ if (!caps.clipboard_image) {
 }
 ```
 
-The keys are booleans, one per row of the matrix above:
+The keys are booleans — one per row of the matrix above, plus a few reported by
+`capabilities()` that are not in that table:
 
-`clipboard_text`, `clipboard_image`, `notifications`, `trash`, `keep_awake`, `tray`,
-`badge`, `power_events`, `global_shortcuts`.
+`clipboard_text`, `clipboard_image`, `clipboard_files`, `notifications`, `trash`,
+`keep_awake`, `tray`, `badge`, `power_events`, `global_shortcuts`, `mica`, `nsis`,
+`screenshot`.
+
+- `clipboard_files` — file clipboard support (Copy in a file manager → `vesper.clipboard.readFiles()`), same backend as `clipboard_text` per platform.
+- `mica` — Windows 11 backdrop materials; see [Window Controls](window-controls.md).
+- `nsis` — whether `makensis` is available for the [Windows installer recipe](recipes/windows-installer.md).
+- `screenshot` — the `vesper-screenshot` plugin's backend (`mss`); see [plugins.md](plugins.md#vesper-screenshot).
 
 Install instructions are deliberately **not** exposed to the frontend — telling a user
 inside your app's UI to run `pip install` is rarely the right move. They go to

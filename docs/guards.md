@@ -141,9 +141,10 @@ For a full authentication system with roles and localStorage persistence, see th
 
 | | Guards | Middleware |
 |---|---|---|
-| Purpose | Allow or deny the call | Observe or transform the call |
-| Return value | `bool` | calls `next()`, can modify result |
-| On rejection | `ForbiddenError`, command skipped | N/A |
+| Purpose | Allow or deny the call | Observe or reject the call |
+| Return value | `bool` | ignored — raise to reject |
+| On rejection | `ForbiddenError`, command skipped | raise `ForbiddenError` yourself |
 | Order | Before middleware | After guards, before command |
+| Sees the command's result | No | No — middleware does not wrap execution |
 
-Use guards for access control. Use middleware for logging, timing, or cross-cutting logic. See [Middleware](middleware.md).
+Use guards for access control. Use middleware for logging or cross-cutting checks. See [Middleware](middleware.md).

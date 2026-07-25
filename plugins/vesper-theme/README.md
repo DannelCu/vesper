@@ -105,7 +105,7 @@ initTheme()
 
 | Command | Args | Returns |
 |---|---|---|
-| `vesper:theme:get` | — | `{ theme: "Light" \| "Dark", is_dark: bool }` |
+| `theme:get` | — | `{ theme: "Light" \| "Dark", is_dark: bool }` |
 
 The `theme:change` event is emitted automatically when `watch=True` and the OS theme changes.
 

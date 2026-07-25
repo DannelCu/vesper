@@ -277,17 +277,17 @@ def test_add_survives_pynput_stop_race(mock_pynput):
 
 def test_register_command_registered():
     app = App(plugins=[ShortcutsPlugin()])
-    assert "vesper:shortcuts:register" in app.registry._commands
+    assert "shortcuts:register" in app.registry._commands
 
 
 def test_unregister_command_registered():
     app = App(plugins=[ShortcutsPlugin()])
-    assert "vesper:shortcuts:unregister" in app.registry._commands
+    assert "shortcuts:unregister" in app.registry._commands
 
 
 def test_unregister_all_command_registered():
     app = App(plugins=[ShortcutsPlugin()])
-    assert "vesper:shortcuts:unregister_all" in app.registry._commands
+    assert "shortcuts:unregister_all" in app.registry._commands
 
 
 def test_ipc_register_adds_hotkey(mock_pynput):
@@ -296,7 +296,7 @@ def test_ipc_register_adds_hotkey(mock_pynput):
 
     resp = app.ipc.handle({
         "id": "1",
-        "command": "vesper:shortcuts:register",
+        "command": "shortcuts:register",
         "args": {"accelerator": "ctrl+k"},
     })
 
@@ -311,7 +311,7 @@ def test_ipc_unregister_removes_hotkey(mock_pynput):
     plugin.add("ctrl+k", lambda: None)
     resp = app.ipc.handle({
         "id": "2",
-        "command": "vesper:shortcuts:unregister",
+        "command": "shortcuts:unregister",
         "args": {"accelerator": "ctrl+k"},
     })
 
@@ -327,7 +327,7 @@ def test_ipc_unregister_all_clears_hotkeys(mock_pynput):
     plugin.add("ctrl+b", lambda: None)
     resp = app.ipc.handle({
         "id": "3",
-        "command": "vesper:shortcuts:unregister_all",
+        "command": "shortcuts:unregister_all",
         "args": {},
     })
 
@@ -343,7 +343,7 @@ def test_ipc_register_emits_js_event_on_trigger(mock_pynput):
 
     app.ipc.handle({
         "id": "1",
-        "command": "vesper:shortcuts:register",
+        "command": "shortcuts:register",
         "args": {"accelerator": "ctrl+k"},
     })
 

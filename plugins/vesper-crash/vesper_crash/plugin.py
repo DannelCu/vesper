@@ -18,7 +18,7 @@ class CrashPlugin(VesperPlugin):
     - Unhandled Python exceptions (``sys.excepthook``, chained to the previous
       hook so default behaviour is preserved).
     - Frontend JS errors, bridged by the SDK's ``window.onerror`` /
-      ``unhandledrejection`` listeners through the ``vesper:crash:report``
+      ``unhandledrejection`` listeners through the ``crash:report``
       command.
 
     **Privacy by default.** Reporting is opt-in twice over: installing the
@@ -61,7 +61,7 @@ class CrashPlugin(VesperPlugin):
             def _report_noop(message: str = "", stack: str = "", kind: str = "") -> bool:
                 return False
 
-            app.registry.register(_report_noop, name="vesper:crash:report")
+            app.registry.register(_report_noop, name="crash:report")
             return
 
         import sentry_sdk
@@ -111,7 +111,7 @@ class CrashPlugin(VesperPlugin):
             except Exception:
                 return False
 
-        app.registry.register(_report, name="vesper:crash:report")
+        app.registry.register(_report, name="crash:report")
 
     @classmethod
     def sdk_path(cls) -> Path | None:

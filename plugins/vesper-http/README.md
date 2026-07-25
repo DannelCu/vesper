@@ -55,45 +55,48 @@ vesper sync-sdk
 
 ```js
 const response = await vesper.http.get("https://api.example.com/users")
-// response: { status, headers, body }
-// body is a string — parse JSON with JSON.parse()
+// response: { status, ok, headers, body, json }
+// body is the raw response text; json is the parsed body (or null if it wasn't JSON)
 
-const users = JSON.parse(response.body)
+const users = response.json
 ```
 
 ### POST
 
+There is no separate body argument — the body goes inside the second (`options`)
+argument, as `json` (auto-serialized) or `data` (form-encoded):
+
 ```js
 const response = await vesper.http.post(
     "https://api.example.com/users",
-    JSON.stringify({ name: "Alice", email: "alice@example.com" }),
-    { headers: { "Content-Type": "application/json" } }
+    { json: { name: "Alice", email: "alice@example.com" } }
 )
 ```
 
 ### PUT / PATCH / DELETE
 
 ```js
-await vesper.http.put(url, body, options?)
-await vesper.http.patch(url, body, options?)
-await vesper.http.delete(url, options?)
+await vesper.http.put(url, options?)     // options: { json?, data?, headers?, timeout? }
+await vesper.http.patch(url, options?)   // options: { json?, data?, headers?, timeout? }
+await vesper.http.delete(url, options?)  // options: { params?, headers?, timeout? }
 ```
 
 ### Options
 
-All methods accept an optional `options` object:
+Every method takes the URL and a single optional `options` object — never a separate
+body argument:
 
 ```js
-const options = {
+const response = await vesper.http.get("https://api.example.com/data", {
     headers: {
         "Authorization": "Bearer token123",
-        "Content-Type": "application/json",
     },
     timeout: 30,   // seconds (default: 30)
-}
-
-const response = await vesper.http.get("https://api.example.com/data", options)
+})
 ```
+
+`get`/`delete` accept `params` (query string) in `options`; `post`/`put`/`patch`
+accept `json`/`data` (request body) instead.
 
 ---
 
@@ -112,30 +115,44 @@ class GitHubService:
         self.base = "https://api.github.com"
 
     def get_user(self, username: str) -> dict:
-        import json
         resp = self.http.get(
             f"{self.base}/users/{username}",
             headers={"Accept": "application/vnd.github.v3+json"},
         )
-        resp.raise_for_status()
-        return json.loads(resp.text)
+        return resp["json"]
 ```
 
-`HttpClient` is an httpx `Client` instance configured for sync use. For async services, use `httpx.AsyncClient` directly.
+`HttpClient` is a small wrapper around `httpx.Client`, not an `httpx.Client`/`Response`
+itself — every method (`get`, `post`, `put`, `patch`, `delete`) returns a plain `dict`:
+
+```python
+{
+    "status": 200,
+    "ok": True,          # True when status < 400
+    "headers": {...},
+    "body": "...",        # raw response text
+    "json": {...} | None, # parsed JSON, or None if the body wasn't JSON
+}
+```
+
+There is no `.raise_for_status()` or `.text` on the result — check `resp["ok"]` /
+`resp["status"]` and read `resp["json"]` or `resp["body"]` directly. For async
+services, use `httpx.AsyncClient` directly instead of `HttpClient`.
 
 ---
 
 ## IPC command names
 
-| Command | Method |
-|---|---|
-| `http:get` | GET |
-| `http:post` | POST |
-| `http:put` | PUT |
-| `http:patch` | PATCH |
-| `http:delete` | DELETE |
+| Command | Method | Extra args |
+|---|---|---|
+| `http:get` | GET | `params?, headers?, timeout?` |
+| `http:post` | POST | `json?, data?, headers?, timeout?` |
+| `http:put` | PUT | `json?, data?, headers?, timeout?` |
+| `http:patch` | PATCH | `json?, data?, headers?, timeout?` |
+| `http:delete` | DELETE | `params?, headers?, timeout?` |
 
-All accept `{ url, body?, headers?, timeout? }`.
+There is no generic `body` field — POST/PUT/PATCH take `json` (auto-serialized) or
+`data` (form-encoded) instead.
 
 ---
 
@@ -146,20 +163,23 @@ All HTTP commands return:
 ```json
 {
     "status": 200,
+    "ok": true,
     "headers": { "content-type": "application/json", ... },
-    "body": "<response body as string>"
+    "body": "<response body as string>",
+    "json": { "...": "..." }
 }
 ```
 
-Non-2xx status codes do **not** reject the Promise — the `status` field lets you handle errors:
+`json` is the parsed body, or `null` if it was not JSON. Non-2xx status codes do
+**not** reject the Promise — use `ok` (or `status`) to handle errors:
 
 ```js
 const response = await vesper.http.get("https://api.example.com/data")
-if (response.status !== 200) {
+if (!response.ok) {
     console.error("HTTP error:", response.status, response.body)
     return
 }
-const data = JSON.parse(response.body)
+const data = response.json
 ```
 
 ---
@@ -174,19 +194,32 @@ const headers = { "Authorization": `Bearer ${token}` }
 const response = await vesper.http.get("/api/protected", { headers })
 ```
 
-Or set default headers in a Python wrapper command:
+Or set default headers once, via an injected service rather than a plain command —
+`HttpClient` is only reachable through DI (`app.register_global_provider`), so a
+bare `@app.command` function has no built-in way to reach the same instance:
 
 ```python
+from vesper import Injectable, Controller, command
+from vesper_http import HttpClient
+
 API_KEY = "..."
 
-@app.command
-def api_get(path: str) -> dict:
-    import json
-    from vesper_http import HttpClient
-    # Get the global HttpClient instance
-    from vesper.core.module import Container
-    client = Container._global.get(HttpClient)
-    resp = client.get(f"https://api.example.com{path}",
-                      headers={"X-API-Key": API_KEY})
-    return {"status": resp.status_code, "data": json.loads(resp.text)}
+@Injectable()
+class ApiService:
+    def __init__(self, http: HttpClient):
+        self.http = http
+
+    def get(self, path: str) -> dict:
+        resp = self.http.get(f"https://api.example.com{path}",
+                              headers={"X-API-Key": API_KEY})
+        return resp["json"]
+
+@Controller("api")
+class ApiController:
+    def __init__(self, svc: ApiService):
+        self.svc = svc
+
+    @command
+    def get(self, path: str) -> dict:
+        return self.svc.get(path)
 ```

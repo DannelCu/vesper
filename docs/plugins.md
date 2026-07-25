@@ -78,7 +78,7 @@ from vesper_http import HttpPlugin
 app = App(plugins=[HttpPlugin()])
 ```
 
-JS API: `vesper.http.get(url, options?)`, `post(url, body, options?)`, `put(...)`, `patch(...)`, `delete(...)`.
+JS API: `vesper.http.get(url, options?)`, `post(url, options?)`, `put(url, options?)`, `patch(url, options?)`, `delete(url, options?)` — the body goes inside `options` as `json`/`data`, there is no separate body argument.
 
 See [vesper-http README](../plugins/vesper-http/README.md).
 
@@ -299,38 +299,53 @@ class MyPlugin(VesperPlugin):
         def hello(name: str) -> str:
             return f"Hello from MyPlugin, {name}!"
 
-    def sdk_path(self) -> Path | None:
+    @classmethod
+    def sdk_path(cls) -> Path | None:
         return Path(__file__).parent / "sdk" / "my-plugin.js"
 
 Plugin = MyPlugin   # convention: export Plugin alias
 ```
 
+### Command naming convention
+
+The `vesper:` prefix is reserved for the framework's own built-in commands
+(`vesper:fs:read`, `vesper:dialog:open`, ...) — `vesper sync-types` uses it to filter
+out built-ins when generating typed definitions for your app's commands. **Plugins
+must not use it.** Every official plugin registers under its own bare namespace
+instead — `store:get`, `http:post`, `theme:get`, `sysinfo:snapshot` — so pick a short
+name for your plugin (typically its own name, e.g. `myplugin:hello` above) and
+register everything under that.
+
 ### register(app)
 
 Called during `App.__init__` (before `root_module`). Use it to:
-- Register IPC commands with `@app.command` or `app.registry.register(name, fn)`
+- Register IPC commands with `@app.command` or `app.registry.register(fn, name="...")`
 - Register middleware with `@app.middleware`
 - Add teardown hooks with `app.add_teardown(fn)`
-- Register global DI providers with `Container.register_global(type_, instance)`
+- Register global DI providers with `app.register_global_provider(type_, instance)`
 
 ### sdk_path()
 
-Return the path to your JS SDK file, or `None` if the plugin has no JS interface. `vesper sync-sdk` copies this file into the project's frontend directory.
+Return the path to your JS SDK file, or `None` if the plugin has no JS interface.
+Override it as a `@classmethod` — `vesper sync-sdk` calls it on the class, not an
+instance, before copying the file into the project's frontend directory.
 
 ### Global DI providers
 
 To make a type injectable across all modules:
 
 ```python
-from vesper.core.module import Container
-
 class MyPlugin(VesperPlugin):
     def register(self, app) -> None:
         instance = MyService()
-        Container.register_global(MyService, instance)
+        app.register_global_provider(MyService, instance)
 ```
 
-Any `@Injectable` or `@Controller` with `def __init__(self, svc: MyService)` will receive this instance.
+Any `@Injectable` or `@Controller` with `def __init__(self, svc: MyService)` will
+receive this instance. Prefer `app.register_global_provider()` over the lower-level
+`Container.register_global()` — the latter is class-level and shared across every
+`App` instance in the process, which is rarely what you want; every official plugin
+that registers a provider uses `app.register_global_provider()`.
 
 ### Teardown hooks
 

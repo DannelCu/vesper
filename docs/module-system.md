@@ -115,6 +115,14 @@ class UserService:
 - Parameters with a concrete `type` annotation are resolved from the container
 - Primitive types (`str`, `int`, etc.) and unannotated parameters are skipped
 - Each provider is a singleton within its module's container
+- A type with no registered provider (global or per-App) is only auto-constructed if
+  it is itself `@Injectable()` or `@Controller()`. Anything else — typically a
+  plugin's marker type meant to arrive only via `app.register_global_provider(...)`,
+  like `vesper_db.DbSession` — raises `MissingProviderError` instead of silently
+  building an empty instance. This matters most when a plugin is optional: declaring
+  `db: DbSession` in a service whose app might run without `vesper-db` installed now
+  fails clearly at resolve time rather than constructing a `DbSession()` that breaks
+  confusingly on first real use.
 
 ---
 

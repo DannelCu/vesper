@@ -60,7 +60,7 @@ await arduino.write("LED ON\n")
 await arduino.close()
 ```
 
-Several ports can be open at once; each carries its own id, and the `onData`/`onClose` handlers are filtered per port. Raw events are `vesper:serial:data` (`{id, data}`) and `vesper:serial:closed` (`{id}`).
+Several ports can be open at once; each carries its own id, and the `onData`/`onClose` handlers are filtered per port. Raw events are `serial:data` (`{id, data}`) and `serial:closed` (`{id}`) — no `vesper:` prefix.
 
 Incoming bytes are delivered as UTF-8 text with undecodable bytes replaced — for binary protocols, frame and hex/base64-encode on the device side or handle the port in a Python command instead.
 

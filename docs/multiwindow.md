@@ -19,7 +19,7 @@ settings = app.register_window(
 )
 ```
 
-`app.register_window(**kwargs)` accepts the same parameters as `App.__init__` (except `frontend` is required). It returns a `WindowHandle`.
+`app.register_window(**kwargs)` accepts the same window/chrome parameters as `App.__init__` (`title`, `width`, `height`, `resizable`, `fullscreen`, `minimized`, `on_top`, `frameless`, `easy_drag`, `transparent`, `vibrancy`, `min_width`, `min_height`) plus `frontend`, which is required here. App-level options (`plugins`, `fs_scope`, `shell_scope`, `remember_window`, etc.) are not accepted — those apply to the app as a whole, not to a secondary window. It returns a `WindowHandle`.
 
 Secondary windows share the main app's IPC registry — all `@app.command` functions and module commands are reachable from any window.
 

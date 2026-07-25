@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ops Console</title>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- VESPER SDK: DO NOT REMOVE. Required for Python <-> JavaScript communication. -->
+  <script src="/vesper.js"></script>
+  <!-- Plugin SDKs, copied by `vesper sync-sdk` (see vesper.toml's [plugins]
+       section). Each is a no-op namespace addition if its Python plugin
+       ended up not installed — the app only ever calls into one after
+       checking system:features, never unconditionally. -->
+  <script src="/vesper-keychain.js"></script>
+  <script src="/vesper-sysinfo.js"></script>
+  <script src="/vesper-notify.js"></script>
+  <script src="/vesper-theme.js"></script>
+  <script src="/vesper-crash.js"></script>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+</html>

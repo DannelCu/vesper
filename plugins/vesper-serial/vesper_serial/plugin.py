@@ -12,8 +12,8 @@ class SerialPlugin(VesperPlugin):
     Serial port access for Vesper via pyserial.
 
     Multiple ports can be open at once, each with an id; incoming bytes stream
-    to the frontend as ``vesper:serial:data`` events (``{id, data}``, text with
-    undecodable bytes replaced). A ``vesper:serial:closed`` event (``{id}``)
+    to the frontend as ``serial:data`` events (``{id, data}``, text with
+    undecodable bytes replaced). A ``serial:closed`` event (``{id}``)
     fires when a port closes — including a device unplugged mid-session.
 
     Ports are opened through ``serial.serial_for_url``, so both real devices
@@ -49,10 +49,10 @@ class SerialPlugin(VesperPlugin):
         def _close(id: int) -> bool:
             return self.close(id)
 
-        app.registry.register(_list_ports, name="vesper:serial:list_ports")
-        app.registry.register(_open, name="vesper:serial:open")
-        app.registry.register(_write, name="vesper:serial:write")
-        app.registry.register(_close, name="vesper:serial:close")
+        app.registry.register(_list_ports, name="serial:list_ports")
+        app.registry.register(_open, name="serial:open")
+        app.registry.register(_write, name="serial:write")
+        app.registry.register(_close, name="serial:close")
 
         # Reader threads and open handles must not outlive the window.
         app.on("close")(self.close_all)

@@ -16,7 +16,7 @@ class SysinfoPlugin(VesperPlugin):
 
     - **Snapshot** on demand: ``vesper.sysinfo.snapshot()``.
     - **Subscription**: ``vesper.sysinfo.subscribe({interval})`` emits
-      ``vesper:sysinfo:tick`` events until unsubscribed. One subscription per
+      ``sysinfo:tick`` events until unsubscribed. One subscription per
       app — a second subscribe just retunes the interval. The ticker thread
       stops cleanly when the app closes; no orphan threads.
 
@@ -47,9 +47,9 @@ class SysinfoPlugin(VesperPlugin):
         def _unsubscribe() -> bool:
             return self.unsubscribe()
 
-        app.registry.register(_snapshot, name="vesper:sysinfo:snapshot")
-        app.registry.register(_subscribe, name="vesper:sysinfo:subscribe")
-        app.registry.register(_unsubscribe, name="vesper:sysinfo:unsubscribe")
+        app.registry.register(_snapshot, name="sysinfo:snapshot")
+        app.registry.register(_subscribe, name="sysinfo:subscribe")
+        app.registry.register(_unsubscribe, name="sysinfo:unsubscribe")
 
         app.on("close")(self.unsubscribe)
 

@@ -24,6 +24,18 @@ app = App(
 def hide_window() -> None:
     app.window.minimize()
 
+# app.on(...) hooks only run in Python — they are not automatically forwarded
+# to the frontend as events (only `deeplink` is). To make the JS `vesper.on(
+# "restore", ...)` / `vesper.on("blur", ...)` listeners below actually fire,
+# bridge each hook to an emitted event explicitly.
+@app.on("restore")
+def _on_restore() -> None:
+    app.emit("restore", {})
+
+@app.on("blur")
+def _on_blur() -> None:
+    app.emit("blur", {})
+
 app.tray(
     icon="icon.png",
     menu=[

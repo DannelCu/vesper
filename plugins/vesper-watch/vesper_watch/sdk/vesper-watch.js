@@ -20,7 +20,7 @@
          */
         watch: function (path, options) {
             var opts = options || {};
-            return window.vesper.invoke("vesper:fs:watch", {
+            return window.vesper.invoke("fs:watch", {
                 path: path,
                 recursive: opts.recursive === undefined ? true : !!opts.recursive,
                 debounce: opts.debounce === undefined ? -1 : opts.debounce
@@ -35,7 +35,7 @@
                     id: id,
                     unwatch: function () {
                         if (unsub) unsub();
-                        return window.vesper.invoke("vesper:fs:unwatch", { id: id });
+                        return window.vesper.invoke("fs:unwatch", { id: id });
                     }
                 };
             });
@@ -46,7 +46,7 @@
          * @returns {Promise<boolean>} False for an unknown id.
          */
         unwatch: function (id) {
-            return window.vesper.invoke("vesper:fs:unwatch", { id: id });
+            return window.vesper.invoke("fs:unwatch", { id: id });
         },
         /**
          * Subscribe to every fs change event, across all watches.

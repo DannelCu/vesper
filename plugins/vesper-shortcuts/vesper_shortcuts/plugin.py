@@ -230,9 +230,9 @@ class ShortcutsPlugin(VesperPlugin):
         def _ipc_unregister_all() -> None:
             plugin.remove_all()
 
-        app.registry.register(_ipc_register, name="vesper:shortcuts:register")
-        app.registry.register(_ipc_unregister, name="vesper:shortcuts:unregister")
-        app.registry.register(_ipc_unregister_all, name="vesper:shortcuts:unregister_all")
+        app.registry.register(_ipc_register, name="shortcuts:register")
+        app.registry.register(_ipc_unregister, name="shortcuts:unregister")
+        app.registry.register(_ipc_unregister_all, name="shortcuts:unregister_all")
 
     @classmethod
     def sdk_path(cls) -> Path | None:

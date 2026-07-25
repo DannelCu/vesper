@@ -5,6 +5,8 @@ import typing
 from collections.abc import Callable
 from typing import Any
 
+from vesper.exceptions import MissingProviderError
+
 
 def Injectable() -> Callable[[type], type]:
     """Mark a class as injectable — available as a DI provider."""
@@ -116,6 +118,25 @@ class Container:
 
         if cls in Container._global:
             return Container._global[cls]
+
+        # Auto-construction is only for classes the framework actually knows
+        # are meant to be built this way: @Injectable() services, and
+        # @Controller() classes (register_module() resolves controllers
+        # directly, and they are never @Injectable-decorated). Anything else
+        # — a plugin marker type like DbSession/Keychain whose real instance
+        # is supposed to come from register_global_provider — has no business
+        # being silently constructed from nothing. Without this check, a
+        # missing plugin produced a blank instance that failed confusingly on
+        # first real use instead of failing clearly, here, at resolve time.
+        if not getattr(cls, "__vesper_injectable__", False) and not getattr(
+            cls, "__vesper_controller__", None
+        ):
+            raise MissingProviderError(
+                f"No provider registered for {cls.__module__}.{cls.__qualname__}. "
+                "Register it with app.register_global_provider(...) (typically "
+                "done by the plugin that owns it), or mark the class @Injectable() "
+                "if it is meant to be constructed by the container."
+            )
 
         deps: dict[str, Any] = {}
         try:

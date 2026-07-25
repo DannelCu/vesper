@@ -28,7 +28,7 @@ app = App(
 `app_name` determines the directory where the JSON store file is saved:
 - Windows: `%APPDATA%\my-app\store.json`
 - macOS: `~/Library/Application Support/my-app/store.json`
-- Linux: `~/.local/share/my-app/store.json`
+- Linux: `~/.config/my-app/store.json` (or `$XDG_CONFIG_HOME`)
 
 ---
 
@@ -84,11 +84,11 @@ The store is also accessible via IPC from Python tests or internal commands:
 | Command | Args | Returns |
 |---|---|---|
 | `store:get` | `key: str` | value or `null` |
-| `store:set` | `key: str, value: any` | `true` |
-| `store:delete` | `key: str` | `true` |
+| `store:set` | `key: str, value: any` | `null` |
+| `store:delete` | `key: str` | `null` |
 | `store:has` | `key: str` | `bool` |
 | `store:keys` | — | `list[str]` |
-| `store:clear` | — | `true` |
+| `store:clear` | — | `null` |
 
 ---
 

@@ -174,8 +174,8 @@ def _stream_loop():
         app.emit("data-point", {"value": read_sensor()})
         time.sleep(0.1)
 
-@app.on("closed")
-def on_closed():
+@app.on("close")
+def on_close():
     _stop_event.set()   # signal the thread to exit
 ```
 

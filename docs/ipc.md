@@ -17,7 +17,7 @@ Arg validation — checks against the Python function signature
     ↓
 Guard chain — each guard returns True/False
     ↓
-Middleware chain — wraps around execution
+Middleware chain — runs before the command, in registration order
     ↓
 CommandRegistry.get("greet") → calls the function
     ↓
@@ -77,13 +77,13 @@ Vesper validates arguments against the Python function's signature **before** ru
 **Missing required argument**
 ```js
 await vesper.invoke("greet", {})
-// rejects with: { type: "ValidationError", message: "missing argument: name" }
+// rejects with: { type: "ValidationError", message: "Missing required arguments: name" }
 ```
 
 **Unexpected argument**
 ```js
 await vesper.invoke("greet", { name: "Alice", extra: 1 })
-// rejects with: { type: "ValidationError", message: "unexpected argument: extra" }
+// rejects with: { type: "ValidationError", message: "Unexpected arguments: extra" }
 ```
 
 **Commands with `**kwargs` skip the unexpected-argument check** — they explicitly accept arbitrary keys.

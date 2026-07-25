@@ -9,7 +9,7 @@ from vesper_notify import NotifyPlugin
 
 def _send(app, **args):
     payload = {"title": "Hello", **args}
-    return app.ipc.handle({"id": "1", "command": "vesper:notify:send", "args": payload})
+    return app.ipc.handle({"id": "1", "command": "notify:send", "args": payload})
 
 
 @pytest.fixture
@@ -20,7 +20,7 @@ def app():
 
 
 def test_command_registered(app):
-    assert "vesper:notify:send" in app.registry._commands
+    assert "notify:send" in app.registry._commands
 
 
 def test_send_builds_the_notifier_call(app, mock_desktop_notifier):

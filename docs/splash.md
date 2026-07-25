@@ -71,10 +71,12 @@ The path can be absolute or relative. The splash window is frameless — no titl
 ## Empty splash (default loading indicator)
 
 ```python
-app.splash()   # uses built-in PyWebView blank page
+app.splash()   # uses the built-in dark loading indicator
 ```
 
-An empty `html` string shows a plain white window while the main window loads.
+An empty `html` string shows a built-in dark screen (`#1a1a1a` background, white
+"Loading…" text) rather than a blank window, so there is always something visible
+while the main window loads.
 
 ---
 

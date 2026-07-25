@@ -61,7 +61,7 @@ const { theme, is_dark } = await vesper.theme.get()
 
 ```python
 # Direct IPC call
-resp = app.ipc.handle({"id": "1", "command": "vesper:theme:get", "args": {}})
+resp = app.ipc.handle({"id": "1", "command": "theme:get", "args": {}})
 # resp["result"] = {"theme": "Light", "is_dark": False}
 ```
 

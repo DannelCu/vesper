@@ -18,7 +18,7 @@
          */
         capture: function (options) {
             var opts = options || {};
-            return window.vesper.invoke("vesper:screenshot:capture", {
+            return window.vesper.invoke("screenshot:capture", {
                 monitor: opts.monitor || 0,
                 region: opts.region || null,
                 dest: ""
@@ -32,7 +32,7 @@
          */
         captureToFile: function (dest, options) {
             var opts = options || {};
-            return window.vesper.invoke("vesper:screenshot:capture", {
+            return window.vesper.invoke("screenshot:capture", {
                 monitor: opts.monitor || 0,
                 region: opts.region || null,
                 dest: dest
@@ -44,7 +44,7 @@
          * @returns {Promise<object[]>}
          */
         monitors: function () {
-            return window.vesper.invoke("vesper:screenshot:monitors", {});
+            return window.vesper.invoke("screenshot:monitors", {});
         }
     };
 })();

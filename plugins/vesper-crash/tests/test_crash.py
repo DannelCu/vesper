@@ -38,7 +38,7 @@ def test_without_dsn_nothing_initialises(mock_sentry):
         mock_sentry.init.assert_not_called()
         # The bridge command exists as a no-op so frontend code needs no branch.
         resp = app.ipc.handle({
-            "id": "1", "command": "vesper:crash:report", "args": {"message": "x"},
+            "id": "1", "command": "crash:report", "args": {"message": "x"},
         })
         assert resp["ok"] is True
         assert resp["result"] is False
@@ -118,7 +118,7 @@ def test_excepthook_captures_and_chains(app, mock_sentry):
 
 def test_js_error_report_captures_message(app, mock_sentry):
     resp = app.ipc.handle({
-        "id": "1", "command": "vesper:crash:report",
+        "id": "1", "command": "crash:report",
         "args": {"message": "undefined is not a function", "stack": "at foo.js:1", "kind": "error"},
     })
     assert resp["ok"] is True

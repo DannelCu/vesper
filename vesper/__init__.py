@@ -33,6 +33,7 @@ from vesper.exceptions.errors import (
     CommandNotFoundError,
     CommandAlreadyRegisteredError,
     ForbiddenError,
+    MissingProviderError,
 )
 
 try:
@@ -61,4 +62,5 @@ __all__ = [
     "CommandNotFoundError",
     "CommandAlreadyRegisteredError",
     "ForbiddenError",
+    "MissingProviderError",
 ]

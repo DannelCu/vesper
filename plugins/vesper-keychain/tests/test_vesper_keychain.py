@@ -84,8 +84,8 @@ def test_keychain_injected_into_service():
         def __init__(self, keychain: Keychain):
             self.keychain = keychain
 
-    App(plugins=[KeychainPlugin(service="test-app")])
-    container = Container([MyService])
+    app = App(plugins=[KeychainPlugin(service="test-app")])
+    container = Container([MyService], global_providers=app._global_providers)
     service = container.resolve(MyService)
     assert isinstance(service.keychain, Keychain)
 
@@ -313,7 +313,7 @@ class AuthModule:
 
 def test_di_service_receives_keychain():
     app = App(plugins=[KeychainPlugin(service="di-test")], root_module=AuthModule)
-    container = Container([TokenService])
+    container = Container([TokenService], global_providers=app._global_providers)
     service = container.resolve(TokenService)
     assert isinstance(service.keychain, Keychain)
 

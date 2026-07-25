@@ -205,11 +205,11 @@ document.getElementById("admin-btn").onclick = async () => {
         const result = await callProtected("admin_action")
         alert(result)
     } catch (err) {
-        if (err.type === "ForbiddenError") {
+        if (err.name === "ForbiddenError") {
             alert("You do not have admin access.")
         } else {
             // GuardError means the check itself broke — a bug, not a denial.
-            console.error(err.type, err.message)
+            console.error(err.name, err.message)
         }
     }
 }

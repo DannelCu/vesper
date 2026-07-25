@@ -104,7 +104,7 @@ def test_http_client_injected_into_service():
             self.http = http
 
     app = App(plugins=[HttpPlugin()])
-    container = Container([MyService])
+    container = Container([MyService], global_providers=app._global_providers)
     service = container.resolve(MyService)
     assert isinstance(service.http, HttpClient)
 
@@ -375,7 +375,7 @@ class ApiModule:
 
 def test_di_service_receives_http_client():
     app = App(plugins=[HttpPlugin()], root_module=ApiModule)
-    container = Container([ApiService])
+    container = Container([ApiService], global_providers=app._global_providers)
     service = container.resolve(ApiService)
     assert isinstance(service.http, HttpClient)
 

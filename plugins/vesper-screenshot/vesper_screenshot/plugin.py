@@ -45,8 +45,8 @@ class ScreenshotPlugin(VesperPlugin):
         def _monitors() -> list:
             return self.monitors()
 
-        app.registry.register(_capture, name="vesper:screenshot:capture")
-        app.registry.register(_monitors, name="vesper:screenshot:monitors")
+        app.registry.register(_capture, name="screenshot:capture")
+        app.registry.register(_monitors, name="screenshot:monitors")
 
     def _check_supported(self) -> None:
         if (

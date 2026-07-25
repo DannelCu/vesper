@@ -126,6 +126,14 @@ app.tray(
         TrayMenuItem("Quit", lambda: app.quit()),
     ],
 )
+
+# The primary window isn't hidden automatically — hide it once it has
+# loaded so the app starts in the tray instead of flashing a window.
+@app.on("loaded")
+def hide_primary():
+    app.window.hide()
 ```
 
-> Note: PyWebView requires at least one window to exist. The primary `App` window is created hidden in this pattern.
+> Note: PyWebView requires at least one window to exist, so the primary `App`
+> window still has to be created — hide it yourself (as above) if you don't
+> want it visible at startup.

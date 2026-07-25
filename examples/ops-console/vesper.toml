@@ -1,0 +1,17 @@
+[project]
+name = "ops-console"
+template = "react"
+styles = "none"
+bundler = "pyinstaller"
+package_manager = "npm"
+
+# vesper sync-sdk reads this section and copies each plugin's JavaScript SDK
+# into public/. All six are optional — the app runs with none installed (see
+# the README's "Without the optional pieces" table).
+[plugins]
+keychain = "vesper-keychain"
+sysinfo  = "vesper-sysinfo"
+db       = "vesper-db"
+notify   = "vesper-notify"
+theme    = "vesper-theme"
+crash    = "vesper-crash"

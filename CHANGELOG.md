@@ -35,6 +35,23 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   its four optional pieces: each missing one greys out its command with the reason,
   and with neither tray nor hotkey the window minimizes instead of hiding, so it can
   never strand itself off-screen with nothing to summon it.
+- **[examples/ops-console](examples/ops-console/)** — a local-machine monitoring
+  panel and the only example built around the module system: four domain modules
+  (`auth`, `metrics`, `processes`, `alerts`), each with its own `@Controller` and
+  injected `@Injectable` services, wired through `@Module` and a real cross-module DI
+  edge (`AlertsService` injects the same `MetricsService` instance the dashboard
+  reads from). Role-based guards gate process termination and threshold changes, with
+  the frontend distinguishing a policy denial from a guard bug from the command's own
+  failure. Also: live metrics over events, a real psutil-backed process table with a
+  right-click menu (the context-menu recipe, since PyWebView has none — KI2), a
+  detached process-detail window, threshold alerts with notifications and a taskbar
+  badge, a deep link routed through single-instance, and an IPC middleware panel —
+  which surfaced a real gap between `docs/recipes/logging-middleware.md`'s documented
+  3-argument `(command, args, next)` signature and what `IPC.handle()` actually calls
+  (`(command, args)`, no `next`), written up in
+  `examples/ops-console/modules/common/telemetry.py`. React + Vite, the only example
+  with a Node toolchain — exercises `sync-sdk` and `sync-types` for the first time.
+  Runs with none of its five optional plugins installed.
 - **[examples/README.md](examples/README.md)** — an index of the examples, with what
   each one demonstrates and who should read it first.
 
@@ -254,10 +271,69 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-*The ones below were found by building `examples/media-vault` and `examples/launcher`
-and using them like real apps. Each had shipped, and each is now covered by a
-regression test.*
+*The ones below were found by building `examples/ops-console` (the module system, DI,
+guards and middleware, exercised for the first time) and a full documentation
+accuracy pass across every `docs/*.md`, `docs/recipes/*.md`, and plugin `README.md`
+against the actual implementation.*
 
+- **The DI container silently built a "phantom" empty instance instead of failing
+  clearly.** `Container.resolve()` could not tell "no provider registered for this
+  type" apart from "this type happens to have a zero-argument constructor" — resolving
+  a plugin marker type like `vesper_db.DbSession` when its plugin was not installed
+  silently constructed a blank instance instead of raising, which then failed
+  confusingly on first real use instead of failing clearly at startup. `resolve()` now
+  raises `MissingProviderError` for any type that is neither `@Injectable()`/
+  `@Controller()` nor a registered provider. New exception, exported from the top-level
+  package alongside `ForbiddenError`. See [docs/module-system.md](docs/module-system.md#dependency-injection).
+- **`vesper.js`'s `security.lockdown()` could not reliably tell `vesper dev` apart
+  from a production app using `App(serve_frontend=True)`** — both serve from
+  `127.0.0.1`, and the framework's own dev-detection global,
+  `window.VESPER_DEV_URL`, was never actually injected anywhere; it existed only as a
+  Python-side environment variable with the same name. `vesper dev`'s vanilla dev
+  server now injects the real `window.VESPER_DEV_URL`, and `vesper init`'s React/Vue/
+  Svelte templates now scaffold their `lockdown()` call gated on Vite's own
+  `import.meta.env.DEV` build-time flag — the reliable signal for a bundled app either
+  way. See [docs/security-lockdown.md](docs/security-lockdown.md).
+- **`vesper-db`'s `DatabasePlugin` had no way to skip its automatic
+  `Base.metadata.create_all()`.** Its own README documented a `create_tables=False`
+  constructor option, for apps managing schema with Alembic, that did not exist. Added
+  for real: `DatabasePlugin(url=..., create_tables=False)`.
+- **Eight of the thirteen official plugins registered their IPC commands under the
+  `vesper:` prefix**, which is reserved for the framework's own built-ins — `vesper
+  sync-types` filters on that prefix to skip them, so it silently produced zero typed
+  definitions for `vesper-screenshot`, `vesper-serial`, `vesper-shortcuts`,
+  `vesper-watch`, `vesper-sysinfo`, `vesper-theme`, `vesper-notify` and `vesper-crash`.
+  All eight now register under their own bare namespace (`screenshot:capture`,
+  `sysinfo:snapshot`, `theme:get`, ...), matching the other five plugins. Not breaking
+  for documented usage — every plugin's JS SDK method names (`vesper.sysinfo.snapshot()`
+  etc.) are unchanged, only the IPC command string underneath; only code invoking the
+  raw string directly is affected. `examples/launcher`'s synced `vesper-screenshot.js`/
+  `vesper-shortcuts.js` copies and `examples/media-vault`'s direct
+  `app.ipc.handle({"command": "vesper:fs:watch", ...})` call were still on the old
+  prefixed names and have been updated to match.
+- **Extensive documentation drift**, found via the accuracy pass above and fixed
+  throughout `docs/` and every plugin `README.md`: `docs/middleware.md` and
+  `docs/recipes/logging-middleware.md` described a `next()`-chaining middleware
+  contract `app.middleware()` has never actually implemented (it is, and always was,
+  a pre-command `(command, args)` hook — see the rewritten docs for what it can and
+  cannot do); wrong dialog parameter names in `docs/dialogs.md`/`docs/recipes/
+  drag-out.md`; `docs/splash.md` misdescribing the default splash as blank white
+  instead of the real dark loading screen; wrong `signtool`/`osslsigncode` invocations
+  in `docs/code-signing.md`; a hyphen-vs-colon event name bug in `docs/auto-updates.md`;
+  an incomplete built-in-events table in `docs/events.md` and an incomplete
+  capabilities list in `docs/optional-features.md`; a deep-link example that
+  double-fired its own event in `docs/deeplink.md`; wrong platform casing in
+  `docs/recipes/custom-titlebar.md`; an invalid lifecycle event name in
+  `docs/recipes/real-time.md`; erroneous `await`s on the synchronous `IPC.handle()` in
+  `docs/recipes/user-preferences.md`; a recipe in `docs/recipes/menubar-app.md` whose
+  frontend listened for events its own Python side never emitted; and a
+  `docs/plugins.md` plugin-authoring example that itself contradicted the framework's
+  documented `sdk_path()`/`registry.register()`/global-provider conventions. Plugin
+  READMEs fixed: `vesper-store` (wrong storage path and return values),
+  `vesper-db` (constructor options that did not exist), `vesper-http` (wrong
+  method signatures and response shape throughout), `vesper-mongodb` (wrong SDK
+  filename and response keys), and `vesper-serial`/`vesper-watch` (event names
+  documented with a `vesper:` prefix they do not actually carry).
 - **The native menu bar silently never appeared on Linux whenever `App(remember_window=True)` was combined with `app.menu()`** — no error, no warning, the window just opened without it. PyWebView's GTK backend builds its menu bar exactly once, and only if its internal menu state is already populated at that moment; `remember_window`'s startup geometry check touches PyWebView in a way that triggers this build *before* Vesper had registered the menu, so it locked in empty. Reproduces on any Linux desktop, not a particular one — first suspected as an XFCE quirk before the real ordering bug was isolated. `App.run()` now registers the menu before anything can trigger that early build.
 
 - **`vesper dev` hung on exit and had to be killed with Ctrl+C.** Quitting the app

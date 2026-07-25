@@ -21,8 +21,8 @@ def export_csv(data: list) -> str | None:
 
     # Show save dialog — returns None if cancelled
     dest = app.window.save_dialog(
-        file_types=["CSV files (*.csv)"],
-        save_filename="export.csv",
+        filters=[{"name": "CSV files", "extensions": ["csv"]}],
+        filename="export.csv",
     )
     if not dest:
         return None

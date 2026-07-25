@@ -16,16 +16,16 @@ from vesper_theme.plugin import ThemePlugin as ThemePluginDirect
 
 def test_vesper_theme_get_registered():
     app = App(plugins=[ThemePlugin(watch=False)])
-    assert "vesper:theme:get" in app.registry._commands
+    assert "theme:get" in app.registry._commands
 
 
-# ── vesper:theme:get ──────────────────────────────────────────────────────────
+# ── theme:get ──────────────────────────────────────────────────────────
 
 
 def test_get_returns_light_theme(mock_darkdetect):
     mock_darkdetect.theme.return_value = "Light"
     app = App(plugins=[ThemePlugin(watch=False)])
-    resp = app.ipc.handle({"id": "1", "command": "vesper:theme:get", "args": {}})
+    resp = app.ipc.handle({"id": "1", "command": "theme:get", "args": {}})
     assert resp["ok"] is True
     assert resp["result"]["theme"] == "Light"
     assert resp["result"]["is_dark"] is False
@@ -34,7 +34,7 @@ def test_get_returns_light_theme(mock_darkdetect):
 def test_get_returns_dark_theme(mock_darkdetect):
     mock_darkdetect.theme.return_value = "Dark"
     app = App(plugins=[ThemePlugin(watch=False)])
-    resp = app.ipc.handle({"id": "1", "command": "vesper:theme:get", "args": {}})
+    resp = app.ipc.handle({"id": "1", "command": "theme:get", "args": {}})
     assert resp["ok"] is True
     assert resp["result"]["theme"] == "Dark"
     assert resp["result"]["is_dark"] is True
@@ -43,7 +43,7 @@ def test_get_returns_dark_theme(mock_darkdetect):
 def test_get_defaults_to_light_when_darkdetect_returns_none(mock_darkdetect):
     mock_darkdetect.theme.return_value = None
     app = App(plugins=[ThemePlugin(watch=False)])
-    resp = app.ipc.handle({"id": "1", "command": "vesper:theme:get", "args": {}})
+    resp = app.ipc.handle({"id": "1", "command": "theme:get", "args": {}})
     assert resp["ok"] is True
     assert resp["result"]["theme"] == "Light"
 

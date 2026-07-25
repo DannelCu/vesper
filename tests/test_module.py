@@ -126,6 +126,46 @@ def test_container_returns_singleton():
     assert b.n == 99
 
 
+def test_container_raises_for_unmarked_unregistered_type():
+    """
+    A plain class — no @Injectable, no @Controller, never registered as a
+    global provider — must not be silently auto-constructed. This is exactly
+    the vesper_db.DbSession shape: a marker type meant to only ever arrive via
+    register_global_provider(); resolving it without that registration used
+    to build a blank, useless instance instead of failing clearly.
+    """
+    from vesper.exceptions import MissingProviderError
+
+    class PlainMarker:
+        pass
+
+    c = Container([])
+    with pytest.raises(MissingProviderError, match="PlainMarker"):
+        c.resolve(PlainMarker)
+
+
+def test_container_still_resolves_injectable_with_no_global():
+    @Injectable()
+    class StandaloneService:
+        def __init__(self):
+            self.ok = True
+
+    c = Container([])
+    svc = c.resolve(StandaloneService)
+    assert svc.ok is True
+
+
+def test_container_still_resolves_controller_with_no_global():
+    @Controller("thing")
+    class ThingController:
+        def __init__(self):
+            self.ok = True
+
+    c = Container([])
+    ctrl = c.resolve(ThingController)
+    assert ctrl.ok is True
+
+
 # ── Module integration tests ──────────────────────────────────────────────────
 
 

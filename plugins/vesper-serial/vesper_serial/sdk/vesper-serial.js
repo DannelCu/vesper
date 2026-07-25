@@ -7,7 +7,7 @@
          * @returns {Promise<{device:string, description:string, hwid:string}[]>}
          */
         listPorts: function () {
-            return window.vesper.invoke("vesper:serial:list_ports", {});
+            return window.vesper.invoke("serial:list_ports", {});
         },
         /**
          * Open a serial port and stream incoming data.
@@ -25,7 +25,7 @@
          */
         open: function (port, options) {
             var opts = options || {};
-            return window.vesper.invoke("vesper:serial:open", {
+            return window.vesper.invoke("serial:open", {
                 port: port,
                 baudrate: opts.baudrate || 9600
             }).then(function (id) {
@@ -45,10 +45,10 @@
                 return {
                     id: id,
                     write: function (data) {
-                        return window.vesper.invoke("vesper:serial:write", { id: id, data: data });
+                        return window.vesper.invoke("serial:write", { id: id, data: data });
                     },
                     close: function () {
-                        return window.vesper.invoke("vesper:serial:close", { id: id });
+                        return window.vesper.invoke("serial:close", { id: id });
                     }
                 };
             });
@@ -60,7 +60,7 @@
          * @returns {Promise<number>} Bytes written.
          */
         write: function (id, data) {
-            return window.vesper.invoke("vesper:serial:write", { id: id, data: data });
+            return window.vesper.invoke("serial:write", { id: id, data: data });
         },
         /**
          * Close a port by id.
@@ -68,7 +68,7 @@
          * @returns {Promise<boolean>}
          */
         close: function (id) {
-            return window.vesper.invoke("vesper:serial:close", { id: id });
+            return window.vesper.invoke("serial:close", { id: id });
         }
     };
 })();

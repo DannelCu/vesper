@@ -105,14 +105,17 @@ vesper sign
 This runs:
 
 ```
-signtool.exe sign /f cert.pfx /p <password> /fd sha256 /tr <timestamp_url> /td sha256 package\my-app.exe
+signtool.exe sign /f cert.pfx /p <password> /t <timestamp_url> /fd sha256 package\my-app.exe
 ```
 
 If `signtool.exe` is not found, Vesper falls back to `osslsigncode`:
 
 ```
-osslsigncode sign -pkcs12 cert.pfx -pass <password> -t <timestamp_url> -in package/my-app.exe -out package/my-app.exe
+osslsigncode sign -pkcs12 cert.pfx -pass <password> -t <timestamp_url> -in package/my-app.exe -out package/my-app_signed.exe
 ```
+
+`osslsigncode` never overwrites the input — the signed binary is written next to it
+with a `_signed` suffix (`my-app_signed.exe`).
 
 ### Finding signtool.exe
 

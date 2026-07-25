@@ -1,6 +1,7 @@
 # Middleware
 
-Middleware wraps every IPC call. It runs after guards and before the command, giving you a place to observe, log, time, or transform requests and responses.
+Middleware runs before every IPC call, after guards and before the command. Use it to
+observe, log, or reject requests.
 
 ---
 
@@ -8,100 +9,76 @@ Middleware wraps every IPC call. It runs after guards and before the command, gi
 
 ```python
 @app.middleware
-async def log_middleware(command: str, args: dict, next):
-    print(f"→ {command} {args}")
-    result = await next(command, args)
-    print(f"← {command} {result}")
-    return result
+def log_middleware(command: str, args: dict) -> None:
+    print(f"-> {command} {args}")
 ```
 
-`@app.middleware` accepts both `async def` and plain `def` functions. The `next` parameter is always awaitable.
+`@app.middleware` accepts both `def` and `async def` functions.
 
 ---
 
 ## Signature
 
 ```python
-async def my_middleware(command: str, args: dict, next) -> any:
+def my_middleware(command: str, args: dict) -> None:
     ...
-    result = await next(command, args)
-    ...
-    return result
 ```
 
 - `command` — the IPC command name (e.g. `"users.get_user"`)
 - `args` — the validated argument dictionary
-- `next` — call this to pass control to the next middleware or the command itself
-- Return value — must return the result (either from `next` or a replacement)
+- Return value is ignored — middleware cannot replace or transform the command's
+  result. To reject a call, raise (see below); to allow it, return normally.
 
-Not calling `next()` short-circuits the pipeline and returns whatever you return instead — useful for caching:
-
-```python
-@app.middleware
-async def cache_middleware(command: str, args: dict, next):
-    key = f"{command}:{args}"
-    if key in cache:
-        return cache[key]
-    result = await next(command, args)
-    cache[key] = result
-    return result
-```
+Middleware does not wrap the command call — there is no way to run code *after* the
+command finishes, see its result, or measure its duration from inside a middleware
+function. If you need that, see
+[Recipes — IPC Logging Middleware, "Timing and result, not just invocation"](recipes/logging-middleware.md#timing-and-result-not-just-invocation)
+for the pattern that actually provides it (a wrapper around the command registry, not
+`app.middleware()`).
 
 ---
 
 ## Execution order
 
-Middleware registered first wraps outermost:
+Middleware registered first runs first, all before the command:
 
 ```python
 @app.middleware
-async def first(command, args, next):    # runs first (outermost)
-    ...
+def first(command, args): ...    # runs first
 
 @app.middleware
-async def second(command, args, next):   # runs second (innermost)
-    ...
-```
+def second(command, args): ...   # runs second
 
-Execution order for a call: `first → second → command → second → first`
-
----
-
-## Error handling in middleware
-
-Exceptions raised inside `next()` propagate up through the middleware chain. You can catch and handle them:
-
-```python
-@app.middleware
-async def error_reporter(command: str, args: dict, next):
-    try:
-        return await next(command, args)
-    except Exception as exc:
-        report_to_sentry(command, exc)
-        raise   # re-raise so IPC still returns { ok: false, error: ... }
+# then the command itself
 ```
 
 ---
 
-## Timing middleware
+## Rejecting a call
+
+Raise `ForbiddenError` to deny a call — reported the same way a guard rejection is
+(see [Guards](guards.md)):
 
 ```python
-import time
+from vesper import ForbiddenError
 
 @app.middleware
-async def timing_middleware(command: str, args: dict, next):
-    start = time.monotonic()
-    result = await next(command, args)
-    elapsed_ms = (time.monotonic() - start) * 1000
-    print(f"{command} took {elapsed_ms:.1f}ms")
-    return result
+def rate_limit(command: str, args: dict) -> None:
+    if too_many_calls():
+        raise ForbiddenError("Rate limit exceeded")
 ```
 
 ---
 
-## Middleware shared by reference
+## When middleware fails
 
-`App._middleware` is passed by reference to `IPC._middleware`. Middleware registered after `App.__init__` is still visible to all subsequent calls — you can add middleware at any time before `app.run()`.
+A middleware that raises anything other than `ForbiddenError` is a bug in the
+middleware, not a rejected call, so it is reported under its own error type with the
+original exception preserved as the cause, and the command does not run:
+
+```json
+{ "type": "MiddlewareError", "cause": "RuntimeError", "message": "redis down" }
+```
 
 ---
 
@@ -109,37 +86,22 @@ async def timing_middleware(command: str, args: dict, next):
 
 | | Guards | Middleware |
 |---|---|---|
-| Purpose | Allow or deny | Observe or transform |
-| Return value | `bool` | result (from `next` or own) |
-| On rejection | `ForbiddenError` | depends on what you return |
-| Order | Before middleware | After guards |
+| Purpose | Allow or deny | Observe, log, or reject |
+| Return value | `bool` | ignored |
+| On rejection | `ForbiddenError` | raise `ForbiddenError` yourself |
+| Order | Before middleware | After guards, before the command |
+| Sees the command's result | No | No — neither guards nor middleware wrap execution |
 
-See [Guards](guards.md) for access control. See [Recipes — IPC Logging](recipes/logging-middleware.md) for a ready-to-use logging setup.
+See [Guards](guards.md) for access control. See
+[Recipes — IPC Logging](recipes/logging-middleware.md) for a ready-to-use logging
+setup, including the workaround for timing/result logging.
 
 ---
 
-## When middleware fails
+## Middleware shared by reference
 
-A middleware that raises is a bug in the middleware, not a rejected call, so it is
-reported under its own error type with the original exception preserved as the cause:
-
-```json
-{ "type": "MiddlewareError", "cause": "RuntimeError", "message": "redis down" }
-```
-
-The command does not run.
-
-To *reject* a call from middleware — an auth check, a rate limit — raise
-`ForbiddenError` instead. That is treated as policy and reaches the frontend as
-`ForbiddenError`, the same as a guard rejection:
-
-```python
-from vesper import ForbiddenError
-
-@app.middleware
-def rate_limit(command, args):
-    if too_many_calls():
-        raise ForbiddenError("Rate limit exceeded")
-```
+`App._middleware` is passed by reference to `IPC._middleware`. Middleware registered
+after `App.__init__` is still visible to all subsequent calls — you can add
+middleware at any time before `app.run()`.
 
 See [IPC](ipc.md) for the full error type table.

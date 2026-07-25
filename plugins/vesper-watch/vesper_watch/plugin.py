@@ -13,7 +13,7 @@ class WatchPlugin(VesperPlugin):
     File watching for Vesper, backed by watchdog (inotify / FSEvents /
     ReadDirectoryChangesW).
 
-    The frontend asks to watch a path and receives ``vesper:fs:changed`` events:
+    The frontend asks to watch a path and receives ``fs:changed`` events:
 
         const watcher = await vesper.watch.watch("/data/projects", {
             onChange: ({ kind, path }) => refresh(),
@@ -54,8 +54,8 @@ class WatchPlugin(VesperPlugin):
         def _unwatch(id: int) -> bool:
             return self.unwatch(id)
 
-        app.registry.register(_watch, name="vesper:fs:watch")
-        app.registry.register(_unwatch, name="vesper:fs:unwatch")
+        app.registry.register(_watch, name="fs:watch")
+        app.registry.register(_unwatch, name="fs:unwatch")
 
         # Observer threads must not outlive the window.
         app.on("close")(self.stop_all)

@@ -140,17 +140,15 @@ Add this before `app.run()`. WAL mode allows one writer and multiple concurrent 
 ### In-memory SQLite for tests
 
 ```python
-from sqlalchemy.pool import StaticPool
 from vesper_db import DatabasePlugin
 
-plugin = DatabasePlugin(
-    url="sqlite:///:memory:",
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
+plugin = DatabasePlugin(url="sqlite:///:memory:")
 ```
 
-`StaticPool` ensures all connections share the same in-memory database (required for `:memory:` under concurrent access).
+`DatabasePlugin.__init__` takes only `url` — there is no `connect_args`/`poolclass`
+parameter to pass. Nothing more is needed: when the URL is exactly
+`sqlite:///:memory:`, the plugin automatically applies `check_same_thread=False` and
+`StaticPool` internally, so every connection shares the same in-memory database.
 
 ---
 

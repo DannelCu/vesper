@@ -25,13 +25,13 @@ def app(plugin):
 
 def test_commands_registered(app):
     for cmd in (
-        "vesper:sysinfo:snapshot", "vesper:sysinfo:subscribe", "vesper:sysinfo:unsubscribe",
+        "sysinfo:snapshot", "sysinfo:subscribe", "sysinfo:unsubscribe",
     ):
         assert cmd in app.registry._commands
 
 
 def test_snapshot_shape(app):
-    resp = app.ipc.handle({"id": "1", "command": "vesper:sysinfo:snapshot", "args": {}})
+    resp = app.ipc.handle({"id": "1", "command": "sysinfo:snapshot", "args": {}})
     assert resp["ok"] is True
     info = resp["result"]
 
@@ -58,7 +58,7 @@ def test_subscription_emits_ticks(app, plugin):
     app.window.emit = emit
 
     resp = app.ipc.handle({
-        "id": "1", "command": "vesper:sysinfo:subscribe", "args": {"interval": 0.1},
+        "id": "1", "command": "sysinfo:subscribe", "args": {"interval": 0.1},
     })
     assert resp["ok"] is True
 

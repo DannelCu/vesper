@@ -595,6 +595,17 @@ def create_react_main_jsx(styles: str) -> str:
 
     return "\n".join(lines) + """
 
+// Turns off browser affordances (reload, find, right-click menu, zoom) so the
+// app feels native rather than like a page in a browser. import.meta.env.DEV
+// is Vite's own dev/production flag — true under `vesper dev`, false in a
+// production build, regardless of how the frontend is served (this also
+// covers App(serve_frontend=True), which security.lockdown()'s own runtime
+// heuristic cannot distinguish from `vesper dev` by hostname alone).
+// See docs/security-lockdown.md.
+if (!import.meta.env.DEV) {
+  window.vesper.security.lockdown()
+}
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <App />
@@ -858,7 +869,19 @@ def create_vue_main_js(styles: str) -> str:
     else:
         lines.append("import './index.css'")
 
-    lines += ["import App from './App.vue'", "", "createApp(App).mount('#app')", ""]
+    lines += [
+        "import App from './App.vue'",
+        "",
+        "// import.meta.env.DEV is Vite's own dev/production flag — see the",
+        "// comment in the React template's main.jsx for why this is checked",
+        "// instead of security.lockdown()'s own runtime heuristic.",
+        "if (!import.meta.env.DEV) {",
+        "  window.vesper.security.lockdown()",
+        "}",
+        "",
+        "createApp(App).mount('#app')",
+        "",
+    ]
 
     return "\n".join(lines)
 
@@ -1087,6 +1110,13 @@ def create_svelte_main_js(styles: str) -> str:
 
     lines += [
         "import App from './App.svelte'",
+        "",
+        "// import.meta.env.DEV is Vite's own dev/production flag — see the",
+        "// comment in the React template's main.jsx for why this is checked",
+        "// instead of security.lockdown()'s own runtime heuristic.",
+        "if (!import.meta.env.DEV) {",
+        "  window.vesper.security.lockdown()",
+        "}",
         "",
         "new App({",
         "  target: document.getElementById('app'),",

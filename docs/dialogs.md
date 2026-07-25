@@ -82,8 +82,8 @@ The dialogs are registered as built-in IPC commands (`vesper:dialog:open`, `vesp
 @app.command
 def import_csv() -> str | None:
     paths = app.window.open_dialog(
-        file_types=["CSV files (*.csv)"],
-        allow_multiple=False,
+        filters=[{"name": "CSV files", "extensions": ["csv"]}],
+        multiple=False,
     )
     return paths[0] if paths else None
 ```

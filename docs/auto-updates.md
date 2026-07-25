@@ -57,7 +57,7 @@ You can optionally include a SHA-256 digest per platform. Vesper will verify the
 }
 ```
 
-When a `sha256` field is present, `install()` refuses to proceed if the downloaded binary's digest does not match. The string-URL format (no sha256) is still accepted for backward compatibility, but the binary will require `allow_unverified=True` to install — not recommended for production.
+When a `sha256` field is present, `install()` refuses to proceed if the downloaded binary's digest does not match. The string-URL format (no sha256) is still accepted for backward compatibility, but `allow_unverified=True` — the escape hatch for installing without a digest — only exists on the low-level `vesper.core.updater.install()` function. Neither the `vesper:update:install` IPC command nor `App.install_update()` expose it, so a manifest without a `sha256` cannot be installed through the normal JS or `app.install_update()` paths; only code that calls `updater.install()` directly can bypass verification. Not recommended for production either way.
 
 ---
 
@@ -89,7 +89,7 @@ result = app.check_update()
 
 ```js
 // Stream download progress
-vesper.on("update-progress", ({ percent }) => {
+vesper.on("update:progress", ({ percent }) => {
     progressBar.style.width = percent + "%"
 })
 
@@ -103,7 +103,7 @@ const path = await vesper.invoke("vesper:update:download", {
 
 ```python
 def on_progress(percent: int):
-    app.emit("update-progress", {"percent": percent})
+    app.emit("update:progress", {"percent": percent})
 
 path = app.download_update(update["download_url"], on_progress=on_progress)
 ```
@@ -148,7 +148,7 @@ async function checkForUpdates() {
     )
     if (!confirmed) return
 
-    vesper.on("update-progress", ({ percent }) => {
+    vesper.on("update:progress", ({ percent }) => {
         document.getElementById("progress").textContent = `Downloading… ${percent}%`
     })
 

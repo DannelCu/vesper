@@ -85,7 +85,7 @@ Available flags:
 
 | Flag | Values | Default |
 |---|---|---|
-| `--name` | any string | `my-app` |
+| `--name` | any string | `my-vesper-app` |
 | `--template` | `vanilla`, `react`, `vue`, `svelte` | `vanilla` |
 | `--styles` | `none`, `bootstrap`, `tailwind` | `none` |
 | `--bundler` | `pyinstaller`, `nuitka` | `pyinstaller` |
@@ -103,7 +103,8 @@ my-app/
 ├── vesper.toml
 └── frontend/
     ├── index.html
-    └── vesper.js
+    ├── vesper.js
+    └── vesper-icon-dark.svg
 ```
 
 `app.py` looks like this:

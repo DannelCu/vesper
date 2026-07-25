@@ -38,10 +38,13 @@ DEFAULTS = {
 }
 
 @app.command
-async def get_all_prefs() -> dict:
+def get_all_prefs() -> dict:
+    # app.ipc.handle() is synchronous — it returns a plain dict, not a
+    # coroutine, so it is never awaited (see docs/ipc.md's own "Calling IPC
+    # from Python" example).
     prefs = {}
     for key, default in DEFAULTS.items():
-        stored = await app.ipc.handle({
+        stored = app.ipc.handle({
             "id": "pref",
             "command": "store:get",
             "args": {"key": f"pref:{key}"},
@@ -50,10 +53,10 @@ async def get_all_prefs() -> dict:
     return prefs
 
 @app.command
-async def set_pref(key: str, value) -> None:
+def set_pref(key: str, value) -> None:
     if key not in DEFAULTS:
         raise ValueError(f"Unknown preference: {key}")
-    await app.ipc.handle({
+    app.ipc.handle({
         "id": "pref",
         "command": "store:set",
         "args": {"key": f"pref:{key}", "value": value},
@@ -61,9 +64,9 @@ async def set_pref(key: str, value) -> None:
     app.emit("pref-changed", {"key": key, "value": value})
 
 @app.command
-async def reset_prefs() -> dict:
+def reset_prefs() -> dict:
     for key, default in DEFAULTS.items():
-        await app.ipc.handle({
+        app.ipc.handle({
             "id": "pref",
             "command": "store:set",
             "args": {"key": f"pref:{key}", "value": default},

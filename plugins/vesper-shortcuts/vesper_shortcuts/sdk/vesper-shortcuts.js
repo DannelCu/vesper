@@ -9,7 +9,7 @@
          * @returns {Promise<void>}
          */
         register: function (accelerator) {
-            return window.vesper.invoke("vesper:shortcuts:register", { accelerator: accelerator });
+            return window.vesper.invoke("shortcuts:register", { accelerator: accelerator });
         },
         /**
          * Unregister a previously registered shortcut.
@@ -17,14 +17,14 @@
          * @returns {Promise<void>}
          */
         unregister: function (accelerator) {
-            return window.vesper.invoke("vesper:shortcuts:unregister", { accelerator: accelerator });
+            return window.vesper.invoke("shortcuts:unregister", { accelerator: accelerator });
         },
         /**
          * Unregister all shortcuts registered via IPC.
          * @returns {Promise<void>}
          */
         unregisterAll: function () {
-            return window.vesper.invoke("vesper:shortcuts:unregister_all", {});
+            return window.vesper.invoke("shortcuts:unregister_all", {});
         },
     };
 })();

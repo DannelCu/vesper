@@ -89,6 +89,8 @@ Built-in events dispatched by the framework:
 
 | Event name | When |
 |---|---|
+| `deeplink` | A deep link URL arrives — cold start or forwarded by single-instance. No plugin required. See [Deep Linking](deeplink.md). |
+| `power:suspend` / `power:resume` / `power:lock` / `power:unlock` | System power/session state changes, when `App(power_events=True)`. No plugin required — built-in on Windows, `pyobjc` on macOS, `jeepney` on Linux. See [Power](power.md). |
 | `theme:change` | OS dark/light mode changes (requires vesper-theme with `watch=True`) |
 | `shortcut` | A registered global shortcut fires (requires vesper-shortcuts) |
 

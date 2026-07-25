@@ -138,7 +138,7 @@ document.getElementById("btn-close").onclick = () => vesper.quit()
 
   ```js
   const { platform } = await vesper.os.info()
-  if (platform === "Darwin") {
+  if (platform === "darwin") {
       document.getElementById("titlebar").classList.add("mac")
   }
   ```

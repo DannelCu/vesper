@@ -149,6 +149,8 @@ All window controls are registered as built-in commands:
 - `vesper:window:minimize`
 - `vesper:window:maximize`
 - `vesper:window:restore`
+- `vesper:window:hide`
+- `vesper:window:show`
 - `vesper:window:fullscreen`
 - `vesper:window:resize`
 - `vesper:window:move`

@@ -39,7 +39,7 @@ Reporting is **opt-in twice**: installing the plugin does nothing until you also
 |---|---|---|
 | Exceptions in IPC commands, guards, middleware | `app.ipc.on_error` observation hook | None — the frontend receives the exact same IPC error response |
 | Unhandled Python exceptions | `sys.excepthook`, chained to the previous hook | None — the prior hook (default traceback) still runs |
-| Frontend JS errors | SDK installs `window.onerror` + `unhandledrejection` → `vesper:crash:report` | None — errors propagate in the page as usual |
+| Frontend JS errors | SDK installs `window.onerror` + `unhandledrejection` → `crash:report` | None — errors propagate in the page as usual |
 
 ---
 

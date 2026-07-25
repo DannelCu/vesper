@@ -43,10 +43,15 @@ class DatabasePlugin(VesperPlugin):
         - SQLite:     "sqlite:///myapp.db"   (no extra driver needed)
         - PostgreSQL: "postgresql://user:pass@localhost/db"  (pip install psycopg2-binary)
         - MySQL:      "mysql+pymysql://user:pass@localhost/db"  (pip install pymysql)
+
+    Pass create_tables=False to skip the automatic Base.metadata.create_all() —
+    for production apps managing schema with Alembic instead:
+        DatabasePlugin(url="postgresql://...", create_tables=False)
     """
 
-    def __init__(self, *, url: str) -> None:
+    def __init__(self, *, url: str, create_tables: bool = True) -> None:
         self._url = url
+        self._create_tables = create_tables
 
     def register(self, app) -> None:
         try:
@@ -68,7 +73,8 @@ class DatabasePlugin(VesperPlugin):
 
         # All models inheriting from Base are already imported by the time
         # App() is constructed (Python imports happen at module load time).
-        Base.metadata.create_all(engine)
+        if self._create_tables:
+            Base.metadata.create_all(engine)
 
         # scoped_session gives each thread its own session proxy.
         # IPC calls run on the calling thread, so each call gets an isolated session.

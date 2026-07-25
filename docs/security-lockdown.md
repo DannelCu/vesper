@@ -9,8 +9,62 @@ vesper.security.lockdown()
 ```
 
 Opt-in, and **skipped in development** — reload is exactly what you want while
-building. Detection is via the dev server URL, so `vesper dev` never locks down and a
-production build always does.
+building.
+
+## Detecting development vs. production
+
+`vesper init` scaffolds the right call for each template automatically — you rarely
+need to think about this — but it is worth understanding what actually decides "dev"
+from "production," because getting it wrong means shipping a build that never locks
+down, or a dev build that fights you with no reload.
+
+**Framework templates (React/Vue/Svelte, Vite-based).** The scaffolded `main.jsx` /
+`main.js` checks `import.meta.env.DEV` — Vite's own build-time flag, `true` under
+`vesper dev` and `false` in a production `vite build`, with zero configuration:
+
+```js
+if (!import.meta.env.DEV) {
+  window.vesper.security.lockdown()
+}
+```
+
+This is the reliable signal for these templates. It is *not* the same thing as
+`lockdown()`'s own built-in runtime heuristic (below) — the scaffolded code decides
+whether to call `lockdown()` at all, rather than relying on `lockdown()` to detect dev
+mode by itself.
+
+**Vanilla template.** `vesper dev`'s server injects `window.VESPER_DEV_URL` into every
+served page, and `lockdown()` checks that global directly — see below. Calling
+`lockdown()` unconditionally is safe here; there is no `import.meta.env` without a
+bundler.
+
+## `lockdown()`'s own runtime heuristic — and its one sharp edge
+
+Without a `force` option, `lockdown()` skips locking down when it thinks it is running
+under `vesper dev`. It checks, in order: `window.VESPER_DEV_URL` (set by the vanilla
+dev server), then the page's own origin — `http://` or `https://` on `localhost` or
+`127.0.0.1`.
+
+That second check is a heuristic, and it has exactly one failure mode worth knowing:
+**`App(serve_frontend=True)`** (used for SPA routing, relative `fetch()`, or ES modules
+in production — see [project-config.md](project-config.md)) serves your *production*
+build from `http://127.0.0.1:<port>` too — indistinguishable from `vesper dev` by
+origin alone. An app using `serve_frontend=True` that relies only on `lockdown()`'s
+default heuristic will never actually lock down in production.
+
+The fix is the same `import.meta.env.DEV` check already described above — decide
+whether to call `lockdown()` yourself, and pass `force: true` so `lockdown()` doesn't
+re-apply its own (in this case wrong) heuristic on top:
+
+```js
+if (!import.meta.env.DEV) {
+  window.vesper.security.lockdown({ force: true })
+}
+```
+
+`force: true` on its own, with no surrounding check, would also lock down under
+`vesper dev` for a framework template, since `window.VESPER_DEV_URL` is a vanilla-only
+signal — always pair it with the `import.meta.env.DEV` check for Vite-based apps.
 
 ## What each flag disables
 

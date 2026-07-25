@@ -27,7 +27,7 @@ def dev_server(tmp_path):
     # The file a traversal is trying to reach, one level above the served root.
     (tmp_path / "secret.txt").write_text("TOP SECRET")
 
-    server = http.server.HTTPServer(("localhost", 0), _make_dev_handler(frontend, [0]))
+    server = http.server.HTTPServer(("localhost", 0), _make_dev_handler(frontend, [0], [0]))
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
@@ -133,6 +133,52 @@ def test_percent_encoded_space_in_filename_is_served(dev_server):
     status, body = _raw_get(server, "/my%20file.css")
     assert status == 200
     assert b"body{}" in body
+
+
+# ── security.lockdown() dev-detection ────────────────────────────────────────
+#
+# vesper.js's security.lockdown() checks window.VESPER_DEV_URL to decide it is
+# running under `vesper dev` and should skip locking down. That global was
+# never actually injected into the page — nothing set it, so the check was
+# always false and lockdown fell back entirely to a hostname heuristic that
+# also matches App(serve_frontend=True) in production. These tests prove the
+# vanilla dev server now injects the real value.
+
+
+def test_dev_server_injects_vesper_dev_url(tmp_path):
+    from vesper.commands.dev import _start_dev_server
+
+    (tmp_path / "index.html").write_text("<body>hello</body>")
+    server, _version = _start_dev_server(tmp_path)
+    try:
+        status, body = _raw_get(server, "/")
+        assert status == 200
+        port = server.server_address[1]
+        assert f'window.VESPER_DEV_URL = "http://localhost:{port}"'.encode() in body
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_dev_server_vesper_dev_url_precedes_reload_script(tmp_path):
+    """
+    Both injected snippets land before </body>, and in this order — not load-
+    bearing for correctness, just documents the actual output shape.
+    """
+    from vesper.commands.dev import _start_dev_server
+
+    (tmp_path / "index.html").write_text("<body>hello</body>")
+    server, _version = _start_dev_server(tmp_path)
+    try:
+        _status, body = _raw_get(server, "/")
+        dev_url_pos = body.find(b"VESPER_DEV_URL")
+        reload_pos = body.find(b"__vesper_dev")
+        assert dev_url_pos != -1
+        assert reload_pos != -1
+        assert dev_url_pos < reload_pos
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 # ── Exit ─────────────────────────────────────────────────────────────────────

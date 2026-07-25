@@ -71,12 +71,21 @@ def _get_frontend_mtimes(frontend_dir: Path) -> dict[Path, float]:
 # ─── Vanilla dev server ───────────────────────────────────────────────────────
 
 
-def _make_dev_handler(frontend_dir: Path, version: list[int]) -> type:
+def _make_dev_handler(frontend_dir: Path, version: list[int], port: list[int]) -> type:
     # The serving/confinement logic lives in core.static_server, shared with the
     # production localhost mode; this only adds what is dev-specific — the version
     # endpoint the reload poller hits and the script injection itself.
+    #
+    # window.VESPER_DEV_URL is what security.lockdown() (vesper/sdk/vesper.js)
+    # checks to skip locking down in development. `port` is a mutable one-item
+    # list, same trick as `version`: the handler class is built before the
+    # server binds and learns its ephemeral port, so the value is filled in
+    # afterward and read here lazily, per request.
     def _inject_reload(content: bytes) -> bytes:
-        return content.replace(b"</body>", _RELOAD_SCRIPT + b"</body>", 1)
+        dev_globals = (
+            f'<script>window.VESPER_DEV_URL = "http://localhost:{port[0]}";</script>'
+        ).encode()
+        return content.replace(b"</body>", dev_globals + _RELOAD_SCRIPT + b"</body>", 1)
 
     return make_static_handler(
         frontend_dir,
@@ -87,14 +96,16 @@ def _make_dev_handler(frontend_dir: Path, version: list[int]) -> type:
 
 def _start_dev_server(frontend_dir: Path) -> tuple[http.server.HTTPServer, list[int]]:
     version: list[int] = [0]
+    port: list[int] = [0]
     # Threaded for the same reason as the production server (see
     # core.static_server.start): one idle connection — which WebKit opens as a
     # matter of course — parks a single-threaded server inside readline() forever,
     # so serve_forever never sees the shutdown request and `vesper dev` hangs on
     # exit instead of returning to the shell.
     server = http.server.ThreadingHTTPServer(
-        ("localhost", 0), _make_dev_handler(frontend_dir, version)
+        ("localhost", 0), _make_dev_handler(frontend_dir, version, port)
     )
+    port[0] = server.server_address[1]
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server, version
 

@@ -356,9 +356,9 @@ def open_library(path: str) -> dict:
 
     if HAS_WATCH:
         # Refresh on change instead of making the user press a button. The
-        # plugin emits vesper:fs:changed; the frontend re-indexes on it.
+        # plugin emits fs:changed; the frontend re-indexes on it.
         app.ipc.handle({
-            "id": "watch", "command": "vesper:fs:watch",
+            "id": "watch", "command": "fs:watch",
             "args": {"path": str(root), "recursive": False},
         })
 
