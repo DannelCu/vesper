@@ -237,6 +237,46 @@ def test_windows_resume_fires_again_after_the_window(monkeypatch):
     assert backend._is_duplicate_resume(power.RESUME) is False
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="creates a real Win32 window")
+def test_windows_pump_creates_and_tears_down_a_real_window():
+    """
+    A real round trip, not a mock: every ctypes call in _pump() carries at least
+    one pointer-width handle (module or window), and an undeclared argtype lets
+    ctypes silently mis-marshal those as a 32-bit int. That only breaks once a
+    handle's value lands above 2 GiB, so a mock that hands back a small fake
+    handle can never catch it — only creating a real window does.
+    """
+    backend = power._WindowsPowerEvents(lambda e: None)
+
+    assert backend.start() is True
+    assert backend._hwnd
+
+    backend.stop()
+    backend._thread.join(timeout=2)
+    assert not backend._thread.is_alive()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="creates a real Win32 window")
+def test_windows_pump_can_restart_in_the_same_process():
+    """
+    DestroyWindow (implicit in the default WM_CLOSE handling) does not
+    unregister the window class. Without an explicit UnregisterClassW, a
+    second start() in the same process fails outright with
+    ERROR_CLASS_ALREADY_EXISTS — exactly what happens the moment a real app
+    stops and restarts power monitoring, or when this backend is exercised by
+    more than one test in the same pytest run.
+    """
+    first = power._WindowsPowerEvents(lambda e: None)
+    assert first.start() is True
+    first.stop()
+    first._thread.join(timeout=2)
+
+    second = power._WindowsPowerEvents(lambda e: None)
+    assert second.start() is True
+    second.stop()
+    second._thread.join(timeout=2)
+
+
 # ── Linux D-Bus signal mapping ────────────────────────────────────────────────
 
 
@@ -355,9 +395,6 @@ def _run_receive(messages):
     assert not thread.is_alive()
 
     return events
-
-
-pytest.importorskip("jeepney")
 
 
 @needs_jeepney

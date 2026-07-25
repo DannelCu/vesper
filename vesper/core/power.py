@@ -459,6 +459,40 @@ class _WindowsPowerEvents:
 
         user32 = ctypes.windll.user32
         wtsapi32 = ctypes.windll.wtsapi32
+        kernel32 = ctypes.windll.kernel32
+
+        # Every one of these calls carries at least one pointer-width value (a
+        # module or window handle). Left undeclared, ctypes assumes a 32-bit C
+        # int for both arguments and return values, which silently corrupts
+        # those handles and overflows the moment one lands above 2 GiB — which
+        # is where ASLR routinely places a module's base address on x64.
+        kernel32.GetModuleHandleW.restype = wintypes.HMODULE
+        kernel32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
+        user32.RegisterClassW.restype = wintypes.ATOM
+        user32.RegisterClassW.argtypes = [ctypes.POINTER(_WNDCLASS)]
+        user32.CreateWindowExW.restype = wintypes.HWND
+        user32.CreateWindowExW.argtypes = [
+            wintypes.DWORD, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD,
+            ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+            wintypes.HWND, wintypes.HMENU, wintypes.HINSTANCE, wintypes.LPVOID,
+        ]
+        user32.DefWindowProcW.restype = ctypes.c_longlong
+        user32.DefWindowProcW.argtypes = [
+            wintypes.HWND, ctypes.c_uint, wintypes.WPARAM, wintypes.LPARAM,
+        ]
+        user32.GetMessageW.argtypes = [
+            ctypes.POINTER(_MSG), wintypes.HWND, ctypes.c_uint, ctypes.c_uint,
+        ]
+        user32.TranslateMessage.argtypes = [ctypes.POINTER(_MSG)]
+        user32.DispatchMessageW.restype = ctypes.c_longlong
+        user32.DispatchMessageW.argtypes = [ctypes.POINTER(_MSG)]
+        user32.PostMessageW.argtypes = [
+            wintypes.HWND, ctypes.c_uint, wintypes.WPARAM, wintypes.LPARAM,
+        ]
+        wtsapi32.WTSRegisterSessionNotification.argtypes = [wintypes.HWND, wintypes.DWORD]
+        wtsapi32.WTSUnRegisterSessionNotification.argtypes = [wintypes.HWND]
+        user32.PostQuitMessage.argtypes = [ctypes.c_int]
+        user32.UnregisterClassW.argtypes = [wintypes.LPCWSTR, wintypes.HINSTANCE]
 
         proc_type = ctypes.WINFUNCTYPE(
             ctypes.c_longlong, wintypes.HWND, ctypes.c_uint,
@@ -466,6 +500,12 @@ class _WindowsPowerEvents:
         )
 
         def wndproc(hwnd, msg, wparam, lparam):
+            # DefWindowProcW destroys the window on WM_CLOSE but never quits the
+            # message loop on its own — without PostQuitMessage, GetMessageW
+            # blocks forever and stop() leaks this thread.
+            if msg == _WM_DESTROY:
+                user32.PostQuitMessage(0)
+                return 0
             event = _windows_event_for(msg, wparam)
             if event is not None and not self._is_duplicate_resume(event):
                 self._dispatch(event)
@@ -476,41 +516,50 @@ class _WindowsPowerEvents:
         wndclass = _WNDCLASS()
         wndclass.lpfnWndProc = self._wndproc
         wndclass.lpszClassName = "VesperPowerEvents"
-        wndclass.hInstance = ctypes.windll.kernel32.GetModuleHandleW(None)
+        wndclass.hInstance = kernel32.GetModuleHandleW(None)
 
         atom = user32.RegisterClassW(ctypes.byref(wndclass))
         if not atom:
             _warn_once("win-power-class", "Could not register power event window class")
             return
 
-        hwnd = user32.CreateWindowExW(
-            0, atom, "VesperPowerEvents", 0, 0, 0, 0, 0,
-            _HWND_MESSAGE, None, wndclass.hInstance, None,
-        )
-        if not hwnd:
-            _warn_once("win-power-window", "Could not create power event window")
-            return
-
-        self._hwnd = hwnd
-        # Power broadcasts reach every window for free; session change does not.
-        if not wtsapi32.WTSRegisterSessionNotification(hwnd, _NOTIFY_FOR_THIS_SESSION):
-            _warn_once(
-                "win-session-notify",
-                "Session lock/unlock unavailable; suspend/resume still active",
-            )
-
-        self._started = True
-        self._ready.set()
-
-        msg = _MSG()
-        while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
-            user32.TranslateMessage(ctypes.byref(msg))
-            user32.DispatchMessageW(ctypes.byref(msg))
-
         try:
-            wtsapi32.WTSUnRegisterSessionNotification(hwnd)
-        except Exception:
-            logger.debug("Could not unregister session notification")
+            # A class registered by atom is created by casting that atom to a
+            # class-name pointer (MAKEINTATOM), not by passing the atom as an int.
+            hwnd = user32.CreateWindowExW(
+                0, ctypes.cast(atom, wintypes.LPCWSTR), "VesperPowerEvents", 0,
+                0, 0, 0, 0, _HWND_MESSAGE, None, wndclass.hInstance, None,
+            )
+            if not hwnd:
+                _warn_once("win-power-window", "Could not create power event window")
+                return
+
+            self._hwnd = hwnd
+            # Power broadcasts reach every window for free; session change does not.
+            if not wtsapi32.WTSRegisterSessionNotification(hwnd, _NOTIFY_FOR_THIS_SESSION):
+                _warn_once(
+                    "win-session-notify",
+                    "Session lock/unlock unavailable; suspend/resume still active",
+                )
+
+            self._started = True
+            self._ready.set()
+
+            msg = _MSG()
+            while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+                user32.TranslateMessage(ctypes.byref(msg))
+                user32.DispatchMessageW(ctypes.byref(msg))
+
+            try:
+                wtsapi32.WTSUnRegisterSessionNotification(hwnd)
+            except Exception:
+                logger.debug("Could not unregister session notification")
+        finally:
+            # DestroyWindow (implicit in DefWindowProcW's WM_CLOSE handling)
+            # does not unregister the class. Leaving it registered means the
+            # *next* start() in this process fails outright with
+            # ERROR_CLASS_ALREADY_EXISTS, even after this window is long gone.
+            user32.UnregisterClassW(ctypes.cast(atom, wintypes.LPCWSTR), wndclass.hInstance)
 
     def _is_duplicate_resume(self, event: str) -> bool:
         """Collapse the RESUMEAUTOMATIC/RESUMESUSPEND pair into one resume."""

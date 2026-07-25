@@ -29,7 +29,8 @@ progress bar appears.
 | `fs.trash` (macOS) | Which command is built | Finder scripting needs automation permission, unavailable in CI |
 | `autostart` (Windows / macOS) | Real `enable → is_enabled → disable` round trip | Whether the OS acts on it at login |
 | `power` events (Linux) | Signal mapping, and a real D-Bus round trip for lock/unlock | A real suspend, which would suspend the runner |
-| `power` events (Windows / macOS) | Signal mapping only, against mocks | Whether the OS delivers the message at all |
+| `power` events (Windows) | Signal mapping, and a real window-creation/class-registration/message-loop round trip | Whether the OS actually delivers a broadcast message |
+| `power` events (macOS) | Signal mapping only, against mocks | Whether the OS delivers the message at all |
 | `window_effects.set_backdrop` (mica) | The DwmSetWindowAttribute call built, version gating, degradation | Whether the material visibly renders on a real Windows 11 machine |
 | `package --installer` (dmg / deb) | hdiutil/dpkg-deb command construction, control/.desktop content, staging layout | Mounting the dmg / installing the deb on a real system |
 | vesper-notify (rich notifications) | The desktop-notifier call built, event wiring for click/action callbacks | The visible bubble, and real click delivery — which on macOS additionally requires a signed bundle |

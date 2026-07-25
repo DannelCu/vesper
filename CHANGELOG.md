@@ -271,6 +271,25 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Windows power events (`power_events=True`) crashed on startup instead of
+  degrading, on any process where a loaded module's base address landed above
+  2 GiB — routine under ASLR.** `_WindowsPowerEvents._pump()` called
+  `GetModuleHandleW`, `CreateWindowExW`, `DefWindowProcW` and friends through
+  ctypes without declaring `argtypes`/`restype`; left undeclared, ctypes
+  assumes every handle is a 32-bit C int, and marshalling a real pointer-width
+  handle into that raised `ctypes.ArgumentError: OverflowError: int too long
+  to convert`, taking the message loop down. Fixed by declaring the real
+  Win32 prototypes for every call in `_pump()`. Two more real bugs surfaced
+  once window creation actually succeeded, both invisible to the existing
+  mock-only tests: the window procedure never called `PostQuitMessage` on
+  `WM_DESTROY`, so `stop()` left the message-loop thread running forever; and
+  the window class was never unregistered, so a second `start()` in the same
+  process (a restart, or two apps in one interpreter) failed outright with
+  `ERROR_CLASS_ALREADY_EXISTS`. Also removed a stray module-level
+  `pytest.importorskip("jeepney")` in `tests/test_power_events.py` that was
+  silently skipping the entire file — including the Windows and macOS tests —
+  on every CI run, on every platform, since CI never installs jeepney.
+
 *The ones below were found by building `examples/ops-console` (the module system, DI,
 guards and middleware, exercised for the first time) and a full documentation
 accuracy pass across every `docs/*.md`, `docs/recipes/*.md`, and plugin `README.md`
