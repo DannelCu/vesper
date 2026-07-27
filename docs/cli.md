@@ -1,6 +1,6 @@
 # CLI Reference
 
-All Vesper commands are run via the `vesper` executable installed with `pip install vesper`.
+All Vesper commands are run via the `vesper` executable installed with `pip install vesper-desktop`.
 
 ---
 

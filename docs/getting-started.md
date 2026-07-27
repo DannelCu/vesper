@@ -14,8 +14,8 @@ This guide walks you through installing Vesper, creating your first project, and
 ### System WebView
 
 Vesper renders your UI in the operating system's native WebView rather than bundling a
-browser. That runtime comes from the OS, not from pip, so `pip install vesper` can
-succeed on a machine that still cannot open a window.
+browser. That runtime comes from the OS, not from pip, so `pip install vesper-desktop`
+can succeed on a machine that still cannot open a window.
 
 **macOS** — nothing to install. The Cocoa/WKWebView backend ships with the system.
 
@@ -52,8 +52,11 @@ Run `vesper doctor` at any point to confirm which backend resolved on your machi
 ## Install Vesper
 
 ```bash
-pip install vesper
+pip install vesper-desktop
 ```
+
+The distribution is `vesper-desktop` (the name `vesper` is taken on PyPI by another
+project); everything you `import` still starts with `import vesper`.
 
 Verify the installation:
 

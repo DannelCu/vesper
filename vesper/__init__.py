@@ -38,7 +38,7 @@ from vesper.exceptions.errors import (
 
 try:
     from importlib.metadata import version as _v
-    __version__ = _v("vesper")
+    __version__ = _v("vesper-desktop")
 except Exception:
     __version__ = "0.1.0"
 

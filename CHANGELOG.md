@@ -9,138 +9,78 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Added
+### Planned
+- PyPI publish — `vesper-desktop` and all 13 plugins. Packaging and metadata are
+  fully prepared (see [docs/releasing.md](docs/releasing.md)); the actual
+  `twine upload` is the maintainer's manual step.
+- Example apps (`examples/`) — todo, file manager, data dashboard
+- `vesper upgrade` CLI command
+- `vesper-sqlite` plugin — sqlite3 stdlib wrapper without ORM
+- `vesper-pdf` plugin — PDF generation via reportlab/weasyprint
+- `vesper-excel` plugin — Excel/CSV export via openpyxl
 
-**Examples**
+---
 
-- **[examples/media-vault](examples/media-vault/)** — a media library with an in-app
-  video player, built to make two points concrete. First: seeking needs HTTP byte
-  ranges, so a `<video>` on `file://` has a dead scrub bar and one on the production
-  localhost server does not. Second: a WebView plays *web* formats, so a `.avi` the
-  user can see in their file manager will not play — the app indexes it anyway and
-  converts it on demand with ffmpeg, with live progress, rather than hiding the file.
-  Also covers the scoped filesystem API, a real `ShellScope` allowlist over
-  ffprobe/ffmpeg, taskbar progress, keep-awake and suspend handling, multi-window,
-  splash, single-instance and the file clipboard. Runs with no optional dependency
-  installed: without ffmpeg there are no thumbnails, unplayable formats say so instead
-  of offering a dead button, and a banner explains why.
-- **[examples/launcher](examples/launcher/)** — a Spotlight-style command bar, built
-  for the shell a launcher needs and a normal window does not: frameless and
-  transparent with a hand-built drag region (`easy_drag=False` + `data-vesper-drag`,
-  so the search field stays typeable), always-on-top, dropped onto the active screen
-  with the positioner, hidden to the tray and summoned by a global hotkey. Carries a
-  calculator that evaluates a user-typed string **without `eval()`** — a tokeniser and
-  the shunting-yard algorithm, since in a desktop app `eval` hands the process holding
-  your filesystem bridge to whatever was typed — and a 2048 game. Runs with none of
-  its four optional pieces: each missing one greys out its command with the reason,
-  and with neither tray nor hotkey the window minimizes instead of hiding, so it can
-  never strand itself off-screen with nothing to summon it.
-- **[examples/ops-console](examples/ops-console/)** — a local-machine monitoring
-  panel and the only example built around the module system: four domain modules
-  (`auth`, `metrics`, `processes`, `alerts`), each with its own `@Controller` and
-  injected `@Injectable` services, wired through `@Module` and a real cross-module DI
-  edge (`AlertsService` injects the same `MetricsService` instance the dashboard
-  reads from). Role-based guards gate process termination and threshold changes, with
-  the frontend distinguishing a policy denial from a guard bug from the command's own
-  failure. Also: live metrics over events, a real psutil-backed process table with a
-  right-click menu (the context-menu recipe, since PyWebView has none — KI2), a
-  detached process-detail window, threshold alerts with notifications and a taskbar
-  badge, a deep link routed through single-instance, and an IPC middleware panel —
-  which surfaced a real gap between `docs/recipes/logging-middleware.md`'s documented
-  3-argument `(command, args, next)` signature and what `IPC.handle()` actually calls
-  (`(command, args)`, no `next`), written up in
-  `examples/ops-console/modules/common/telemetry.py`. React + Vite, the only example
-  with a Node toolchain — exercises `sync-sdk` and `sync-types` for the first time.
-  Runs with none of its five optional plugins installed.
-- **[examples/README.md](examples/README.md)** — an index of the examples, with what
-  each one demonstrates and who should read it first.
+## [0.1.0] - 2026-07-27
 
-**Recipes and known issues (documentation of what Vesper cannot do — yet)**
+First complete release of the Vesper framework, published to PyPI as
+`vesper-desktop` with its 13 official plugins. Covers the full lifecycle from
+scaffolding to packaging, signing, auto-updating, and now distributing a desktop
+app.
 
-- **[Playing Video](docs/recipes/video-playback.md)** — why `.avi`, `.wmv` and friends
-  refuse to play in a Vesper window: the UI is a WebView, so it plays what browsers
-  play, and container and codec each have to be supported (which is why an H.265 `.mp4`
-  fails too). Covers the reliable formats, the extra GStreamer wrinkle on Linux, why
-  filtering unplayable files out of your UI is the wrong answer, and the pattern that
-  is the right one — index everything, mark what is `web_playable`, transcode the rest
-  on demand with `-movflags +faststart` so the converted copy still seeks, cache it,
-  and report progress from ffmpeg's own `-progress` stream. Explains why this is a
-  recipe and not a core API: it would put an external binary behind a core call, and
-  caching and quality policy are product decisions.
-- **[Asking the User for Text](docs/recipes/text-input.md)** — there is no native
-  text-input dialog (KI7), so this is the `<dialog>`-based pattern that replaces it:
-  focus trapping, Escape-to-cancel and top-layer rendering for free, identical on all
-  three platforms, plus the server-side validation the frontend's answer still needs.
-- **CONTRIBUTING.md — the two rules that decide the hard cases.** The four-level tree
-  listed the levels but not how to choose between them. Code-only work now goes in the
-  **core** unless owning it would be overkill (a `<dialog>` prompt is markup inside the
-  app's page; `fs.copy()` has one correct implementation). And the tree must be worked
-  *down*: needing a dependency is a reason to write a plugin, never a reason to call
-  something impossible — a `KNOWN-ISSUES.md` entry has to say why recipe and plugin
-  were both ruled out. **KI6** (jump lists, dock menus) is reclassified under that
-  rule: it needs `comtypes`/`pyobjc`, which makes it a plugin, not an impossibility.
+### Added — Core Framework
 
-- **[Printing recipe](docs/recipes/printing.md)** — `window.print()` on all three
-  platforms with engine differences and `@media print` guidance; print-to-PDF via
-  the system dialog (Microsoft Print to PDF / Save as PDF / cups-pdf per distro);
-  programmatic PDFs as an app-level Python decision. Silent printing is
-  impossible today → KI4.
-- **[Camera & Microphone recipe](docs/recipes/media-capture.md)** — the manual
-  per-platform configuration that maximises `getUserMedia`'s odds (macOS
-  Info.plist keys + entitlements + signed bundle, Windows privacy toggles and
-  origin persistence, Linux GStreamer packages and distro-build caveats), plus
-  the JS detection/fallback pattern. Explicitly honest: it improves odds, it
-  cannot guarantee them → KI5.
-- **KNOWN-ISSUES KI1–KI6** — six linkable entries for what is genuinely
-  impossible today, all sharing one root cause (PyWebView owns the engine
-  objects and does not surface these APIs) and one unblocker (upstream
-  exposure): drag-out (KI1), native context menus (KI2), custom protocols /
-  request interception (KI3, with the localhost server as the pragmatic
-  substitute), programmatic printing (KI4), the media permission handler (KI5),
-  and jump lists / dock menus / recent documents (KI6 — the one with no
-  three-platform workaround, hence no recipe).
-- The existing drag-out and context-menus recipes now state their place in the
-  philosophy and link to KI1/KI2; the CI coverage table gained rows for every
-  new native-touching area (file clipboard, mica, installers, rich
-  notifications, screenshots, serial, frameless).
-
-**Plugins (external dependencies, isolated behind plugin boundaries)**
-
-- **vesper-watch** — file watching via watchdog. `vesper.watch.watch(path, {
-  recursive, debounce, onChange })` streams `created|modified|deleted|moved`
-  events; watched paths honour the app's `fs_scope`, observers stop at app
-  close, and bursts are debounced. README covers the inotify watch limit.
-- **vesper-notify** — rich notifications via desktop-notifier: click callbacks,
-  action buttons, custom icon and sound (`vesper.notifyRich.send`). The core's
-  minimal `vesper.notify()` is untouched as the fallback, and
-  `capabilities().notifications` now reports which backend is active. README
-  documents the macOS constraint: callbacks require a signed bundle.
-- **vesper-crash** — error reporting via sentry-sdk. Captures IPC command
-  exceptions (through the new `IPC.on_error` observation hook — the frontend
-  receives the identical error response), unhandled Python exceptions (chained
-  `sys.excepthook`), and frontend JS errors (`window.onerror` /
-  `unhandledrejection` bridged over `vesper:crash:report`). Privacy-first: no
-  DSN → silent no-op; no PII, no breadcrumbs, no automatic integrations, and
-  the README states exactly what an event contains.
-- **vesper-screenshot** — screen capture via mss: full screen, monitor N, or a
-  region, as a PNG data URL or written to a scope-validated path. Wayland and
-  the macOS Screen Recording permission degrade with explanatory errors, and
-  the new `screenshot` capability reports them in `vesper doctor` (Wayland as
-  N/A — nothing to install).
-- **vesper-serial** — serial ports via pyserial: `listPorts`, multiple
-  simultaneous connections with ids, streamed `vesper:serial:data` events,
-  write, close (plus a `closed` event on unplug). CI exercises the full path
-  against `loop://`; README covers Linux `dialout` per distro and Windows
-  drivers.
-- **vesper-sysinfo** — system information via psutil: CPU, memory, disks,
-  network counters, battery, uptime; on-demand snapshot plus a tick
-  subscription that stops cleanly at app close (no orphan threads).
-- **`IPC.on_error(fn)`** — a core observation hook for exceptions raised in
-  commands, guards and middleware (not policy denials). Zero-dependency, added
-  so error-reporting plugins can observe failures without wrapping the pipeline;
-  the error response the frontend receives is unchanged.
-
-**Core (zero new dependencies)**
+- **`App`** — single entry point: `@app.command`, `@app.middleware`, `@app.on(event)`,
+  `app.emit()`, `app.notify()`, `app.tray()`, `app.menu()`, `app.splash()`,
+  `app.register_window()`, `app.register_module()`, `app.add_teardown()`, `app.quit()`
+- **`IPC`** — bidirectional bridge between JS and Python. Validates args against the
+  Python function signature (missing/unexpected args → `ValidationError`) before
+  running guards or the command. Returns `{id, ok, result}` / `{id, ok, error}`.
+  Async commands dispatched via `asyncio.run_coroutine_threadsafe` on a dedicated loop.
+- **`CommandRegistry`** — `dict[str, Callable]` with `CommandAlreadyRegisteredError` on
+  duplicate registration and `CommandNotFoundError` on miss.
+- **`Window` / `WindowHandle`** — wraps PyWebView. `VESPER_DEV_URL` env var switches to
+  HTTP dev server. Secondary windows start hidden; shown via `WindowHandle.show()`.
+- **`WindowConfig`** — `@dataclass(slots=True)` that validates window parameters at
+  construction. File existence check deferred to `Window.create()`.
+- **Guards** (`@guard`) — per-command or per-controller access control. Stacking prepends
+  (outermost first). Sync and async. `ForbiddenError` on rejection.
+- **Middleware** (`@app.middleware`) — wraps every IPC call. Sync and async. Shared by
+  reference so registration after `IPC` construction is visible.
+- **Module system** — `@Module`, `@Controller(prefix, guards=[])`, `@Injectable()`,
+  `@command`, `Container`. IoC container resolves singletons by `__init__` type hints.
+  `Container.register_global()` for plugin-injected providers.
+- **Multi-window** — `app.register_window()` returns `WindowHandle`. All windows share
+  the IPC registry. Dev mode uses `{VESPER_DEV_URL}/{basename}` for secondary windows.
+- **Lifecycle hooks** — `@app.on("loaded" | "closed" | "resize" | "deeplink")`
+- **System tray** — `app.tray(icon, menu, title)`, `TrayMenuItem`. Requires `vesper[tray]`.
+- **Native menu bar** — `app.menu(items)`, `MenuItem(label, action, submenu)`. Converted
+  to PyWebView `Menu`/`MenuAction`/`MenuSeparator`.
+- **Splash screen** — `app.splash(html, width, height)`. Frameless window dismissed on
+  main window `loaded` event.
+- **Window controls** — `minimize()`, `maximize()`, `restore()`, `toggle_fullscreen()`,
+  `resize(w, h)`, `move(x, y)`, `list_screens()`. Exposed as `vesper:window:*` and
+  `vesper:screen:list` IPC built-ins.
+- **Native notifications** — `app.notify(title, body)`. PowerShell on Windows, osascript
+  on macOS, notify-send on Linux. Fire-and-forget daemon thread.
+- **Shell integration** — `vesper:shell:open_url` (webbrowser), `vesper:shell:reveal`
+  (Explorer/Finder/xdg-open). Exposed as `vesper.shell.*` in JS.
+- **Clipboard** — `vesper:clipboard:read/write`. PowerShell / pbpaste / xclip.
+  Exposed as `vesper.clipboard.*` in JS.
+- **OS info** — `vesper:os:info` returns `{platform, version, machine, python_version}`.
+  Exposed as `vesper.os.info()` in JS.
+- **Deep linking** — `sys.argv` inspection at `App.__init__`. Custom `deeplink` hook fires
+  on `loaded`. `vesper register-protocol` CLI command for OS registration.
+- **Built-in filesystem API** — `vesper:fs:read/write/exists/list`. `write` creates parent
+  dirs automatically. `list` sorts dirs-first. Exposed as `vesper.fs.*` in JS.
+- **Native file dialogs** — `vesper:dialog:open/save/folder`. Filter format:
+  `[{name, extensions}]` converted to PyWebView tuples. Exposed as `vesper.dialog.*` in JS.
+- **Auto-updates** — `App(update_url, version)`. Manifest JSON with per-platform URLs.
+  `vesper:update:check/download/install`. Install: `os.execv` on POSIX, bat swap on Windows.
+- **`VesperPlugin` ABC** — `register(app)`, `sdk_path()`. Plugins run before `root_module`.
+  `add_teardown(fn)` for per-call cleanup (runs in `finally`).
+- **`vesper.js` SDK** — `invoke`, `on`, `dialog.*`, `notify`, `fs.*`, `shell.*`,
+  `clipboard.*`, `window.*`, `screen.list()`, `os.info()`, `quit()`, `drop.onFiles()`.
 
 - **`process.run(on_output=…)`** — stream a command's stdout line by line while it
   runs, instead of getting everything at the end. A transcode or a build can now report
@@ -236,7 +176,7 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   fallback to the legacy MSHTML (IE11) renderer is now reported as a failure instead of
   surfacing later as broken CSS and JavaScript.
 - **`CONTRIBUTING.md`** — development setup, per-platform WebView prerequisites, editable
-  install of the framework and all seven plugins, test conventions, and repository layout.
+  install of the framework and all 13 plugins, test conventions, and repository layout.
 - **Window smoke test (`scripts/smoke_window.py`)** — opens a real native window, has the
   frontend invoke a Python command over IPC, and verifies the returned value. The unit
   suite mocks PyWebView, so it passed on machines that could not open a window at all;
@@ -268,6 +208,227 @@ Vesper adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Opt-in and best-effort: an absent optional dependency or a desktop that publishes
   nothing degrades to no events, never to an error. See [docs/power.md](docs/power.md)
   for the per-platform table.
+- **`IPC.on_error(fn)`** — a core observation hook for exceptions raised in
+  commands, guards and middleware (not policy denials). Zero-dependency, added
+  so error-reporting plugins can observe failures without wrapping the pipeline;
+  the error response the frontend receives is unchanged.
+
+### Added — CLI
+
+- `vesper init` — interactive wizard + direct flags. Templates: vanilla, react, vue, svelte.
+  Styles: none, bootstrap, tailwind. Bundlers: pyinstaller, nuitka. PMs: npm, pnpm, yarn.
+- `vesper dev` — vanilla: internal HTTP server + file watcher. Frameworks: Vite subprocess
+  + `VESPER_DEV_URL` handoff.
+- `vesper build` — vanilla: esbuild bundle via `<pm> dlx`. Frameworks: `<pm> run build`.
+- `vesper run` — `runpy.run_path` on the app entrypoint.
+- `vesper package` — PyInstaller (`--windowed --onefile`) or Nuitka (`--standalone --onefile`).
+- `vesper sign` — macOS: `codesign` + optional `xcrun notarytool` notarization.
+  Windows: `signtool.exe` or `osslsigncode` fallback. Config via `[sign]` in `vesper.toml`.
+- `vesper generate` / `vesper g` — scaffold module/controller/service. Auto-creates
+  `app_module.py` on first module.
+- `vesper sync-sdk` — copies `vesper.js` and plugin JS SDKs to `frontend/` or `public/`.
+- `vesper sync-types` — generates `vesper.d.ts` from registered commands. Filters `vesper:*`
+  built-ins. 5-second timeout to detect unguarded `app.run()`.
+- `vesper doctor` — checks Python, PyWebView, Node.js, PM, vesper.toml schema, entrypoint,
+  frontend structure, SDK script tag.
+- `vesper register-protocol` — registers custom URL scheme. Windows: registry. macOS: plist
+  snippet. Linux: .desktop file + xdg-mime.
+- `vesper info`, `vesper version`, `vesper clean`
+
+- `vesper dev` gained `--no-devtools` (the WebView inspector is on by default
+  otherwise); `vesper package` gained `--installer` for a `.dmg` on macOS or a
+  `.deb` on Debian/Ubuntu.
+
+### Added — Plugins
+
+#### vesper-store 0.1.0
+Persistent JSON key-value store. IPC: `store:get/set/delete/has/keys/clear`.
+JS: `vesper.store.*`. Storage in OS app data dir.
+
+#### vesper-db 0.1.0
+SQLAlchemy ORM integration. `Base`, `DbSession` (injectable `scoped_session`),
+`DatabasePlugin(url)`. `create_all()` at registration. `session.remove()` as teardown hook.
+Supports SQLite (including `:memory:` with `StaticPool`), PostgreSQL, MySQL.
+
+#### vesper-http 0.1.0
+HTTP proxy via httpx. Solves CORS in WebView. `HttpClient` injectable. IPC:
+`http:get/post/put/patch/delete`. JS: `vesper.http.*`. Response: `{status, headers, body}`.
+
+#### vesper-keychain 0.1.0
+OS keychain via keyring. `Keychain` injectable. IPC: `keychain:get/set/delete/has`.
+JS: `vesper.keychain.*`. Backends: Windows Credential Manager, macOS Keychain,
+Linux Secret Service.
+
+#### vesper-mongodb 0.1.0
+MongoDB via PyMongo. `MongoDatabase` injectable. IPC: `mongo:find/find_one/insert_one/
+insert_many/update_one/update_many/delete_one/delete_many/count`. JS: `vesper.mongo.*`.
+`ObjectId` auto-serialized to `str` in all responses.
+
+#### vesper-shortcuts 0.1.0
+Global keyboard shortcuts via pynput. Active when app is not focused. IPC:
+`vesper:shortcuts:register/unregister/unregister_all`. JS: `vesper.shortcuts.*`.
+Fires `shortcut` event with `{accelerator}` payload.
+
+#### vesper-theme 0.1.0
+OS dark/light mode via darkdetect. `watch=True` starts daemon thread and emits
+`theme:change` event on mode switch. IPC: `vesper:theme:get`. JS: `vesper.theme.*`.
+
+#### vesper-watch 0.1.0
+File watching via watchdog. `vesper.watch.watch(path, { recursive, debounce,
+onChange })` streams `created|modified|deleted|moved` events. Watched paths honour
+the app's `fs_scope`; observers stop at app close; bursts are debounced.
+
+#### vesper-notify 0.1.0
+Rich notifications via desktop-notifier: click callbacks, action buttons, custom
+icon and sound (`vesper.notifyRich.send`). The core's minimal `vesper.notify()`
+remains as the dependency-free fallback; `capabilities().notifications` reports
+which backend is active. macOS callbacks require a signed bundle.
+
+#### vesper-crash 0.1.0
+Crash reporting via sentry-sdk. Captures IPC command exceptions (via the core's
+`IPC.on_error` hook), unhandled Python exceptions, and frontend JS errors
+(`window.onerror`/`unhandledrejection` bridged to `vesper:crash:report`).
+Privacy-first: no DSN means a silent no-op, no PII, no breadcrumbs, no automatic
+integrations.
+
+#### vesper-screenshot 0.1.0
+Screen capture via mss: full screen, per monitor, or a region, as a PNG data URL
+or written to a scope-validated path. Wayland and the macOS Screen Recording
+permission degrade with explanatory errors, reported through `vesper doctor`.
+
+#### vesper-serial 0.1.0
+Serial port access via pyserial: `listPorts`, multiple simultaneous connections by
+id, streamed `vesper:serial:data` events, write, close (plus a `closed` event on
+unplug). Linux needs the `dialout` group; see the plugin README.
+
+#### vesper-sysinfo 0.1.0
+System information via psutil: CPU, memory, disks, network counters, battery,
+uptime — an on-demand snapshot plus a tick subscription that stops cleanly at app
+close.
+
+### Added — Documentation
+
+- `README.md` — public-facing framework entry point with quickstart, feature list,
+  plugin table, project structure, and links to all docs.
+- `docs/` — 23 guides: getting-started, cli, project-config, ipc, module-system,
+  guards, middleware, events, multiwindow, dialogs, notifications, tray, menu, shell,
+  clipboard, window-controls, splash, deeplink, filesystem, file-transfers,
+  auto-updates, code-signing, plugins, os-theme.
+- `docs/recipes/` — 8 recipes: auth, context-menus, drag-out, state-between-windows,
+  logging-middleware, user-preferences, theming, real-time.
+- `plugins/*/README.md` — individual README for each of the 13 plugins.
+
+**Recipes and known issues (documentation of what Vesper cannot do — yet)**
+
+- **[Playing Video](docs/recipes/video-playback.md)** — why `.avi`, `.wmv` and friends
+  refuse to play in a Vesper window: the UI is a WebView, so it plays what browsers
+  play, and container and codec each have to be supported (which is why an H.265 `.mp4`
+  fails too). Covers the reliable formats, the extra GStreamer wrinkle on Linux, why
+  filtering unplayable files out of your UI is the wrong answer, and the pattern that
+  is the right one — index everything, mark what is `web_playable`, transcode the rest
+  on demand with `-movflags +faststart` so the converted copy still seeks, cache it,
+  and report progress from ffmpeg's own `-progress` stream. Explains why this is a
+  recipe and not a core API: it would put an external binary behind a core call, and
+  caching and quality policy are product decisions.
+- **[Asking the User for Text](docs/recipes/text-input.md)** — there is no native
+  text-input dialog (KI7), so this is the `<dialog>`-based pattern that replaces it:
+  focus trapping, Escape-to-cancel and top-layer rendering for free, identical on all
+  three platforms, plus the server-side validation the frontend's answer still needs.
+- **CONTRIBUTING.md — the two rules that decide the hard cases.** The four-level tree
+  listed the levels but not how to choose between them. Code-only work now goes in the
+  **core** unless owning it would be overkill (a `<dialog>` prompt is markup inside the
+  app's page; `fs.copy()` has one correct implementation). And the tree must be worked
+  *down*: needing a dependency is a reason to write a plugin, never a reason to call
+  something impossible — a `KNOWN-ISSUES.md` entry has to say why recipe and plugin
+  were both ruled out. **KI6** (jump lists, dock menus) is reclassified under that
+  rule: it needs `comtypes`/`pyobjc`, which makes it a plugin, not an impossibility.
+
+- **[Printing recipe](docs/recipes/printing.md)** — `window.print()` on all three
+  platforms with engine differences and `@media print` guidance; print-to-PDF via
+  the system dialog (Microsoft Print to PDF / Save as PDF / cups-pdf per distro);
+  programmatic PDFs as an app-level Python decision. Silent printing is
+  impossible today → KI4.
+- **[Camera & Microphone recipe](docs/recipes/media-capture.md)** — the manual
+  per-platform configuration that maximises `getUserMedia`'s odds (macOS
+  Info.plist keys + entitlements + signed bundle, Windows privacy toggles and
+  origin persistence, Linux GStreamer packages and distro-build caveats), plus
+  the JS detection/fallback pattern. Explicitly honest: it improves odds, it
+  cannot guarantee them → KI5.
+- **KNOWN-ISSUES KI1–KI7** — seven linkable entries for what is genuinely
+  impossible today, all sharing one root cause (PyWebView owns the engine
+  objects and does not surface these APIs) and one unblocker (upstream
+  exposure): drag-out (KI1), native context menus (KI2), custom protocols /
+  request interception (KI3, with the localhost server as the pragmatic
+  substitute), programmatic printing (KI4), the media permission handler (KI5),
+  jump lists / dock menus / recent documents (KI6 — the one with no
+  three-platform workaround, hence no recipe), and no native text-input dialog
+  (KI7, see the recipe above).
+- The existing drag-out and context-menus recipes now state their place in the
+  philosophy and link to KI1/KI2; the CI coverage table gained rows for every
+  new native-touching area (file clipboard, mica, installers, rich
+  notifications, screenshots, serial, frameless).
+
+### Added — Examples
+
+- **[examples/media-vault](examples/media-vault/)** — a media library with an in-app
+  video player, built to make two points concrete. First: seeking needs HTTP byte
+  ranges, so a `<video>` on `file://` has a dead scrub bar and one on the production
+  localhost server does not. Second: a WebView plays *web* formats, so a `.avi` the
+  user can see in their file manager will not play — the app indexes it anyway and
+  converts it on demand with ffmpeg, with live progress, rather than hiding the file.
+  Also covers the scoped filesystem API, a real `ShellScope` allowlist over
+  ffprobe/ffmpeg, taskbar progress, keep-awake and suspend handling, multi-window,
+  splash, single-instance and the file clipboard. Runs with no optional dependency
+  installed: without ffmpeg there are no thumbnails, unplayable formats say so instead
+  of offering a dead button, and a banner explains why.
+- **[examples/launcher](examples/launcher/)** — a Spotlight-style command bar, built
+  for the shell a launcher needs and a normal window does not: frameless and
+  transparent with a hand-built drag region (`easy_drag=False` + `data-vesper-drag`,
+  so the search field stays typeable), always-on-top, dropped onto the active screen
+  with the positioner, hidden to the tray and summoned by a global hotkey. Carries a
+  calculator that evaluates a user-typed string **without `eval()`** — a tokeniser and
+  the shunting-yard algorithm, since in a desktop app `eval` hands the process holding
+  your filesystem bridge to whatever was typed — and a 2048 game. Runs with none of
+  its four optional pieces: each missing one greys out its command with the reason,
+  and with neither tray nor hotkey the window minimizes instead of hiding, so it can
+  never strand itself off-screen with nothing to summon it.
+- **[examples/ops-console](examples/ops-console/)** — a local-machine monitoring
+  panel and the only example built around the module system: four domain modules
+  (`auth`, `metrics`, `processes`, `alerts`), each with its own `@Controller` and
+  injected `@Injectable` services, wired through `@Module` and a real cross-module DI
+  edge (`AlertsService` injects the same `MetricsService` instance the dashboard
+  reads from). Role-based guards gate process termination and threshold changes, with
+  the frontend distinguishing a policy denial from a guard bug from the command's own
+  failure. Also: live metrics over events, a real psutil-backed process table with a
+  right-click menu (the context-menu recipe, since PyWebView has none — KI2), a
+  detached process-detail window, threshold alerts with notifications and a taskbar
+  badge, a deep link routed through single-instance, and an IPC middleware panel —
+  which surfaced a real gap between `docs/recipes/logging-middleware.md`'s documented
+  3-argument `(command, args, next)` signature and what `IPC.handle()` actually calls
+  (`(command, args)`, no `next`), written up in
+  `examples/ops-console/modules/common/telemetry.py`. React + Vite, the only example
+  with a Node toolchain — exercises `sync-sdk` and `sync-types` for the first time.
+  Runs with none of its five optional plugins installed.
+- **[examples/README.md](examples/README.md)** — an index of the examples, with what
+  each one demonstrates and who should read it first.
+
+### Added — Packaging & Distribution
+
+- **`__version__` via `importlib.metadata`**, single source of truth is each
+  package's `pyproject.toml`; falls back to `"0.1.0"` in a non-installed dev
+  environment.
+- **PyPI packaging.** The core distribution is `vesper-desktop` (the bare name
+  `vesper` belongs to another project on PyPI) while the import path is untouched
+  — `import vesper` is unchanged everywhere. All 13 plugins depend on
+  `vesper-desktop>=0.1.0` instead of the bare `"vesper"`, which would otherwise
+  have resolved to the wrong package. Every one of the 14 `pyproject.toml` files
+  carries `readme`, `authors`/`maintainers`, `keywords`, `classifiers`, and
+  `[project.urls]`. The core exposes one optional-dependency extra per plugin
+  (`vesper-desktop[db]`, `[http]`, ...) plus an `all` extra covering every plugin
+  except `vesper-mongodb`, which needs a MongoDB server the extra can't provide.
+  `README.md` and `docs/plugins.md` document both install paths. See
+  [docs/releasing.md](docs/releasing.md) for the maintainer's publish checklist —
+  actual publishing, version bumps, and git tags stay manual.
 
 ### Fixed
 
@@ -535,155 +696,12 @@ against the actual implementation.*
   rate (5/8 runs) under Xvfb before the fix, 0/8 after.
 
 ### Changed
+
 - **Docs — system WebView requirements.** `README.md` and `docs/getting-started.md` now
   document the OS WebView runtime as a first-class requirement, including the Linux
   `--system-site-packages` venv requirement (`python3-gi` is a distribution package that
   pip cannot install) and macOS framework-build caveats. `docs/getting-started.md` gains
   a troubleshooting table for the common startup failures.
-
-### Planned
-- GitHub Actions CI — Windows + macOS + Linux test matrix
-- PyPI publish — `vesper` and all 7 plugins
-- Example apps (`examples/`) — todo, file manager, data dashboard
-- Window state persistence — remember size/position across restarts
-- `vesper upgrade` CLI command
-- `vesper-sqlite` plugin — sqlite3 stdlib wrapper without ORM
-- `vesper-pdf` plugin — PDF generation via reportlab/weasyprint
-- `vesper-excel` plugin — Excel/CSV export via openpyxl
-
----
-
-## [0.1.0] - 2026-07-01
-
-First complete release of the Vesper framework. Covers the full lifecycle from
-scaffolding to packaging, signing, and auto-updating a desktop app.
-
-### Added — Core Framework
-
-- **`App`** — single entry point: `@app.command`, `@app.middleware`, `@app.on(event)`,
-  `app.emit()`, `app.notify()`, `app.tray()`, `app.menu()`, `app.splash()`,
-  `app.register_window()`, `app.register_module()`, `app.add_teardown()`, `app.quit()`
-- **`IPC`** — bidirectional bridge between JS and Python. Validates args against the
-  Python function signature (missing/unexpected args → `ValidationError`) before
-  running guards or the command. Returns `{id, ok, result}` / `{id, ok, error}`.
-  Async commands dispatched via `asyncio.run_coroutine_threadsafe` on a dedicated loop.
-- **`CommandRegistry`** — `dict[str, Callable]` with `CommandAlreadyRegisteredError` on
-  duplicate registration and `CommandNotFoundError` on miss.
-- **`Window` / `WindowHandle`** — wraps PyWebView. `VESPER_DEV_URL` env var switches to
-  HTTP dev server. Secondary windows start hidden; shown via `WindowHandle.show()`.
-- **`WindowConfig`** — `@dataclass(slots=True)` that validates window parameters at
-  construction. File existence check deferred to `Window.create()`.
-- **Guards** (`@guard`) — per-command or per-controller access control. Stacking prepends
-  (outermost first). Sync and async. `ForbiddenError` on rejection.
-- **Middleware** (`@app.middleware`) — wraps every IPC call. Sync and async. Shared by
-  reference so registration after `IPC` construction is visible.
-- **Module system** — `@Module`, `@Controller(prefix, guards=[])`, `@Injectable()`,
-  `@command`, `Container`. IoC container resolves singletons by `__init__` type hints.
-  `Container.register_global()` for plugin-injected providers.
-- **Multi-window** — `app.register_window()` returns `WindowHandle`. All windows share
-  the IPC registry. Dev mode uses `{VESPER_DEV_URL}/{basename}` for secondary windows.
-- **Lifecycle hooks** — `@app.on("loaded" | "closed" | "resize" | "deeplink")`
-- **System tray** — `app.tray(icon, menu, title)`, `TrayMenuItem`. Requires `vesper[tray]`.
-- **Native menu bar** — `app.menu(items)`, `MenuItem(label, action, submenu)`. Converted
-  to PyWebView `Menu`/`MenuAction`/`MenuSeparator`.
-- **Splash screen** — `app.splash(html, width, height)`. Frameless window dismissed on
-  main window `loaded` event.
-- **Window controls** — `minimize()`, `maximize()`, `restore()`, `toggle_fullscreen()`,
-  `resize(w, h)`, `move(x, y)`, `list_screens()`. Exposed as `vesper:window:*` and
-  `vesper:screen:list` IPC built-ins.
-- **Native notifications** — `app.notify(title, body)`. PowerShell on Windows, osascript
-  on macOS, notify-send on Linux. Fire-and-forget daemon thread.
-- **Shell integration** — `vesper:shell:open_url` (webbrowser), `vesper:shell:reveal`
-  (Explorer/Finder/xdg-open). Exposed as `vesper.shell.*` in JS.
-- **Clipboard** — `vesper:clipboard:read/write`. PowerShell / pbpaste / xclip.
-  Exposed as `vesper.clipboard.*` in JS.
-- **OS info** — `vesper:os:info` returns `{platform, version, machine, python_version}`.
-  Exposed as `vesper.os.info()` in JS.
-- **Deep linking** — `sys.argv` inspection at `App.__init__`. Custom `deeplink` hook fires
-  on `loaded`. `vesper register-protocol` CLI command for OS registration.
-- **Built-in filesystem API** — `vesper:fs:read/write/exists/list`. `write` creates parent
-  dirs automatically. `list` sorts dirs-first. Exposed as `vesper.fs.*` in JS.
-- **Native file dialogs** — `vesper:dialog:open/save/folder`. Filter format:
-  `[{name, extensions}]` converted to PyWebView tuples. Exposed as `vesper.dialog.*` in JS.
-- **Auto-updates** — `App(update_url, version)`. Manifest JSON with per-platform URLs.
-  `vesper:update:check/download/install`. Install: `os.execv` on POSIX, bat swap on Windows.
-- **`VesperPlugin` ABC** — `register(app)`, `sdk_path()`. Plugins run before `root_module`.
-  `add_teardown(fn)` for per-call cleanup (runs in `finally`).
-- **`vesper.js` SDK** — `invoke`, `on`, `dialog.*`, `notify`, `fs.*`, `shell.*`,
-  `clipboard.*`, `window.*`, `screen.list()`, `os.info()`, `quit()`, `drop.onFiles()`.
-
-### Added — CLI
-
-- `vesper init` — interactive wizard + direct flags. Templates: vanilla, react, vue, svelte.
-  Styles: none, bootstrap, tailwind. Bundlers: pyinstaller, nuitka. PMs: npm, pnpm, yarn.
-- `vesper dev` — vanilla: internal HTTP server + file watcher. Frameworks: Vite subprocess
-  + `VESPER_DEV_URL` handoff.
-- `vesper build` — vanilla: esbuild bundle via `<pm> dlx`. Frameworks: `<pm> run build`.
-- `vesper run` — `runpy.run_path` on the app entrypoint.
-- `vesper package` — PyInstaller (`--windowed --onefile`) or Nuitka (`--standalone --onefile`).
-- `vesper sign` — macOS: `codesign` + optional `xcrun notarytool` notarization.
-  Windows: `signtool.exe` or `osslsigncode` fallback. Config via `[sign]` in `vesper.toml`.
-- `vesper generate` / `vesper g` — scaffold module/controller/service. Auto-creates
-  `app_module.py` on first module.
-- `vesper sync-sdk` — copies `vesper.js` and plugin JS SDKs to `frontend/` or `public/`.
-- `vesper sync-types` — generates `vesper.d.ts` from registered commands. Filters `vesper:*`
-  built-ins. 5-second timeout to detect unguarded `app.run()`.
-- `vesper doctor` — checks Python, PyWebView, Node.js, PM, vesper.toml schema, entrypoint,
-  frontend structure, SDK script tag.
-- `vesper register-protocol` — registers custom URL scheme. Windows: registry. macOS: plist
-  snippet. Linux: .desktop file + xdg-mime.
-- `vesper info`, `vesper version`, `vesper clean`
-
-### Added — Plugins
-
-#### vesper-store 0.1.0
-Persistent JSON key-value store. IPC: `store:get/set/delete/has/keys/clear`.
-JS: `vesper.store.*`. Storage in OS app data dir.
-
-#### vesper-db 0.1.0
-SQLAlchemy ORM integration. `Base`, `DbSession` (injectable `scoped_session`),
-`DatabasePlugin(url)`. `create_all()` at registration. `session.remove()` as teardown hook.
-Supports SQLite (including `:memory:` with `StaticPool`), PostgreSQL, MySQL.
-
-#### vesper-http 0.1.0
-HTTP proxy via httpx. Solves CORS in WebView. `HttpClient` injectable. IPC:
-`http:get/post/put/patch/delete`. JS: `vesper.http.*`. Response: `{status, headers, body}`.
-
-#### vesper-keychain 0.1.0
-OS keychain via keyring. `Keychain` injectable. IPC: `keychain:get/set/delete/has`.
-JS: `vesper.keychain.*`. Backends: Windows Credential Manager, macOS Keychain,
-Linux Secret Service.
-
-#### vesper-mongodb 0.1.0
-MongoDB via PyMongo. `MongoDatabase` injectable. IPC: `mongo:find/find_one/insert_one/
-insert_many/update_one/update_many/delete_one/delete_many/count`. JS: `vesper.mongo.*`.
-`ObjectId` auto-serialized to `str` in all responses.
-
-#### vesper-shortcuts 0.1.0
-Global keyboard shortcuts via pynput. Active when app is not focused. IPC:
-`vesper:shortcuts:register/unregister/unregister_all`. JS: `vesper.shortcuts.*`.
-Fires `shortcut` event with `{accelerator}` payload.
-
-#### vesper-theme 0.1.0
-OS dark/light mode via darkdetect. `watch=True` starts daemon thread and emits
-`theme:change` event on mode switch. IPC: `vesper:theme:get`. JS: `vesper.theme.*`.
-
-### Added — Documentation
-
-- `README.md` — public-facing framework entry point with quickstart, feature list,
-  plugin table, project structure, and links to all docs.
-- `docs/` — 23 guides: getting-started, cli, project-config, ipc, module-system,
-  guards, middleware, events, multiwindow, dialogs, notifications, tray, menu, shell,
-  clipboard, window-controls, splash, deeplink, filesystem, file-transfers,
-  auto-updates, code-signing, plugins, os-theme.
-- `docs/recipes/` — 8 recipes: auth, context-menus, drag-out, state-between-windows,
-  logging-middleware, user-preferences, theming, real-time.
-- `plugins/*/README.md` — individual README for each of the 7 plugins.
-
-### Added — Versioning
-
-- `__version__` via `importlib.metadata` in `vesper` and all 7 plugins. Single source
-  of truth is `pyproject.toml`. Fallback `"0.1.0"` for non-installed dev environments.
 
 ---
 

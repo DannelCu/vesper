@@ -63,7 +63,9 @@ code · tests · `docs/<topic>.md` · SDK namespace in `vesper/sdk/vesper.js` ·
 - ANSI output must degrade: no TTY, or `NO_COLOR` set → plain text.
 
 ## Don't
-- Publish to PyPI, tag releases, or bump versions — the maintainer does that.
+- Preparing packaging and metadata (`pyproject.toml`, classifiers, extras, a local
+  `python -m build`) is in scope. **Publishing** — `twine upload`, tagging a
+  release, or bumping a version number — is not: the maintainer does that by hand.
 - Put merely-unfinished work in `KNOWN-ISSUES.md`; that's backlog, not a known
   issue.
 - Fix things you weren't asked to fix. Report them instead.

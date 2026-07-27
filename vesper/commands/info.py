@@ -11,7 +11,7 @@ from vesper.commands.utils import find_entrypoint, get_installed_version
 def info() -> None:
     current_directory = Path.cwd()
 
-    vesper_version = get_installed_version("vesper") or "not installed"
+    vesper_version = get_installed_version("vesper-desktop") or "not installed"
     pywebview_version = get_installed_version("pywebview") or "not installed"
     python_version = ".".join(str(part) for part in sys.version_info[:3])
     platform_name = platform.platform()

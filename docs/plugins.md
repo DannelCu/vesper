@@ -4,6 +4,42 @@ Plugins extend Vesper with additional capabilities. Each plugin is a separate pi
 
 ---
 
+## Installing a plugin
+
+Two equivalent paths. Standalone — the plugin depends on `vesper-desktop` and pulls it in:
+
+```bash
+pip install vesper-db
+```
+
+Or as a core extra, one `pip install` for both:
+
+```bash
+pip install "vesper-desktop[db]"
+```
+
+`vesper-desktop[all]` installs every plugin below except `vesper-mongodb` (it needs a
+MongoDB server the extra can't provide) — install that one directly, or combine:
+`pip install "vesper-desktop[all]" vesper-mongodb`.
+
+| Plugin | Standalone install | Core extra |
+|---|---|---|
+| `vesper-store` | `pip install vesper-store` | `vesper-desktop[store]` |
+| `vesper-db` | `pip install vesper-db` | `vesper-desktop[db]` |
+| `vesper-http` | `pip install vesper-http` | `vesper-desktop[http]` |
+| `vesper-keychain` | `pip install vesper-keychain` | `vesper-desktop[keychain]` |
+| `vesper-mongodb` | `pip install vesper-mongodb` | `vesper-desktop[mongodb]` (excluded from `[all]`) |
+| `vesper-shortcuts` | `pip install vesper-shortcuts` | `vesper-desktop[shortcuts]` |
+| `vesper-theme` | `pip install vesper-theme` | `vesper-desktop[theme]` |
+| `vesper-watch` | `pip install vesper-watch` | `vesper-desktop[watch]` |
+| `vesper-notify` | `pip install vesper-notify` | `vesper-desktop[notify]` |
+| `vesper-crash` | `pip install vesper-crash` | `vesper-desktop[crash]` |
+| `vesper-screenshot` | `pip install vesper-screenshot` | `vesper-desktop[screenshot]` |
+| `vesper-serial` | `pip install vesper-serial` | `vesper-desktop[serial]` |
+| `vesper-sysinfo` | `pip install vesper-sysinfo` | `vesper-desktop[sysinfo]` |
+
+---
+
 ## Using a plugin
 
 Install the plugin:

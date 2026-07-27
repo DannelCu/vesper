@@ -255,7 +255,7 @@ def doctor() -> None:
     )
     has_failures = has_failures or not python_ok
 
-    vesper_version = get_installed_version("vesper")
+    vesper_version = get_installed_version("vesper-desktop")
     vesper_ok = vesper_version is not None
     print_check(
         vesper_ok,

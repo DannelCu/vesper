@@ -6,14 +6,37 @@ build-backend = "setuptools.build_meta"
 name = "vesper-theme"
 version = "0.1.0"
 description = "OS dark/light mode detection plugin for Vesper — react to system theme changes from Python and JavaScript"
+readme = "README.md"
 requires-python = ">=3.10"
-authors = [{ name = "DannelCu" }]
+authors = [{ name = "Dannel D. Ramos", email = "danneldavidr@gmail.com" }]
+maintainers = [{ name = "Dannel D. Ramos", email = "danneldavidr@gmail.com" }]
 license = "MIT"
+keywords = ["vesper", "dark-mode", "theme", "darkdetect", "desktop"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Topic :: Desktop Environment",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+]
 
 dependencies = [
-  "vesper",
+  "vesper-desktop>=0.1.0",
   "darkdetect>=0.8",
 ]
+
+[project.urls]
+Homepage = "https://github.com/DannelCu/vesper"
+Repository = "https://github.com/DannelCu/vesper"
+Documentation = "https://github.com/DannelCu/vesper/tree/main/plugins/vesper-theme#readme"
+Issues = "https://github.com/DannelCu/vesper/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]

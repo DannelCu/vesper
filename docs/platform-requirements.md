@@ -1,9 +1,10 @@
 # Platform Requirements
 
 Vesper renders through the operating system's **native WebView**. This is the one
-dependency that cannot be fixed from Python: `pip install vesper` pulls in pywebview,
-which is pure Python and does not install any renderer. Without the platform runtime
-below, the framework installs cleanly and then fails the moment a window opens.
+dependency that cannot be fixed from Python: `pip install vesper-desktop` pulls in
+pywebview, which is pure Python and does not install any renderer. Without the
+platform runtime below, the framework installs cleanly and then fails the moment a
+window opens.
 
 Everything else Vesper touches is optional and degrades to a no-op — see
 [Optional Features](optional-features.md). This page is about the part that does not.

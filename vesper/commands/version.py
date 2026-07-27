@@ -10,7 +10,7 @@ def version() -> None:
     Print the installed Vesper version.
     """
 
-    vesper_version = get_installed_version("vesper") or "unknown"
+    vesper_version = get_installed_version("vesper-desktop") or "unknown"
     print(f"Vesper {vesper_version}")
 
 

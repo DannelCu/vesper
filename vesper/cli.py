@@ -20,7 +20,7 @@ from vesper.commands.version import add_version_parser, handle_version
 
 
 def build_parser() -> argparse.ArgumentParser:
-    vesper_version = get_installed_version("vesper") or "unknown"
+    vesper_version = get_installed_version("vesper-desktop") or "unknown"
 
     parser = argparse.ArgumentParser(
         prog="vesper",

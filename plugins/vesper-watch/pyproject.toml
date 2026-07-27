@@ -6,14 +6,37 @@ build-backend = "setuptools.build_meta"
 name = "vesper-watch"
 version = "0.1.0"
 description = "File watching plugin for Vesper — emit fs change events to the frontend via watchdog"
+readme = "README.md"
 requires-python = ">=3.10"
-authors = [{ name = "DannelCu" }]
+authors = [{ name = "Dannel D. Ramos", email = "danneldavidr@gmail.com" }]
+maintainers = [{ name = "Dannel D. Ramos", email = "danneldavidr@gmail.com" }]
 license = "MIT"
+keywords = ["vesper", "file-watching", "watchdog", "filesystem", "desktop"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Topic :: Software Development :: Libraries",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+]
 
 dependencies = [
-  "vesper",
+  "vesper-desktop>=0.1.0",
   "watchdog>=3.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/DannelCu/vesper"
+Repository = "https://github.com/DannelCu/vesper"
+Documentation = "https://github.com/DannelCu/vesper/tree/main/plugins/vesper-watch#readme"
+Issues = "https://github.com/DannelCu/vesper/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -3,24 +3,81 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "vesper"
+name = "vesper-desktop"
 version = "0.1.0"
 description = "A lightweight Python-first desktop framework inspired by Tauri"
 readme = "README.md"
 requires-python = ">=3.10"
-authors = [{ name = "DannelCu" }]
+authors = [{ name = "Dannel D. Ramos", email = "danneldavidr@gmail.com" }]
+maintainers = [{ name = "Dannel D. Ramos", email = "danneldavidr@gmail.com" }]
 license = "MIT"
+keywords = ["desktop", "gui", "webview", "pywebview", "framework", "ipc", "cross-platform"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Topic :: Software Development :: Libraries :: Application Frameworks",
+  "Topic :: Desktop Environment",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+]
 
 dependencies = [
   "pywebview>=4.0",
   "packaging>=21"
 ]
 
+[project.urls]
+Homepage = "https://github.com/DannelCu/vesper"
+Repository = "https://github.com/DannelCu/vesper"
+Documentation = "https://github.com/DannelCu/vesper/tree/main/docs"
+Issues = "https://github.com/DannelCu/vesper/issues"
+
 [project.optional-dependencies]
 tray = ["pystray>=0.19", "Pillow>=9.0"]
 # fs.trash() falls back to platform tools without this, but send2trash handles the
 # trash specifications properly — including the metadata that makes restore work.
 trash = ["send2trash>=1.8"]
+
+# One extra per first-party plugin, so `pip install vesper-desktop[db,http]` pulls
+# the core and those plugins together. Each plugin is also installable on its own
+# (`pip install vesper-db`) — these extras are convenience, not the only path.
+store = ["vesper-store>=0.1.0"]
+db = ["vesper-db>=0.1.0"]
+http = ["vesper-http>=0.1.0"]
+keychain = ["vesper-keychain>=0.1.0"]
+mongodb = ["vesper-mongodb>=0.1.0"]
+shortcuts = ["vesper-shortcuts>=0.1.0"]
+theme = ["vesper-theme>=0.1.0"]
+watch = ["vesper-watch>=0.1.0"]
+notify = ["vesper-notify>=0.1.0"]
+crash = ["vesper-crash>=0.1.0"]
+screenshot = ["vesper-screenshot>=0.1.0"]
+serial = ["vesper-serial>=0.1.0"]
+sysinfo = ["vesper-sysinfo>=0.1.0"]
+
+# All plugins except vesper-mongodb, which needs a MongoDB server the extra can't
+# provide — installing it alone would be a no-op dependency with no working backend.
+all = [
+  "vesper-store>=0.1.0",
+  "vesper-db>=0.1.0",
+  "vesper-http>=0.1.0",
+  "vesper-keychain>=0.1.0",
+  "vesper-shortcuts>=0.1.0",
+  "vesper-theme>=0.1.0",
+  "vesper-watch>=0.1.0",
+  "vesper-notify>=0.1.0",
+  "vesper-crash>=0.1.0",
+  "vesper-screenshot>=0.1.0",
+  "vesper-serial>=0.1.0",
+  "vesper-sysinfo>=0.1.0",
+]
 
 [project.scripts]
 vesper = "vesper.cli:main"

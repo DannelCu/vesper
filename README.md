@@ -209,23 +209,38 @@ Everything beyond the WebView is optional and degrades to a no-op when absent �
 
 ## Installation
 
+The core distribution is `vesper-desktop` on PyPI (the name `vesper` was already
+taken) — everything you `import` still starts with `import vesper`.
+
 ```bash
-pip install vesper
+pip install vesper-desktop
 ```
 
 With system tray support:
 
 ```bash
-pip install "vesper[tray]"
+pip install "vesper-desktop[tray]"
 ```
 
-Installing plugins:
+Each of the 13 official plugins is its own package, so it can be installed on its
+own:
 
 ```bash
 pip install vesper-store vesper-db vesper-http vesper-keychain vesper-mongodb
 pip install vesper-shortcuts vesper-theme
 pip install vesper-watch vesper-notify vesper-crash vesper-screenshot vesper-serial vesper-sysinfo
 ```
+
+Or pulled in alongside the core through an extra named after the plugin, one
+`pip install` for both:
+
+```bash
+pip install "vesper-desktop[db,http]"
+```
+
+`vesper-desktop[all]` installs every plugin except `vesper-mongodb`, which needs a
+MongoDB server the extra can't provide on its own — install that one directly. See
+[Plugins](docs/plugins.md) for the full list and which extra includes each one.
 
 ---
 

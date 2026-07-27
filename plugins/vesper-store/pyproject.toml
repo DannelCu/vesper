@@ -6,8 +6,33 @@ build-backend = "hatchling.build"
 name = "vesper-store"
 version = "0.1.0"
 description = "Persistent key-value store plugin for Vesper"
+readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["vesper"]
+authors = [{ name = "Dannel D. Ramos", email = "danneldavidr@gmail.com" }]
+maintainers = [{ name = "Dannel D. Ramos", email = "danneldavidr@gmail.com" }]
+license = "MIT"
+keywords = ["vesper", "key-value-store", "persistence", "json", "desktop"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Topic :: Software Development :: Libraries",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+]
+dependencies = ["vesper-desktop>=0.1.0"]
+
+[project.urls]
+Homepage = "https://github.com/DannelCu/vesper"
+Repository = "https://github.com/DannelCu/vesper"
+Documentation = "https://github.com/DannelCu/vesper/tree/main/plugins/vesper-store#readme"
+Issues = "https://github.com/DannelCu/vesper/issues"
 
 [tool.hatch.build.targets.wheel]
 include = ["vesper_store/**"]
