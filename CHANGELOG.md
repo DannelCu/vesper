@@ -82,6 +82,22 @@ app.
 - **`vesper.js` SDK** — `invoke`, `on`, `dialog.*`, `notify`, `fs.*`, `shell.*`,
   `clipboard.*`, `window.*`, `screen.list()`, `os.info()`, `quit()`, `drop.onFiles()`.
 
+- **`vesper init app --typescript` (alias `--ts`)** — scaffold the React, Vue, or
+  Svelte template in TypeScript: `.tsx`/`.ts` sources, `tsconfig.json` (plus
+  `tsconfig.node.json` for `vite.config.ts`), and a `src/vite-env.d.ts` typing
+  `window.vesper`'s base surface so the generated boilerplate type-checks with no
+  manual setup. JavaScript stays the default — the flag is opt-in, the wizard's new
+  language step defaults to JavaScript, and a plain JS project's `vesper.toml` is
+  unchanged (`language = "ts"` is only written for the TypeScript choice; its absence
+  means JS). `vanilla` has no build step, so the flag is a no-op there with an
+  explanation rather than a silent ignore or a hard failure. Vue type-checks via
+  `vue-tsc`, Svelte via `svelte-check`, both matching each framework's own tooling.
+  Each `tsconfig.json` already covers `src`, so `vesper sync-types`'s generated
+  `src/types/vesper.d.ts` needs no further wiring — `vesper.invoke(...)` is typed and
+  autocompleted the moment `sync-types` has run once. In fixing this, corrected a
+  latent bug in the Vue "none" style template: `:style="{outer}"` (object shorthand,
+  wrapping the value under an `outer` key) instead of `:style="outer"` — JS silently
+  dropped the invalid style key at runtime, `vue-tsc` does not.
 - **`process.run(on_output=…)`** — stream a command's stdout line by line while it
   runs, instead of getting everything at the end. A transcode or a build can now report
   progress rather than looking frozen; the full stdout is still captured and returned,

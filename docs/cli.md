@@ -20,6 +20,7 @@ vesper init app --template react --pm pnpm        # non-interactive; name/styles
 |---|---|---|
 | `--name` | any string | `my-vesper-app` |
 | `--template` | `vanilla`, `react`, `vue`, `svelte` | `vanilla` |
+| `--typescript`, `--ts` | flag | JavaScript (flag absent) |
 | `--styles` | `none`, `bootstrap`, `tailwind` | `none` |
 | `--bundler` | `pyinstaller`, `nuitka` | `pyinstaller` |
 | `--pm`, `--package-manager` | `npm`, `pnpm`, `yarn` | `npm` |
@@ -30,11 +31,33 @@ its default above, it is not prompted individually. `vesper init app --name "my-
 does not stop to ask about the template, styles, bundler, or package manager; it
 silently picks vanilla/none/pyinstaller/npm for them.
 
+**TypeScript**
+
+`--typescript` (alias `--ts`) generates the React, Vue, or Svelte template in
+TypeScript instead of JavaScript. JavaScript stays the default either way — the flag
+must be passed explicitly, and the interactive wizard's language step also defaults to
+JavaScript. The `vanilla` template has no build step, so TypeScript doesn't apply to
+it; passing `--typescript` with `--template vanilla` prints an explanation and
+continues in JavaScript rather than failing.
+
+The choice is recorded as `language = "ts"` under `[project]` in `vesper.toml`. Its
+absence means JavaScript — a plain JS project's `vesper.toml` has no `language` key at
+all, so existing projects and tooling that read this file need no changes.
+
+Each TypeScript variant ships a `tsconfig.json` (plus `tsconfig.node.json` for
+`vite.config.ts`) that already includes `src`, so `vesper sync-types`'s generated
+`src/types/vesper.d.ts` is picked up with no further configuration — see
+[vesper sync-types](#vesper-sync-types) below. Vue uses `vue-tsc` and Svelte uses
+`svelte-check` for type-checking, matching each framework's own tooling; React's
+`npm run build` type-checks via `tsc`.
+
 **Generated files**
 
 Vanilla: `app.py`, `vesper.toml`, `frontend/index.html`, `frontend/vesper.js`, `frontend/vesper-icon-dark.svg` (or `-light.svg` with `--styles bootstrap`)
 
-React/Vue/Svelte: `app.py`, `vesper.toml`, `package.json`, `vite.config.js`, `index.html`, `public/vesper.js`, `public/vesper-icon-*.svg`, `public/{react,vue,svelte}-logo.svg`, `public/vite-logo.svg`, `src/App.*`, `src/main.*`
+React/Vue/Svelte (JavaScript): `app.py`, `vesper.toml`, `package.json`, `vite.config.js`, `index.html`, `public/vesper.js`, `public/vesper-icon-*.svg`, `public/{react,vue,svelte}-logo.svg`, `public/vite-logo.svg`, `src/App.*`, `src/main.*`
+
+React/Vue/Svelte (`--typescript`): the same, plus `tsconfig.json`, `tsconfig.node.json`, `src/vite-env.d.ts`, with `vite.config.ts`/`src/main.ts(x)`/`src/App.tsx` in place of their `.js`/`.jsx` counterparts (`src/App.vue` and `src/App.svelte` keep their extension; only their `<script>` tag gains `lang="ts"`). Svelte also gets `svelte.config.js`.
 
 ---
 
@@ -185,6 +208,12 @@ Output:
 Built-in `vesper:*` commands are filtered from the output. Python type hints are used where present; parameters without annotations fall back to `unknown`.
 
 Run this after adding or removing commands.
+
+In a project scaffolded with `--typescript`, `src/types/vesper.d.ts` is already covered
+by `tsconfig.json`'s `include` — there is nothing to wire up. Writing
+`vesper.invoke('yourCommand', ...)` anywhere under `src` is type-checked and
+autocompleted against the current command registry as soon as `sync-types` has run
+once.
 
 ---
 

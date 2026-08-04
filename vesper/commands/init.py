@@ -48,6 +48,12 @@ SUPPORTED_PACKAGE_MANAGERS = {
     "yarn",
 }
 
+# Framework templates only — vanilla has no build step, so TypeScript doesn't apply.
+SUPPORTED_LANGUAGES = {
+    "js",
+    "ts",
+}
+
 
 # ─── Validation ──────────────────────────────────────────────────────────────
 
@@ -109,6 +115,22 @@ def validate_bundler(bundler: str) -> str:
     return normalized
 
 
+def validate_language(language: str) -> str:
+    normalized = language.strip().lower()
+
+    if normalized not in SUPPORTED_LANGUAGES:
+        print(f"Unsupported language: {language}")
+        print("")
+        print("Available languages:")
+
+        for lang in sorted(SUPPORTED_LANGUAGES):
+            print(f"  - {lang}")
+
+        raise SystemExit(1)
+
+    return normalized
+
+
 # ─── vesper.toml ─────────────────────────────────────────────────────────────
 
 
@@ -120,6 +142,7 @@ def create_vesper_toml(
     styles: str,
     bundler: str,
     package_manager: str = "npm",
+    language: str = "js",
 ) -> None:
     content = (
         f"[project]\n"
@@ -129,6 +152,11 @@ def create_vesper_toml(
         f'bundler = "{bundler}"\n'
         f'package_manager = "{package_manager}"\n'
     )
+
+    # Absence means JS — only written for the non-default so a plain JS
+    # scaffold's vesper.toml stays byte-for-byte what it was before TS existed.
+    if language != "js":
+        content += f'language = "{language}"\n'
 
     (app_dir / "vesper.toml").write_text(content, encoding="utf-8")
 
@@ -181,6 +209,20 @@ def run_wizard() -> dict:
 
         print("")
 
+        language = "js"
+
+        if template != "vanilla":
+            language = _prompt(
+                "Language:",
+                "js",
+                {
+                    "1": ("js", "JavaScript"),
+                    "2": ("ts", "TypeScript"),
+                },
+            )
+
+            print("")
+
         styles = _prompt(
             "Styles:",
             "none",
@@ -224,6 +266,7 @@ def run_wizard() -> dict:
     return {
         "name": name,
         "template": template,
+        "language": language,
         "styles": styles,
         "package_manager": package_manager,
         "bundler": bundler,
@@ -499,6 +542,51 @@ def create_vanilla_app(name: str, *, styles: str, bundler: str, package_manager:
 # ─── Vite shared helpers ─────────────────────────────────────────────────────
 
 
+def create_tsconfig_node_json() -> str:
+    """tsconfig covering vite.config.ts — editor-only, not part of the build script."""
+    config = {
+        "compilerOptions": {
+            "composite": True,
+            "skipLibCheck": True,
+            "module": "ESNext",
+            "moduleResolution": "bundler",
+            "allowSyntheticDefaultImports": True,
+            "strict": True,
+        },
+        "include": ["vite.config.ts"],
+    }
+    return json.dumps(config, indent=2) + "\n"
+
+
+def create_vite_env_dts(*, extra_reference: str | None = None) -> str:
+    """
+    Ambient types every TS template needs immediately, before `vesper sync-types`
+    has ever run: `import.meta.env` (Vite) and `window.vesper` (the SDK script tag
+    has no package to ship its own .d.ts from). Declared on the `Window` interface
+    rather than as a bare global const so it can never collide with the bare
+    `declare const vesper` that `sync-types` writes to src/types/vesper.d.ts —
+    that file is for the app's own commands; this one is for the SDK's base surface.
+    """
+    references = ['/// <reference types="vite/client" />']
+    if extra_reference:
+        references.insert(0, f'/// <reference types="{extra_reference}" />')
+
+    return "\n".join(references) + """
+
+export {}
+
+declare global {
+  interface Window {
+    vesper: {
+      invoke(command: string, args?: Record<string, unknown>): Promise<unknown>
+      on(event: string, handler: (detail: unknown) => void): () => void
+      security: { lockdown(): void }
+    }
+  }
+}
+"""
+
+
 def create_vite_index_html(name: str, *, entry: str, mount_id: str) -> str:
     return f"""\
 <!DOCTYPE html>
@@ -522,7 +610,7 @@ def create_vite_index_html(name: str, *, entry: str, mount_id: str) -> str:
 # ─── React template ──────────────────────────────────────────────────────────
 
 
-def create_react_package_json(name: str, styles: str) -> str:
+def create_react_package_json(name: str, styles: str, typescript: bool = False) -> str:
     dependencies: dict = {
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
@@ -539,21 +627,52 @@ def create_react_package_json(name: str, styles: str) -> str:
         dev_dependencies["tailwindcss"] = "^4.0.0"
         dev_dependencies["@tailwindcss/vite"] = "^4.0.0"
 
+    scripts = {
+        "dev": "vite",
+        "build": "vite build",
+        "preview": "vite preview",
+    }
+
+    if typescript:
+        dev_dependencies["typescript"] = "^5.4.0"
+        dev_dependencies["@types/react"] = "^18.2.66"
+        dev_dependencies["@types/react-dom"] = "^18.2.22"
+        scripts["build"] = "tsc && vite build"
+        scripts["type-check"] = "tsc --noEmit"
+
     package = {
         "name": name,
         "version": "0.1.0",
         "private": True,
         "type": "module",
-        "scripts": {
-            "dev": "vite",
-            "build": "vite build",
-            "preview": "vite preview",
-        },
+        "scripts": scripts,
         "dependencies": dependencies,
         "devDependencies": dev_dependencies,
     }
 
     return json.dumps(package, indent=2) + "\n"
+
+
+def create_react_tsconfig_json() -> str:
+    config = {
+        "compilerOptions": {
+            "target": "ES2020",
+            "useDefineForClassFields": True,
+            "lib": ["ES2020", "DOM", "DOM.Iterable"],
+            "module": "ESNext",
+            "skipLibCheck": True,
+            "moduleResolution": "bundler",
+            "allowImportingTsExtensions": True,
+            "resolveJsonModule": True,
+            "isolatedModules": True,
+            "noEmit": True,
+            "jsx": "react-jsx",
+            "strict": True,
+        },
+        "include": ["src"],
+        "references": [{"path": "./tsconfig.node.json"}],
+    }
+    return json.dumps(config, indent=2) + "\n"
 
 
 def create_react_vite_config(styles: str) -> str:
@@ -580,7 +699,9 @@ export default defineConfig({
 """
 
 
-def create_react_main_jsx(styles: str) -> str:
+def create_react_main_jsx(styles: str, typescript: bool = False) -> str:
+    ext = "tsx" if typescript else "jsx"
+
     lines = [
         "import { StrictMode } from 'react'",
         "import { createRoot } from 'react-dom/client'",
@@ -591,9 +712,14 @@ def create_react_main_jsx(styles: str) -> str:
     else:
         lines.append("import './index.css'")
 
-    lines.append("import App from './App.jsx'")
+    lines.append(f"import App from './App.{ext}'")
 
-    return "\n".join(lines) + """
+    # TypeScript's strictNullChecks makes getElementById's return type
+    # `HTMLElement | null` — the `!` tells it the mount point is guaranteed
+    # to exist, matching how every other Vite + React + TS template does this.
+    mount = "document.getElementById('root')!" if typescript else "document.getElementById('root')"
+
+    return "\n".join(lines) + f"""
 
 // Turns off browser affordances (reload, find, right-click menu, zoom) so the
 // app feels native rather than like a page in a browser. import.meta.env.DEV
@@ -602,11 +728,11 @@ def create_react_main_jsx(styles: str) -> str:
 // covers App(serve_frontend=True), which security.lockdown()'s own runtime
 // heuristic cannot distinguish from `vesper dev` by hostname alone).
 // See docs/security-lockdown.md.
-if (!import.meta.env.DEV) {
+if (!import.meta.env.DEV) {{
   window.vesper.security.lockdown()
-}
+}}
 
-createRoot(document.getElementById('root')).render(
+createRoot({mount}).render(
   <StrictMode>
     <App />
   </StrictMode>,
@@ -614,9 +740,9 @@ createRoot(document.getElementById('root')).render(
 """
 
 
-def create_react_app_jsx(name: str, styles: str) -> str:
+def create_react_app_jsx(name: str, styles: str, typescript: bool = False) -> str:
     if styles == "none":
-        return f"""\
+        content = f"""\
 import {{ useState }} from 'react'
 
 function App() {{
@@ -668,8 +794,8 @@ function App() {{
 export default App
 """
 
-    if styles == "bootstrap":
-        return f"""\
+    elif styles == "bootstrap":
+        content = f"""\
 import {{ useState }} from 'react'
 
 function App() {{
@@ -710,8 +836,9 @@ function App() {{
 export default App
 """
 
-    # tailwind
-    return f"""\
+    else:
+        # tailwind
+        content = f"""\
 import {{ useState }} from 'react'
 
 function App() {{
@@ -757,8 +884,18 @@ function App() {{
 export default App
 """
 
+    if typescript:
+        content = content.replace("src/App.jsx", "src/App.tsx")
+        content = content.replace("setMessage(result)", "setMessage(result as string)")
+        content = content.replace("setMessage(e.message)", "setMessage((e as Error).message)")
 
-def create_react_app(name: str, *, styles: str, bundler: str, package_manager: str = "npm") -> None:
+    return content
+
+
+def create_react_app(name: str, *, styles: str, bundler: str, package_manager: str = "npm", language: str = "js") -> None:
+    typescript = language == "ts"
+    ext = "tsx" if typescript else "jsx"
+
     app_dir_name = normalize_app_directory_name(name)
     app_dir = Path.cwd() / app_dir_name
     src_dir = app_dir / "src"
@@ -776,23 +913,29 @@ def create_react_app(name: str, *, styles: str, bundler: str, package_manager: s
     _copy_asset(public_dir, "react-logo.svg")
     _copy_asset(public_dir, "vite-logo.svg")
 
-    (app_dir / "package.json").write_text(create_react_package_json(app_dir_name, styles), encoding="utf-8")
-    (app_dir / "vite.config.js").write_text(create_react_vite_config(styles), encoding="utf-8")
+    (app_dir / "package.json").write_text(create_react_package_json(app_dir_name, styles, typescript), encoding="utf-8")
+    vite_config_name = "vite.config.ts" if typescript else "vite.config.js"
+    (app_dir / vite_config_name).write_text(create_react_vite_config(styles), encoding="utf-8")
     (app_dir / "index.html").write_text(
-        create_vite_index_html(name, entry="/src/main.jsx", mount_id="root"),
+        create_vite_index_html(name, entry=f"/src/main.{ext}", mount_id="root"),
         encoding="utf-8",
     )
-    (src_dir / "main.jsx").write_text(create_react_main_jsx(styles), encoding="utf-8")
-    (src_dir / "App.jsx").write_text(create_react_app_jsx(name, styles), encoding="utf-8")
+    (src_dir / f"main.{ext}").write_text(create_react_main_jsx(styles, typescript), encoding="utf-8")
+    (src_dir / f"App.{ext}").write_text(create_react_app_jsx(name, styles, typescript), encoding="utf-8")
 
     if styles == "tailwind":
         (src_dir / "index.css").write_text('@import "tailwindcss";\n', encoding="utf-8")
     elif styles == "none":
         (src_dir / "index.css").write_text("body { margin: 0; padding: 0; }\n", encoding="utf-8")
 
+    if typescript:
+        (app_dir / "tsconfig.json").write_text(create_react_tsconfig_json(), encoding="utf-8")
+        (app_dir / "tsconfig.node.json").write_text(create_tsconfig_node_json(), encoding="utf-8")
+        (src_dir / "vite-env.d.ts").write_text(create_vite_env_dts(), encoding="utf-8")
+
     (app_dir / "app.py").write_text(create_app_py(name, frontend="dist/index.html"), encoding="utf-8")
 
-    create_vesper_toml(app_dir, name=name, template="react", styles=styles, bundler=bundler, package_manager=package_manager)
+    create_vesper_toml(app_dir, name=name, template="react", styles=styles, bundler=bundler, package_manager=package_manager, language=language)
 
     print(f"Created Vesper app: {app_dir}")
     print("Template: react")
@@ -804,7 +947,7 @@ def create_react_app(name: str, *, styles: str, bundler: str, package_manager: s
 # ─── Vue template ────────────────────────────────────────────────────────────
 
 
-def create_vue_package_json(name: str, styles: str) -> str:
+def create_vue_package_json(name: str, styles: str, typescript: bool = False) -> str:
     dependencies: dict = {
         "vue": "^3.4.0",
     }
@@ -820,21 +963,50 @@ def create_vue_package_json(name: str, styles: str) -> str:
         dev_dependencies["tailwindcss"] = "^4.0.0"
         dev_dependencies["@tailwindcss/vite"] = "^4.0.0"
 
+    scripts = {
+        "dev": "vite",
+        "build": "vite build",
+        "preview": "vite preview",
+    }
+
+    if typescript:
+        dev_dependencies["typescript"] = "^5.4.0"
+        dev_dependencies["vue-tsc"] = "^2.0.0"
+        scripts["build"] = "vue-tsc --noEmit && vite build"
+        scripts["type-check"] = "vue-tsc --noEmit"
+
     package = {
         "name": name,
         "version": "0.1.0",
         "private": True,
         "type": "module",
-        "scripts": {
-            "dev": "vite",
-            "build": "vite build",
-            "preview": "vite preview",
-        },
+        "scripts": scripts,
         "dependencies": dependencies,
         "devDependencies": dev_dependencies,
     }
 
     return json.dumps(package, indent=2) + "\n"
+
+
+def create_vue_tsconfig_json() -> str:
+    config = {
+        "compilerOptions": {
+            "target": "ES2020",
+            "useDefineForClassFields": True,
+            "module": "ESNext",
+            "lib": ["ES2020", "DOM", "DOM.Iterable"],
+            "skipLibCheck": True,
+            "moduleResolution": "bundler",
+            "allowImportingTsExtensions": True,
+            "resolveJsonModule": True,
+            "isolatedModules": True,
+            "noEmit": True,
+            "strict": True,
+        },
+        "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.vue"],
+        "references": [{"path": "./tsconfig.node.json"}],
+    }
+    return json.dumps(config, indent=2) + "\n"
 
 
 def create_vue_vite_config(styles: str) -> str:
@@ -886,27 +1058,27 @@ def create_vue_main_js(styles: str) -> str:
     return "\n".join(lines)
 
 
-def create_vue_app_vue(name: str, styles: str) -> str:
+def create_vue_app_vue(name: str, styles: str, typescript: bool = False) -> str:
     if styles == "none":
         markup = f"""\
 <template>
-  <div :style="{{outer}}">
-    <div :style="{{inner}}">
-      <div :style="{{logoRow}}">
+  <div :style="outer">
+    <div :style="inner">
+      <div :style="logoRow">
         <img src="/vesper-icon-dark.svg" width="72" height="72" alt="Vesper" />
-        <span :style="{{plus}}">+</span>
+        <span :style="plus">+</span>
         <img src="/vue-logo.svg" width="72" height="72" alt="Vue" />
-        <span :style="{{plus}}">+</span>
+        <span :style="plus">+</span>
         <img src="/vite-logo.svg" width="72" height="72" alt="Vite" />
       </div>
-      <h1 :style="{{title}}">{name}</h1>
-      <p :style="{{subtitle}}">Vesper + Vue + Vite</p>
-      <p :style="{{desc}}">
-        Edit <code :style="{{code}}">src/App.vue</code> and save to reload.<br>
-        Call Python with <code :style="{{code}}">vesper.invoke()</code>.
+      <h1 :style="title">{name}</h1>
+      <p :style="subtitle">Vesper + Vue + Vite</p>
+      <p :style="desc">
+        Edit <code :style="code">src/App.vue</code> and save to reload.<br>
+        Call Python with <code :style="code">vesper.invoke()</code>.
       </p>
-      <button :style="{{btn}}" @click="callPython">Call Python</button>
-      <p v-if="message" :style="{{result}}">{{{{ message }}}}</p>
+      <button :style="btn" @click="callPython">Call Python</button>
+      <p v-if="message" :style="result">{{{{ message }}}}</p>
     </div>
   </div>
 </template>"""
@@ -964,20 +1136,31 @@ def create_vue_app_vue(name: str, styles: str) -> str:
 
     styles_obj = ""
     if styles == "none":
-        styles_obj = """
-const outer = { fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", background: '#0d0d14', color: '#e2e4ef', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }
-const inner = { textAlign: 'center', maxWidth: '560px', padding: '2rem' }
-const logoRow = { display: 'flex', gap: '1.25rem', justifyContent: 'center', alignItems: 'center', marginBottom: '1.75rem' }
-const plus = { color: '#2e3352', fontSize: '1.5rem' }
-const title = { fontSize: '2rem', fontWeight: 700, letterSpacing: '-.02em', color: '#f0f1fa', marginBottom: '.4rem' }
-const subtitle = { fontSize: '.7rem', letterSpacing: '.12em', textTransform: 'uppercase', color: '#3e4462', marginBottom: '2rem' }
-const desc = { fontSize: '.9rem', color: '#6e748f', lineHeight: 1.7, marginBottom: '1.75rem' }
-const code = { fontFamily: 'ui-monospace, monospace', color: '#a493ff', fontSize: '.85em' }
-const btn = { background: '#6a4fd6', color: '#fff', border: 'none', borderRadius: '8px', padding: '.6rem 1.5rem', fontSize: '.875rem', fontWeight: 500, cursor: 'pointer' }
-const result = { marginTop: '1rem', fontSize: '.875rem', color: '#a493ff' }"""
+        # Type-annotated under TS so string literals like 'center' narrow to the
+        # CSSProperties union (e.g. TextAlign) instead of widening to `string`,
+        # which is all :style="..." bindings accept.
+        ann = ": CSSProperties" if typescript else ""
+        styles_obj = f"""
+const outer{ann} = {{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", background: '#0d0d14', color: '#e2e4ef', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+const inner{ann} = {{ textAlign: 'center', maxWidth: '560px', padding: '2rem' }}
+const logoRow{ann} = {{ display: 'flex', gap: '1.25rem', justifyContent: 'center', alignItems: 'center', marginBottom: '1.75rem' }}
+const plus{ann} = {{ color: '#2e3352', fontSize: '1.5rem' }}
+const title{ann} = {{ fontSize: '2rem', fontWeight: 700, letterSpacing: '-.02em', color: '#f0f1fa', marginBottom: '.4rem' }}
+const subtitle{ann} = {{ fontSize: '.7rem', letterSpacing: '.12em', textTransform: 'uppercase', color: '#3e4462', marginBottom: '2rem' }}
+const desc{ann} = {{ fontSize: '.9rem', color: '#6e748f', lineHeight: 1.7, marginBottom: '1.75rem' }}
+const code{ann} = {{ fontFamily: 'ui-monospace, monospace', color: '#a493ff', fontSize: '.85em' }}
+const btn{ann} = {{ background: '#6a4fd6', color: '#fff', border: 'none', borderRadius: '8px', padding: '.6rem 1.5rem', fontSize: '.875rem', fontWeight: 500, cursor: 'pointer' }}
+const result{ann} = {{ marginTop: '1rem', fontSize: '.875rem', color: '#a493ff' }}"""
+
+        if typescript:
+            styles_obj = "import type { CSSProperties } from 'vue'\n" + styles_obj
+
+    script_tag = "<script setup lang=\"ts\">" if typescript else "<script setup>"
+    result_assign = "message.value = result as string" if typescript else "message.value = result"
+    catch_assign = "message.value = (e as Error).message" if typescript else "message.value = e.message"
 
     return f"""\
-<script setup>
+{script_tag}
 import {{ ref }} from 'vue'
 {styles_obj}
 const message = ref('')
@@ -985,9 +1168,9 @@ const message = ref('')
 async function callPython() {{
   try {{
     const result = await window.vesper.invoke('hello', {{ name: 'Vesper' }})
-    message.value = result
+    {result_assign}
   }} catch (e) {{
-    message.value = e.message
+    {catch_assign}
   }}
 }}
 </script>
@@ -996,7 +1179,10 @@ async function callPython() {{
 """
 
 
-def create_vue_app(name: str, *, styles: str, bundler: str, package_manager: str = "npm") -> None:
+def create_vue_app(name: str, *, styles: str, bundler: str, package_manager: str = "npm", language: str = "js") -> None:
+    typescript = language == "ts"
+    ext = "ts" if typescript else "js"
+
     app_dir_name = normalize_app_directory_name(name)
     app_dir = Path.cwd() / app_dir_name
     src_dir = app_dir / "src"
@@ -1014,23 +1200,29 @@ def create_vue_app(name: str, *, styles: str, bundler: str, package_manager: str
     _copy_asset(public_dir, "vue-logo.svg")
     _copy_asset(public_dir, "vite-logo.svg")
 
-    (app_dir / "package.json").write_text(create_vue_package_json(app_dir_name, styles), encoding="utf-8")
-    (app_dir / "vite.config.js").write_text(create_vue_vite_config(styles), encoding="utf-8")
+    (app_dir / "package.json").write_text(create_vue_package_json(app_dir_name, styles, typescript), encoding="utf-8")
+    vite_config_name = "vite.config.ts" if typescript else "vite.config.js"
+    (app_dir / vite_config_name).write_text(create_vue_vite_config(styles), encoding="utf-8")
     (app_dir / "index.html").write_text(
-        create_vite_index_html(name, entry="/src/main.js", mount_id="app"),
+        create_vite_index_html(name, entry=f"/src/main.{ext}", mount_id="app"),
         encoding="utf-8",
     )
-    (src_dir / "main.js").write_text(create_vue_main_js(styles), encoding="utf-8")
-    (src_dir / "App.vue").write_text(create_vue_app_vue(name, styles), encoding="utf-8")
+    (src_dir / f"main.{ext}").write_text(create_vue_main_js(styles), encoding="utf-8")
+    (src_dir / "App.vue").write_text(create_vue_app_vue(name, styles, typescript), encoding="utf-8")
 
     if styles == "tailwind":
         (src_dir / "index.css").write_text('@import "tailwindcss";\n', encoding="utf-8")
     elif styles == "none":
         (src_dir / "index.css").write_text("body { margin: 0; padding: 0; }\n", encoding="utf-8")
 
+    if typescript:
+        (app_dir / "tsconfig.json").write_text(create_vue_tsconfig_json(), encoding="utf-8")
+        (app_dir / "tsconfig.node.json").write_text(create_tsconfig_node_json(), encoding="utf-8")
+        (src_dir / "vite-env.d.ts").write_text(create_vite_env_dts(), encoding="utf-8")
+
     (app_dir / "app.py").write_text(create_app_py(name, frontend="dist/index.html"), encoding="utf-8")
 
-    create_vesper_toml(app_dir, name=name, template="vue", styles=styles, bundler=bundler, package_manager=package_manager)
+    create_vesper_toml(app_dir, name=name, template="vue", styles=styles, bundler=bundler, package_manager=package_manager, language=language)
 
     print(f"Created Vesper app: {app_dir}")
     print("Template: vue")
@@ -1042,7 +1234,7 @@ def create_vue_app(name: str, *, styles: str, bundler: str, package_manager: str
 # ─── Svelte template ─────────────────────────────────────────────────────────
 
 
-def create_svelte_package_json(name: str, styles: str) -> str:
+def create_svelte_package_json(name: str, styles: str, typescript: bool = False) -> str:
     dependencies: dict = {}
 
     dev_dependencies: dict = {
@@ -1057,16 +1249,26 @@ def create_svelte_package_json(name: str, styles: str) -> str:
         dev_dependencies["tailwindcss"] = "^4.0.0"
         dev_dependencies["@tailwindcss/vite"] = "^4.0.0"
 
+    scripts = {
+        "dev": "vite",
+        "build": "vite build",
+        "preview": "vite preview",
+    }
+
+    if typescript:
+        dev_dependencies["typescript"] = "^5.4.0"
+        dev_dependencies["svelte-check"] = "^3.6.0"
+        dev_dependencies["@tsconfig/svelte"] = "^5.0.2"
+        # Kept separate from "build", matching upstream create-vite: svelte-check
+        # is slow enough that gating the build on it is not the ecosystem default.
+        scripts["check"] = "svelte-check --tsconfig ./tsconfig.json"
+
     package: dict = {
         "name": name,
         "version": "0.1.0",
         "private": True,
         "type": "module",
-        "scripts": {
-            "dev": "vite",
-            "build": "vite build",
-            "preview": "vite preview",
-        },
+        "scripts": scripts,
         "devDependencies": dev_dependencies,
     }
 
@@ -1074,6 +1276,31 @@ def create_svelte_package_json(name: str, styles: str) -> str:
         package["dependencies"] = dependencies
 
     return json.dumps(package, indent=2) + "\n"
+
+
+def create_svelte_tsconfig_json() -> str:
+    config = {
+        "extends": "@tsconfig/svelte/tsconfig.json",
+        "compilerOptions": {
+            "target": "ESNext",
+            "useDefineForClassFields": True,
+            "module": "ESNext",
+            "resolveJsonModule": True,
+        },
+        "include": ["src/**/*.d.ts", "src/**/*.ts", "src/**/*.svelte"],
+        "references": [{"path": "./tsconfig.node.json"}],
+    }
+    return json.dumps(config, indent=2) + "\n"
+
+
+def create_svelte_config_js() -> str:
+    return """\
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte'
+
+export default {
+  preprocess: vitePreprocess(),
+}
+"""
 
 
 def create_svelte_vite_config(styles: str) -> str:
@@ -1100,13 +1327,18 @@ export default defineConfig({
 """
 
 
-def create_svelte_main_js(styles: str) -> str:
+def create_svelte_main_js(styles: str, typescript: bool = False) -> str:
     lines = []
 
     if styles == "bootstrap":
         lines.append("import 'bootstrap/dist/css/bootstrap.min.css'")
     else:
         lines.append("import './index.css'")
+
+    # TypeScript's strictNullChecks makes getElementById's return type
+    # `HTMLElement | null` — the `!` tells it the mount point is guaranteed
+    # to exist, matching how the other two templates' main file does this.
+    target = "document.getElementById('app')!" if typescript else "document.getElementById('app')"
 
     lines += [
         "import App from './App.svelte'",
@@ -1119,7 +1351,7 @@ def create_svelte_main_js(styles: str) -> str:
         "}",
         "",
         "new App({",
-        "  target: document.getElementById('app'),",
+        f"  target: {target},",
         "})",
         "",
     ]
@@ -1127,7 +1359,7 @@ def create_svelte_main_js(styles: str) -> str:
     return "\n".join(lines)
 
 
-def create_svelte_app_svelte(name: str, styles: str) -> str:
+def create_svelte_app_svelte(name: str, styles: str, typescript: bool = False) -> str:
     if styles == "none":
         markup = f"""\
 <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d0d14; color: #e2e4ef; min-height: 100vh; display: flex; align-items: center; justify-content: center;">
@@ -1200,16 +1432,20 @@ def create_svelte_app_svelte(name: str, styles: str) -> str:
   </div>
 </div>"""
 
+    script_tag = '<script lang="ts">' if typescript else "<script>"
+    result_assign = "message = result as string" if typescript else "message = result"
+    catch_assign = "message = (e as Error).message" if typescript else "message = e.message"
+
     return f"""\
-<script>
+{script_tag}
   let message = ''
 
   async function callPython() {{
     try {{
       const result = await window.vesper.invoke('hello', {{ name: 'Vesper' }})
-      message = result
+      {result_assign}
     }} catch (e) {{
-      message = e.message
+      {catch_assign}
     }}
   }}
 </script>
@@ -1218,8 +1454,11 @@ def create_svelte_app_svelte(name: str, styles: str) -> str:
 """
 
 
-def create_svelte_app(name: str, *, styles: str, bundler: str, package_manager: str = "npm") -> None:
+def create_svelte_app(name: str, *, styles: str, bundler: str, package_manager: str = "npm", language: str = "js") -> None:
     app_dir_name = normalize_app_directory_name(name)
+    typescript = language == "ts"
+    ext = "ts" if typescript else "js"
+
     app_dir = Path.cwd() / app_dir_name
     src_dir = app_dir / "src"
     public_dir = app_dir / "public"
@@ -1236,23 +1475,30 @@ def create_svelte_app(name: str, *, styles: str, bundler: str, package_manager: 
     _copy_asset(public_dir, "svelte-logo.svg")
     _copy_asset(public_dir, "vite-logo.svg")
 
-    (app_dir / "package.json").write_text(create_svelte_package_json(app_dir_name, styles), encoding="utf-8")
-    (app_dir / "vite.config.js").write_text(create_svelte_vite_config(styles), encoding="utf-8")
+    (app_dir / "package.json").write_text(create_svelte_package_json(app_dir_name, styles, typescript), encoding="utf-8")
+    vite_config_name = "vite.config.ts" if typescript else "vite.config.js"
+    (app_dir / vite_config_name).write_text(create_svelte_vite_config(styles), encoding="utf-8")
     (app_dir / "index.html").write_text(
-        create_vite_index_html(name, entry="/src/main.js", mount_id="app"),
+        create_vite_index_html(name, entry=f"/src/main.{ext}", mount_id="app"),
         encoding="utf-8",
     )
-    (src_dir / "main.js").write_text(create_svelte_main_js(styles), encoding="utf-8")
-    (src_dir / "App.svelte").write_text(create_svelte_app_svelte(name, styles), encoding="utf-8")
+    (src_dir / f"main.{ext}").write_text(create_svelte_main_js(styles, typescript), encoding="utf-8")
+    (src_dir / "App.svelte").write_text(create_svelte_app_svelte(name, styles, typescript), encoding="utf-8")
 
     if styles == "tailwind":
         (src_dir / "index.css").write_text('@import "tailwindcss";\n', encoding="utf-8")
     elif styles == "none":
         (src_dir / "index.css").write_text("body { margin: 0; padding: 0; }\n", encoding="utf-8")
 
+    if typescript:
+        (app_dir / "tsconfig.json").write_text(create_svelte_tsconfig_json(), encoding="utf-8")
+        (app_dir / "tsconfig.node.json").write_text(create_tsconfig_node_json(), encoding="utf-8")
+        (app_dir / "svelte.config.js").write_text(create_svelte_config_js(), encoding="utf-8")
+        (src_dir / "vite-env.d.ts").write_text(create_vite_env_dts(extra_reference="svelte"), encoding="utf-8")
+
     (app_dir / "app.py").write_text(create_app_py(name, frontend="dist/index.html"), encoding="utf-8")
 
-    create_vesper_toml(app_dir, name=name, template="svelte", styles=styles, bundler=bundler, package_manager=package_manager)
+    create_vesper_toml(app_dir, name=name, template="svelte", styles=styles, bundler=bundler, package_manager=package_manager, language=language)
 
     print(f"Created Vesper app: {app_dir}")
     print("Template: svelte")
@@ -1308,20 +1554,27 @@ def create_app(
     styles: str = "none",
     bundler: str = "pyinstaller",
     package_manager: str = "npm",
+    language: str = "js",
 ) -> None:
     normalized_template = validate_template(template)
     normalized_styles = validate_styles(styles)
     normalized_bundler = validate_bundler(bundler)
     normalized_pm = validate_package_manager(package_manager)
+    normalized_language = validate_language(language)
+
+    if normalized_template == "vanilla" and normalized_language == "ts":
+        print("The vanilla template has no build step, so there's no TypeScript variant.")
+        print("Continuing with JavaScript.")
+        normalized_language = "js"
 
     if normalized_template == "vanilla":
         create_vanilla_app(name, styles=normalized_styles, bundler=normalized_bundler, package_manager=normalized_pm)
     elif normalized_template == "react":
-        create_react_app(name, styles=normalized_styles, bundler=normalized_bundler, package_manager=normalized_pm)
+        create_react_app(name, styles=normalized_styles, bundler=normalized_bundler, package_manager=normalized_pm, language=normalized_language)
     elif normalized_template == "vue":
-        create_vue_app(name, styles=normalized_styles, bundler=normalized_bundler, package_manager=normalized_pm)
+        create_vue_app(name, styles=normalized_styles, bundler=normalized_bundler, package_manager=normalized_pm, language=normalized_language)
     elif normalized_template == "svelte":
-        create_svelte_app(name, styles=normalized_styles, bundler=normalized_bundler, package_manager=normalized_pm)
+        create_svelte_app(name, styles=normalized_styles, bundler=normalized_bundler, package_manager=normalized_pm, language=normalized_language)
     else:
         raise RuntimeError(f"Unhandled template: {normalized_template}")
 
@@ -1355,6 +1608,16 @@ def add_init_parser(subparsers: argparse._SubParsersAction) -> None:
     )
 
     init_app_parser.add_argument(
+        "--typescript",
+        "--ts",
+        dest="typescript",
+        action="store_true",
+        default=None,
+        help="Generate the framework template in TypeScript instead of JavaScript "
+        "(default). Has no effect with --template vanilla.",
+    )
+
+    init_app_parser.add_argument(
         "--styles",
         default=None,
         help="Frontend styles. Available: none (default), bootstrap, tailwind.",
@@ -1385,6 +1648,7 @@ def handle_init(args: argparse.Namespace) -> bool:
         and args.styles is None
         and getattr(args, "bundler", None) is None
         and getattr(args, "package_manager", None) is None
+        and getattr(args, "typescript", None) is None
     )
 
     if no_flags:
@@ -1393,6 +1657,7 @@ def handle_init(args: argparse.Namespace) -> bool:
         config = {
             "name": args.name or "my-vesper-app",
             "template": args.template or "vanilla",
+            "language": "ts" if getattr(args, "typescript", None) else "js",
             "styles": args.styles or "none",
             "bundler": getattr(args, "bundler", None) or "pyinstaller",
             "package_manager": getattr(args, "package_manager", None) or "npm",
@@ -1405,6 +1670,7 @@ def handle_init(args: argparse.Namespace) -> bool:
             styles=config["styles"],
             bundler=config["bundler"],
             package_manager=config["package_manager"],
+            language=config.get("language", "js"),
         )
     except FileExistsError as e:
         print(str(e))
